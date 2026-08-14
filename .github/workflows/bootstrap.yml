@@ -1,0 +1,42 @@
+name: Bootstrap exact DiffBeacon tree
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out bootstrap commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Reconstruct verified source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .bootstrap/chunk00 .bootstrap/chunk01 .bootstrap/chunk02 | base64 --decode > /tmp/diffbeacon-source.tar.gz
+          mkdir -p /tmp/diffbeacon-source
+          tar -xzf /tmp/diffbeacon-source.tar.gz -C /tmp/diffbeacon-source
+          test -f /tmp/diffbeacon-source/package.json
+          test -f /tmp/diffbeacon-source/.github/workflows/ci.yml
+          test -f /tmp/diffbeacon-source/packages/action/dist/index.js
+      - name: Create clean candidate branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --orphan exact-candidate
+          git rm -rf . >/dev/null 2>&1 || true
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a /tmp/diffbeacon-source/. .
+          git add -A
+          git commit -m "chore: import DiffBeacon v0.1.0 release candidate"
+          git push --force origin HEAD:refs/heads/candidate
