@@ -15,7 +15,7 @@ was attempted.
 ```text
 STARTING SHA:        416bd99eedf13ae808b30c85208808dbe1265946  (Stage 1 re-baseline HEAD)
 REPAIR COMMIT:       813dc91d12de01afdde1563e96418efab5db00f7  fix: close DiffBeacon Stage 1 cross-platform baseline
-ENDING SHA:          see COMMIT/PUSH below (this report is committed on top of the repair)
+ENDING SHA:          a202c5b… + this report's documentation-only successor (see COMMIT / PUSH)
 BRANCH:              rescue/stage0-source
 ORIGIN MAIN SHA:     e0ff98143bfe39c80c338518d006525a846a8739  (untouched; not merged, no PR, no tag)
 REPOSITORY:          https://github.com/Pavithran-R-A/DiffBeacon.git
@@ -402,9 +402,25 @@ See D7. Four findings unchanged, one of them in the `--omit=dev` view; no forced
 
 ## GITHUB ACTIONS
 
-- `.github/workflows/ci.yml` was **not** modified during this repair, so the account-level
-  billing condition is still exposed rather than hidden.
-- New run ID / runner assignment / step execution / billing state: see PUSH AND HOSTED CI below.
+`EXTERNAL CI BLOCKED` — reconfirmed on the repaired tree, and CI YAML was **not** modified to
+hide it.
+
+- The content push `416bd99..a202c5b` to `rescue/stage0-source` automatically created CI run
+  `36074158221` (`event=push`, `headSha=a202c5bf2843af0c67e4311598a8c495146eed69`,
+  `createdAt=2026-09-24T23:43:39Z`, `status=completed`, `conclusion=failure`). It was observed
+  once, as instructed; it was not re-run.
+- Runner assignment: all four matrix jobs (`Node 22/24 × ubuntu/windows-latest`) completed with
+  `runner_id: 0` and `steps: 0`, i.e. nothing was scheduled and no step executed.
+- Billable time: `timing.billable` reports `UBUNTU.jobs=2, total_ms=0` and
+  `WINDOWS.jobs=2, total_ms=0`; every individual `duration_ms` is 0.
+- The run's `annotations` endpoint returned HTTP 404, so this stage records no annotation text as
+  evidence; the runner/billing numbers above are the evidence. The prior annotation attributing
+  the pre-start failure to the account's payment/spending-limit state is carried forward from
+  `stage1-rebaseline.md` as the external cause.
+- Consequence, stated plainly: these are **not** product test results and do not contradict the
+  local matrix. The real GitHub-hosted 4-cell CI matrix has still never executed, and a hosted
+  `uses: ./` Action run has never been observed. LOCAL ACTION SMOKE ≠ REAL GITHUB-HOSTED ACTION
+  EXECUTION remains true after this repair.
 
 ## EXACT COMMANDS RUN
 
@@ -550,4 +566,26 @@ largest remaining recorded-but-unfixed item that is fully addressable offline.
 
 ## COMMIT / PUSH
 
-See the push record appended below by the executing agent after the final normal push.
+```text
+REPAIR COMMIT:  813dc91d12de01afdde1563e96418efab5db00f7  fix: close DiffBeacon Stage 1 cross-platform baseline
+REPORT COMMIT:  a202c5bf2843af0c67e4311598a8c495146eed69  docs: record DiffBeacon Stage 1 cross-platform repair evidence
+ENDING SHA:     a202c5bf2843af0c67e4311598a8c495146eed69 (content of this section's own commit is the
+                documentation-only successor, see below)
+BRANCH:         rescue/stage0-source
+PUSH RESULT:    416bd99..a202c5b  rescue/stage0-source -> rescue/stage0-source   (fast-forward, normal)
+```
+
+Normal forward history only. No `--force`, no `--force-with-lease`, no merge, `main` untouched at
+`e0ff98143bfe39c80c338518d006525a846a8739`, no PR created, no tag, no release, no npm publication.
+Commit identity was one-shot (`-c user.name=… -c user.email=…`,
+`Qoder Stage1 Repair Executor <stage1-repair-executor@local.invalid>`); global Git configuration
+was not read into or written out of the repository. The host's missing `lefthook` still prints
+`Can't find lefthook in PATH` around commits made in the canonical tree; the commits themselves
+succeeded, which is why that line appears in the command output.
+
+One bookkeeping note so the history can be read correctly: the GITHUB ACTIONS evidence above
+requires a push to exist before it can be observed, so the observation is carried by a
+documentation-only successor commit rather than being invented in advance. That successor is the
+only push after the content push, and its automatically created run was deliberately **not**
+inspected, to honor "observe the run once / do not repeatedly rerun". It changes no source, test,
+build script, workflow, or manifest content.
