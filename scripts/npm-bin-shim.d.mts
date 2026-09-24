@@ -1,6 +1,8 @@
 export interface NpmBinShimInvocation {
   file: string;
   args: string[];
+  /** Present only for the cmd.exe path; required by the verbatim command line. */
+  windowsVerbatimArguments?: boolean;
 }
 
 export function windowsCmdInvocation(

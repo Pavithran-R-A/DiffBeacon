@@ -21,14 +21,17 @@ npm ci
 npm run check
 ```
 
-Review a Git range:
+Review a Git range with a local build of this repository:
 
 ```bash
-npx diffbeacon review main...HEAD
-npx diffbeacon review main...HEAD --format markdown
-npx diffbeacon review main...HEAD --format json
-git diff main...HEAD | npx diffbeacon review --stdin
+npm run build
+node packages/cli/dist/index.js review main...HEAD
+node packages/cli/dist/index.js review main...HEAD --format markdown
+node packages/cli/dist/index.js review main...HEAD --format json
+git diff main...HEAD | node packages/cli/dist/index.js review --stdin
 ```
+
+`diffbeacon` is not published to the npm registry yet, so `npx diffbeacon …` does not resolve today. After a published release the same arguments apply through the bin shim, for example `npx diffbeacon review main...HEAD`.
 
 Attention observations do not fail the command. The CLI exits nonzero only for operational or input failures such as an invalid revision or unreadable repository.
 
@@ -64,6 +67,8 @@ This output is a starting sequence, not an assertion that the first item is obje
 
 The JavaScript Action shares the same core and writes a GitHub Job Summary. It does not post comments, modify the repository, require a PAT, require an LLM key, or request `pull-requests: write`.
 
+Today the only runnable reference is the repository-local path form, because no published tag or marketplace entry exists yet:
+
 ```yaml
 name: DiffBeacon
 on:
@@ -77,10 +82,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: Pavithran-R-A/diffbeacon@v1
+      - uses: ./
 ```
 
-The committed Action bundle is `packages/action/dist/index.js`. A future public release should pin the `uses` reference to a reviewed tag or commit. The Action assumes the workflow provides the base and head commits in the local checkout; it does not execute code from the pull request.
+`uses: ./` resolves the root [`action.yml`](action.yml) in the checked-out repository, so it works inside this repository only. The committed Action bundle is `packages/action/dist/index.js`. A public release should instead pin the `uses` reference to a reviewed tag or commit SHA; an owner-repo version-tag reference is not usable until such a tag exists in a public repository. The Action assumes the workflow provides the base and head commits in the local checkout; it does not execute code from the pull request. Continuous integration currently runs the CLI/Action quality gates rather than consuming the Action itself.
 
 ## Browser demo
 
@@ -114,7 +119,7 @@ The initial implementation uses conservative path conventions. It does not dynam
 
 ## Privacy and security model
 
-Diff text, paths, revision names, and pull-request metadata are treated as untrusted input. DiffBeacon resolves small Git metadata queries through bounded argument-vector process execution and collects the actual diff through a bounded asynchronous `spawn` stream. Both use `shell: false`; revision tokens are validated, Git resolves commits before diffing, and `--default-prefix`, `--diff-algorithm=myers`, `--find-renames=50%`, and `-l1000` make the parsed patch format deterministic. External diff/text conversion and full binary patch payloads are disabled because DiffBeacon classifies, never applies, patches; `--` terminates the pathspec. Myers is selected for reproducibility, not because it is objectively superior. It does not source repository scripts, install target dependencies, run changed tests/builds, or execute files from the analyzed repository.
+Diff text, paths, revision names, and pull-request metadata are treated as untrusted input. DiffBeacon resolves small Git metadata queries through bounded argument-vector process execution and collects the actual diff through a bounded asynchronous `spawn` stream. Both use `shell: false`; revision tokens are validated, Git resolves commits before diffing, and `--src-prefix=a/ --dst-prefix=b/`, `--ignore-submodules=none`, `--submodule=short`, `--diff-algorithm=myers`, `--find-renames=50%`, and `-l1000` make the parsed patch format deterministic and independent of repository diff configuration. The explicit prefixes are used instead of `--default-prefix` because that option is unavailable on older still-common Git releases; it was measured as rejected by Git 2.39.5 while the prefix pair produces byte-identical output there and on newer versions. External diff/text conversion and full binary patch payloads are disabled because DiffBeacon classifies, never applies, patches; `--` terminates the pathspec. Myers is selected for reproducibility, not because it is objectively superior. It does not source repository scripts, install target dependencies, run changed tests/builds, or execute files from the analyzed repository.
 
 The browser never injects diff-derived content through unsafe HTML APIs. The Markdown renderer escapes table-breaking and HTML-looking path characters. The Action uses `node24`, a bundled artifact, trusted event SHAs, and a read-only `contents: read` workflow model.
 

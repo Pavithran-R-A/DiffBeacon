@@ -95,6 +95,10 @@ try {
   run(['init', '-q'], { cwd: repo });
   run(['config', 'user.email', 'diffbeacon-smoke@example.invalid'], { cwd: repo });
   run(['config', 'user.name', 'DiffBeacon package smoke'], { cwd: repo });
+  // The smoke repository must not run the developer's unrelated global hooks.
+  const hooks = path.join(project, 'isolated-empty-hooks');
+  mkdirSync(hooks, { recursive: true });
+  run(['config', 'core.hooksPath', hooks], { cwd: repo });
   writeFileSync(path.join(repo, 'src.ts'), 'export const value = 1;\n');
   run(['add', '--', 'src.ts'], { cwd: repo });
   run(['commit', '-qm', 'base'], { cwd: repo });
@@ -126,5 +130,5 @@ try {
     `package-smoke: ${version}; bin=${help.includes('Usage:')}; engines=${installedManifest.engines.node}; stdinFiles=${report.summary.changedFiles}; rangeFiles=${rangeReport.summary.changedFiles}; tarballFiles=${files.length}`,
   );
 } finally {
-  rmSync(temp, { recursive: true, force: true });
+  rmSync(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }

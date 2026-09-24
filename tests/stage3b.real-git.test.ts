@@ -1,38 +1,35 @@
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseUnifiedDiff } from '../packages/core/src/parser.js';
 import type { ChangedFile } from '../packages/core/src/model.js';
+import {
+  createFixtureRepository,
+  removeFixtureRepository,
+  writeRepositoryFile,
+  type FixtureRepository,
+} from './git-repository-fixture.js';
 
-const repositories: string[] = [];
+const fixtures: FixtureRepository[] = [];
 
-function git(cwd: string, args: string[]): string {
-  return execFileSync('git', args, {
-    cwd,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    shell: false,
-    windowsHide: true,
-  }).trim();
+function repository(): FixtureRepository {
+  const fixture = createFixtureRepository({
+    prefix: 'diffbeacon-stage3b-git-',
+    identity: 'diffbeacon-stage3b',
+  });
+  fixtures.push(fixture);
+  return fixture;
 }
 
-function repository(): string {
-  const cwd = mkdtempSync(path.join(tmpdir(), 'diffbeacon-stage3b-git-'));
-  repositories.push(cwd);
-  git(cwd, ['init', '-q']);
-  git(cwd, ['config', 'user.email', 'diffbeacon-stage3b@example.invalid']);
-  git(cwd, ['config', 'user.name', 'DiffBeacon Stage 3B']);
-  return cwd;
-}
+afterEach(() => {
+  for (const fixture of fixtures.splice(0)) removeFixtureRepository(fixture.root);
+});
 
-function commit(cwd: string, message: string): void {
-  git(cwd, ['add', '--all']);
-  git(cwd, ['commit', '-qm', message]);
-}
+// Measured on Windows Node 24 with host Git hooks isolated: the three-repository
+// cases here need about 6 s, versus Vitest's 5 s default.
+vi.setConfig({ testTimeout: 20_000, hookTimeout: 30_000 });
 
-function changed(cwd: string, findRenames = false, renameScore = '-M'): ChangedFile {
+function changed(repo: FixtureRepository, findRenames = false, renameScore = '-M'): ChangedFile {
   const args = [
     'diff',
     '--no-ext-diff',
@@ -44,23 +41,18 @@ function changed(cwd: string, findRenames = false, renameScore = '-M'): ChangedF
     'HEAD~1..HEAD',
     '--',
   ];
-  const files = parseUnifiedDiff(git(cwd, args)).files;
+  const files = parseUnifiedDiff(repo.git(args)).files;
   expect(files).toHaveLength(1);
   return files[0] as ChangedFile;
 }
 
-afterEach(() => {
-  for (const cwd of repositories.splice(0)) rmSync(cwd, { recursive: true, force: true });
-});
-
 describe('real Git file-state metadata', () => {
   it('recognizes an empty file add without /dev/null headers', () => {
-    const cwd = repository();
-    git(cwd, ['commit', '--allow-empty', '-qm', 'base']);
-    writeFileSync(path.join(cwd, 'empty.txt'), '');
-    commit(cwd, 'add empty');
-    const file = changed(cwd);
-    expect(file).toMatchObject({
+    const repo = repository();
+    repo.git(['commit', '--allow-empty', '-qm', 'base']);
+    writeRepositoryFile(repo.cwd, 'empty.txt', '');
+    repo.commit('add empty');
+    expect(changed(repo)).toMatchObject({
       status: 'added',
       oldPath: null,
       newPath: 'empty.txt',
@@ -71,13 +63,12 @@ describe('real Git file-state metadata', () => {
   });
 
   it('recognizes an empty file delete without /dev/null headers', () => {
-    const cwd = repository();
-    writeFileSync(path.join(cwd, 'empty.txt'), '');
-    commit(cwd, 'base empty');
-    rmSync(path.join(cwd, 'empty.txt'));
-    commit(cwd, 'delete empty');
-    const file = changed(cwd);
-    expect(file).toMatchObject({
+    const repo = repository();
+    writeRepositoryFile(repo.cwd, 'empty.txt', '');
+    repo.commit('base empty');
+    rmSync(path.join(repo.cwd, 'empty.txt'));
+    repo.commit('delete empty');
+    expect(changed(repo)).toMatchObject({
       status: 'deleted',
       oldPath: 'empty.txt',
       newPath: null,
@@ -89,9 +80,9 @@ describe('real Git file-state metadata', () => {
 
   it('recognizes nonempty text additions and deletions with line counts', () => {
     const added = repository();
-    git(added, ['commit', '--allow-empty', '-qm', 'base']);
-    writeFileSync(path.join(added, 'new.txt'), 'one\ntwo\n');
-    commit(added, 'add text');
+    added.git(['commit', '--allow-empty', '-qm', 'base']);
+    writeRepositoryFile(added.cwd, 'new.txt', 'one\ntwo\n');
+    added.commit('add text');
     expect(changed(added)).toMatchObject({
       status: 'added',
       oldPath: null,
@@ -102,10 +93,10 @@ describe('real Git file-state metadata', () => {
     });
 
     const deleted = repository();
-    writeFileSync(path.join(deleted, 'old.txt'), 'one\ntwo\n');
-    commit(deleted, 'base text');
-    rmSync(path.join(deleted, 'old.txt'));
-    commit(deleted, 'delete text');
+    writeRepositoryFile(deleted.cwd, 'old.txt', 'one\ntwo\n');
+    deleted.commit('base text');
+    rmSync(path.join(deleted.cwd, 'old.txt'));
+    deleted.commit('delete text');
     expect(changed(deleted)).toMatchObject({
       status: 'deleted',
       oldPath: 'old.txt',
@@ -118,9 +109,9 @@ describe('real Git file-state metadata', () => {
 
   it('recognizes real Git binary add, delete, and modification patches', () => {
     const added = repository();
-    git(added, ['commit', '--allow-empty', '-qm', 'base']);
-    writeFileSync(path.join(added, 'new.bin'), Buffer.from([0, 1, 2, 3]));
-    commit(added, 'add binary');
+    added.git(['commit', '--allow-empty', '-qm', 'base']);
+    writeRepositoryFile(added.cwd, 'new.bin', Buffer.from([0, 1, 2, 3]));
+    added.commit('add binary');
     expect(changed(added)).toMatchObject({
       status: 'added',
       oldPath: null,
@@ -131,10 +122,10 @@ describe('real Git file-state metadata', () => {
     });
 
     const deleted = repository();
-    writeFileSync(path.join(deleted, 'old.bin'), Buffer.from([0, 1, 2, 3]));
-    commit(deleted, 'base binary');
-    rmSync(path.join(deleted, 'old.bin'));
-    commit(deleted, 'delete binary');
+    writeRepositoryFile(deleted.cwd, 'old.bin', Buffer.from([0, 1, 2, 3]));
+    deleted.commit('base binary');
+    rmSync(path.join(deleted.cwd, 'old.bin'));
+    deleted.commit('delete binary');
     expect(changed(deleted)).toMatchObject({
       status: 'deleted',
       oldPath: 'old.bin',
@@ -145,10 +136,10 @@ describe('real Git file-state metadata', () => {
     });
 
     const modified = repository();
-    writeFileSync(path.join(modified, 'changed.bin'), Buffer.from([0, 1, 2, 3]));
-    commit(modified, 'base binary');
-    writeFileSync(path.join(modified, 'changed.bin'), Buffer.from([0, 1, 2, 255]));
-    commit(modified, 'modify binary');
+    writeRepositoryFile(modified.cwd, 'changed.bin', Buffer.from([0, 1, 2, 3]));
+    modified.commit('base binary');
+    writeRepositoryFile(modified.cwd, 'changed.bin', Buffer.from([0, 1, 2, 255]));
+    modified.commit('modify binary');
     expect(changed(modified)).toMatchObject({
       status: 'modified',
       oldPath: 'changed.bin',
@@ -161,19 +152,23 @@ describe('real Git file-state metadata', () => {
 });
 
 describe('real Git rename metadata', () => {
-  function renameRepository(oldPath: string, newPath: string, modify = false): string {
-    const cwd = repository();
+  function renameRepository(
+    repo: FixtureRepository,
+    oldPath: string,
+    newPath: string,
+    modify = false,
+  ): FixtureRepository {
     const original = Array.from({ length: 12 }, (_, index) => `line ${index}\n`).join('');
-    writeFileSync(path.join(cwd, oldPath), original);
-    commit(cwd, 'base rename');
-    git(cwd, ['mv', '--', oldPath, newPath]);
-    if (modify) writeFileSync(path.join(cwd, newPath), original.replace('line 4', 'changed 4'));
-    commit(cwd, 'rename');
-    return cwd;
+    writeRepositoryFile(repo.cwd, oldPath, original);
+    repo.commit('base rename');
+    repo.git(['mv', '--', oldPath, newPath]);
+    if (modify) writeRepositoryFile(repo.cwd, newPath, original.replace('line 4', 'changed 4'));
+    repo.commit('rename');
+    return repo;
   }
 
   it('keeps rename-only status and paths', () => {
-    const file = changed(renameRepository('old.ts', 'new.ts'), true);
+    const file = changed(renameRepository(repository(), 'old.ts', 'new.ts'), true);
     expect(file).toMatchObject({
       status: 'renamed',
       oldPath: 'old.ts',
@@ -185,7 +180,7 @@ describe('real Git rename metadata', () => {
   });
 
   it('keeps renamed status when content also changes', () => {
-    const file = changed(renameRepository('old.ts', 'new.ts', true), true);
+    const file = changed(renameRepository(repository(), 'old.ts', 'new.ts', true), true);
     expect(file.status).toBe('renamed');
     expect(file.oldPath).toBe('old.ts');
     expect(file.newPath).toBe('new.ts');
@@ -194,15 +189,15 @@ describe('real Git rename metadata', () => {
   });
 
   it('recognizes a binary rename with content changes', () => {
-    const cwd = repository();
+    const repo = repository();
     const original = Buffer.alloc(4096, 0);
-    writeFileSync(path.join(cwd, 'old.bin'), original);
-    commit(cwd, 'base binary rename');
-    git(cwd, ['mv', '--', 'old.bin', 'new.bin']);
+    writeRepositoryFile(repo.cwd, 'old.bin', original);
+    repo.commit('base binary rename');
+    repo.git(['mv', '--', 'old.bin', 'new.bin']);
     original[128] = 255;
-    writeFileSync(path.join(cwd, 'new.bin'), original);
-    commit(cwd, 'binary rename');
-    expect(changed(cwd, true, '-M0')).toMatchObject({
+    writeRepositoryFile(repo.cwd, 'new.bin', original);
+    repo.commit('binary rename');
+    expect(changed(repo, true, '-M0')).toMatchObject({
       status: 'renamed',
       oldPath: 'old.bin',
       newPath: 'new.bin',
@@ -213,7 +208,7 @@ describe('real Git rename metadata', () => {
   });
 
   it('decodes a Unicode rename path emitted by real Git', () => {
-    const file = changed(renameRepository('old-文件.ts', 'new-文件.ts'), true);
+    const file = changed(renameRepository(repository(), 'old-文件.ts', 'new-文件.ts'), true);
     expect(file).toMatchObject({
       status: 'renamed',
       oldPath: 'old-文件.ts',

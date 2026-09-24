@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import process from 'node:process';
 import { runTrustedNpm } from './npm-cli.mjs';
+import { renderSourceManifest } from './source-manifest.mjs';
 
 const root = process.cwd();
 const node = process.execPath;
@@ -78,6 +79,7 @@ function assertSourceCompleteness() {
     'scripts/npm-cli.mjs',
     'scripts/npm-bin-shim.mjs',
     'scripts/npm-bin-shim.d.mts',
+    'scripts/source-manifest.mjs',
     'client/index.html',
     'client/src/App.tsx',
     'client/src/main.tsx',
@@ -172,6 +174,17 @@ function assertFreshArtifacts() {
     throw new Error('CLI bundle is stale or missing bounded collector code.');
 }
 
+function assertManifestCurrent() {
+  const expected = renderSourceManifest(root);
+  const actual = existsSync('SOURCE_MANIFEST.txt')
+    ? readFileSync('SOURCE_MANIFEST.txt', 'utf8')
+    : '';
+  if (expected !== actual)
+    throw new Error(
+      'SOURCE_MANIFEST.txt does not match the tracked source. Run `npm run manifest` and commit the result; verify never rewrites the source tree.',
+    );
+}
+
 assertSourceCompleteness();
 runNpm('format:check');
 runNpm('lint');
@@ -179,6 +192,7 @@ runNpm('typecheck');
 runNpm('test');
 runNpm('build');
 assertFreshArtifacts();
+assertManifestCurrent();
 run(node, ['packages/cli/dist/index.js', '--version']);
 run(node, ['packages/cli/dist/index.js', '--help']);
 runNpm('package-smoke');

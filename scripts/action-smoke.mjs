@@ -18,6 +18,10 @@ try {
   run(['init', '-q']);
   run(['config', 'user.email', 'diffbeacon-smoke@example.invalid']);
   run(['config', 'user.name', 'DiffBeacon smoke test']);
+  // The smoke repository must not run the developer's unrelated global hooks.
+  const hooks = path.join(temp, 'isolated-empty-hooks');
+  mkdirSync(hooks, { recursive: true });
+  run(['config', 'core.hooksPath', hooks]);
   mkdirSync(path.join(temp, 'dir b'), { recursive: true });
   writeFileSync(path.join(temp, 'src.ts'), 'export const value = 1;\n');
   writeFileSync(path.join(temp, '$(touch PWNED).ts'), 'export const before = 1;\n');
@@ -100,5 +104,5 @@ try {
     `action-smoke: bundled action wrote ${summary.length} bytes; stdout=${JSON.stringify(actionRun.stdout)}; stderr=${JSON.stringify(actionRun.stderr)}; cliLeak=false; hostilePaths=true; oversizeRejected=true; range=${base.slice(0, 7)}...${head.slice(0, 7)}`,
   );
 } finally {
-  rmSync(temp, { recursive: true, force: true });
+  rmSync(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }

@@ -1,6 +1,6 @@
 // packages/action/src/index.ts
 import { appendFileSync, readFileSync } from "node:fs";
-import process2 from "node:process";
+import process3 from "node:process";
 
 // packages/core/src/parser.ts
 var NULL_PATH = "/dev/null";
@@ -704,7 +704,7 @@ function renderMarkdown(report) {
 
 // packages/cli/src/git.ts
 import { execFileSync, spawn } from "node:child_process";
-import process from "node:process";
+import process2 from "node:process";
 
 // packages/cli/src/revisions.ts
 var INVALID_REVISION = /[\u0000-\u001f\u007f\s$;|&<>`]/;
@@ -744,7 +744,8 @@ function gitArgs(range) {
     "--no-ext-diff",
     "--no-textconv",
     "--no-color",
-    "--default-prefix",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
     "--ignore-submodules=none",
     "--submodule=short",
     "--diff-algorithm=myers",
@@ -787,7 +788,7 @@ function validateRepositoryRange(range, cwd) {
   for (const part of rangeParts(safeRange)) resolveRevision(part ?? "", root);
   return { root, range: safeRange };
 }
-async function collectGitDiffAsync(range, cwd = process.cwd()) {
+async function collectGitDiffAsync(range, cwd = process2.cwd()) {
   const { root, range: safeRange } = validateRepositoryRange(range, cwd);
   const child = spawn("git", gitArgs(safeRange), {
     cwd: root,
@@ -814,7 +815,7 @@ async function collectGitDiffAsync(range, cwd = process.cwd()) {
   child.stderr.on("data", (chunk) => {
     if (stderr.join("").length < 64 * 1024) stderr.push(chunk);
   });
-  return await new Promise((resolve, reject) => {
+  return await new Promise((resolve2, reject) => {
     child.once("error", reject);
     child.once("close", (code, signal) => {
       if (exceeded) {
@@ -827,9 +828,18 @@ async function collectGitDiffAsync(range, cwd = process.cwd()) {
         );
         return;
       }
-      resolve(stdout.join(""));
+      resolve2(stdout.join(""));
     });
   });
+}
+
+// packages/action/src/entry.ts
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+function isEntrypointUrl(moduleUrl, argvPath, cwd, platform = process.platform) {
+  if (!argvPath) return false;
+  const argvUrl = pathToFileURL(resolve(cwd, argvPath)).href;
+  return platform === "win32" ? moduleUrl.toLowerCase() === argvUrl.toLowerCase() : moduleUrl === argvUrl;
 }
 
 // packages/action/src/logic.ts
@@ -843,7 +853,7 @@ function pullRequestRange(event) {
 }
 
 // packages/action/src/index.ts
-async function runAction(env = process2.env) {
+async function runAction(env = process3.env) {
   if (!env.GITHUB_EVENT_PATH) throw new Error("GITHUB_EVENT_PATH is required.");
   const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, "utf8"));
   const range = pullRequestRange(
@@ -857,15 +867,15 @@ async function runAction(env = process2.env) {
 `, { encoding: "utf8" });
   return markdown;
 }
-if (import.meta.url === `file://${process2.argv[1]}`) {
+if (isEntrypointUrl(import.meta.url, process3.argv[1], process3.cwd())) {
   try {
     await runAction();
   } catch (error) {
-    process2.stderr.write(
+    process3.stderr.write(
       `DiffBeacon Action error: ${error instanceof Error ? error.message : "Unknown failure."}
 `
     );
-    process2.exitCode = 1;
+    process3.exitCode = 1;
   }
 }
 export {

@@ -1,0 +1,22 @@
+# Normalize every textual project file to LF in the worktree so that
+# `prettier --check`, source hashing, and build input are identical on every
+# platform regardless of a contributor's core.autocrlf default.
+* text=auto eol=lf
+
+# Forensic recovery material must never be text-normalized: its exact bytes are
+# evidence and its blob hashes are quoted in docs/recovery/.
+.bootstrap/** -text
+.bootstrap2/** -text
+*.tar.xz -text
+*.xz -text
+*.zip -text
+*.gz -text
+*.bin -text
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.ico -text
+*.webp -text
+*.woff -text
+*.woff2 -text

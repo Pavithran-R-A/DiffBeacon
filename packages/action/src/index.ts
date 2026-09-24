@@ -7,6 +7,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { analyzeDiff, renderMarkdown } from '../../core/src/index.js';
 import { collectGitDiffAsync } from '../../cli/src/git.js';
+import { isEntrypointUrl } from './entry.js';
 import { pullRequestRange } from './logic.js';
 
 export async function runAction(env: NodeJS.ProcessEnv = process.env): Promise<string> {
@@ -25,7 +26,7 @@ export async function runAction(env: NodeJS.ProcessEnv = process.env): Promise<s
   return markdown;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isEntrypointUrl(import.meta.url, process.argv[1], process.cwd())) {
   try {
     await runAction();
   } catch (error) {
