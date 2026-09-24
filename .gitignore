@@ -1,0 +1,14 @@
+node_modules/
+dist/
+!packages/action/dist/
+!packages/action/dist/index.js
+coverage/
+.DS_Store
+*.tgz
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+.manus-logs/
+.project-config.json

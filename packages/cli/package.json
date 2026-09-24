@@ -1,0 +1,36 @@
+{
+  "name": "diffbeacon",
+  "version": "0.1.0",
+  "description": "Deterministic attention routing for pull requests.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pavithran-R-A/diffbeacon.git"
+  },
+  "homepage": "https://github.com/Pavithran-R-A/diffbeacon#readme",
+  "bugs": {
+    "url": "https://github.com/Pavithran-R-A/diffbeacon/issues"
+  },
+  "keywords": [
+    "git",
+    "github-actions",
+    "pull-request",
+    "code-review",
+    "diff",
+    "developer-tools"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "diffbeacon": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/build-cli.mjs"
+  }
+}

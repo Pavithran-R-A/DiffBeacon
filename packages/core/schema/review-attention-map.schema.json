@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:diffbeacon:schema:review-attention-map:v1",
+  "title": "DiffBeacon Review Attention Map v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "summary", "files", "attention", "evidence", "reviewOrder"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changedFiles",
+        "additions",
+        "deletions",
+        "binaryFiles",
+        "modeOnlyFiles",
+        "generatedFiles",
+        "diagnostics"
+      ],
+      "properties": {
+        "changedFiles": { "type": "integer", "minimum": 0 },
+        "additions": { "type": "integer", "minimum": 0 },
+        "deletions": { "type": "integer", "minimum": 0 },
+        "binaryFiles": { "type": "integer", "minimum": 0 },
+        "modeOnlyFiles": { "type": "integer", "minimum": 0 },
+        "generatedFiles": { "type": "integer", "minimum": 0 },
+        "diagnostics": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "files": { "type": "array", "items": { "$ref": "#/$defs/file" } },
+    "attention": { "type": "array", "items": { "$ref": "#/$defs/attention" } },
+    "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+    "reviewOrder": { "type": "array", "items": { "$ref": "#/$defs/order" } }
+  },
+  "$defs": {
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "oldPath",
+        "newPath",
+        "displayPath",
+        "status",
+        "additions",
+        "deletions",
+        "binary",
+        "modeOnly",
+        "oldMode",
+        "newMode",
+        "similarity",
+        "surfaces",
+        "generated"
+      ],
+      "properties": {
+        "oldPath": { "type": ["string", "null"] },
+        "newPath": { "type": ["string", "null"] },
+        "displayPath": { "type": "string" },
+        "status": { "enum": ["added", "modified", "deleted", "renamed", "mode-only"] },
+        "additions": { "type": ["integer", "null"], "minimum": 0 },
+        "deletions": { "type": ["integer", "null"], "minimum": 0 },
+        "binary": { "type": "boolean" },
+        "modeOnly": { "type": "boolean" },
+        "oldMode": { "type": ["string", "null"] },
+        "newMode": { "type": ["string", "null"] },
+        "similarity": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "surfaces": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "ci-build",
+              "auth-access",
+              "database-schema",
+              "dependencies",
+              "api-contracts",
+              "configuration",
+              "infrastructure",
+              "tests",
+              "documentation",
+              "generated",
+              "runtime"
+            ]
+          }
+        },
+        "generated": { "type": "boolean" }
+      }
+    },
+    "attention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surface",
+        "title",
+        "description",
+        "level",
+        "fileCount",
+        "additions",
+        "deletions",
+        "files"
+      ],
+      "properties": {
+        "surface": {
+          "enum": [
+            "ci-build",
+            "auth-access",
+            "database-schema",
+            "dependencies",
+            "api-contracts",
+            "configuration",
+            "infrastructure",
+            "tests",
+            "documentation",
+            "generated",
+            "runtime"
+          ]
+        },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "level": { "enum": ["FOCUS", "CHECK", "NOTE"] },
+        "fileCount": { "type": "integer", "minimum": 0 },
+        "additions": { "type": "integer", "minimum": 0 },
+        "deletions": { "type": "integer", "minimum": 0 },
+        "files": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "title", "message", "relatedFiles"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "runtime-without-tests",
+            "auth-without-tests",
+            "database-without-tests",
+            "manifest-without-lockfile",
+            "lockfile-without-manifest",
+            "contract-without-docs",
+            "generated-volume"
+          ]
+        },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "relatedFiles": { "type": "array", "items": { "type": "string" } },
+        "metrics": { "type": "object", "additionalProperties": { "type": "number" } }
+      }
+    },
+    "order": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "surface", "title", "reason", "files"],
+      "properties": {
+        "position": { "type": "integer", "minimum": 1 },
+        "surface": {
+          "enum": [
+            "ci-build",
+            "auth-access",
+            "database-schema",
+            "dependencies",
+            "api-contracts",
+            "configuration",
+            "infrastructure",
+            "tests",
+            "documentation",
+            "generated",
+            "runtime"
+          ]
+        },
+        "title": { "type": "string" },
+        "reason": { "type": "string" },
+        "files": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

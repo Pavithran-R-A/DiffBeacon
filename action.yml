@@ -1,0 +1,9 @@
+name: DiffBeacon
+description: Map review attention from observable pull-request diff evidence.
+author: DiffBeacon maintainers
+branding:
+  color: orange
+  icon: eye
+runs:
+  using: node24
+  main: packages/action/dist/index.js

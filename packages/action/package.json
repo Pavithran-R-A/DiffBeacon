@@ -1,0 +1,15 @@
+{
+  "name": "diffbeacon-action",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only GitHub Action that writes a DiffBeacon job summary.",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/build-action.mjs"
+  }
+}

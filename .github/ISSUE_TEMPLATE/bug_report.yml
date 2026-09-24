@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a reproducible DiffBeacon behavior problem.
+title: 'bug: '
+labels: [bug]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: What did DiffBeacon actually do?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include a minimal diff or command that is safe to share.
+    validations:
+      required: true

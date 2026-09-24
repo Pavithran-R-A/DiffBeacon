@@ -1,0 +1,873 @@
+// packages/action/src/index.ts
+import { appendFileSync, readFileSync } from "node:fs";
+import process2 from "node:process";
+
+// packages/core/src/parser.ts
+var NULL_PATH = "/dev/null";
+function decodeGitQuoted(value) {
+  const trimmed = value.trim();
+  if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) return trimmed;
+  const inner = trimmed.slice(1, -1);
+  const bytes = [];
+  const encoder = new TextEncoder();
+  for (let index = 0; index < inner.length; index += 1) {
+    const character = inner[index] ?? "";
+    if (character !== "\\") {
+      bytes.push(...encoder.encode(character));
+      continue;
+    }
+    const octal = inner.slice(index + 1, index + 4);
+    if (/^[0-7]{3}$/.test(octal)) {
+      bytes.push(Number.parseInt(octal, 8));
+      index += 3;
+      continue;
+    }
+    const next = inner[index + 1] ?? "";
+    const escapes = {
+      "\\": 92,
+      '"': 34,
+      a: 7,
+      b: 8,
+      f: 12,
+      n: 10,
+      r: 13,
+      t: 9,
+      v: 11
+    };
+    if (escapes[next] !== void 0) {
+      bytes.push(escapes[next]);
+      index += 1;
+      continue;
+    }
+    bytes.push(...encoder.encode("\\"));
+  }
+  return new TextDecoder().decode(Uint8Array.from(bytes));
+}
+function stripDiffPrefix(value) {
+  const withoutTimestamp = value.split("	", 1)[0] ?? value;
+  const path = decodeGitQuoted(withoutTimestamp.trim());
+  if (path === NULL_PATH) return null;
+  if (path.startsWith("a/") || path.startsWith("b/")) return path.slice(2);
+  return path;
+}
+function parseQuotedPair(value) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('"')) return null;
+  const tokens = [];
+  let cursor = 0;
+  while (cursor < trimmed.length && tokens.length < 2) {
+    while (trimmed[cursor] === " ") cursor += 1;
+    if (trimmed[cursor] !== '"') return null;
+    const start = cursor;
+    cursor += 1;
+    let escaped = false;
+    while (cursor < trimmed.length) {
+      const character = trimmed[cursor] ?? "";
+      if (!escaped && character === '"') {
+        cursor += 1;
+        break;
+      }
+      escaped = !escaped && character === "\\";
+      if (character !== "\\") escaped = false;
+      cursor += 1;
+    }
+    tokens.push(trimmed.slice(start, cursor));
+  }
+  return tokens.length === 2 ? [stripDiffPrefix(tokens[0]), stripDiffPrefix(tokens[1])] : null;
+}
+function parseGitPair(value) {
+  const trimmed = value.trim();
+  const quoted = parseQuotedPair(trimmed);
+  if (quoted !== null) return quoted;
+  const candidates = [];
+  let offset = 0;
+  while (offset < trimmed.length) {
+    const index = trimmed.indexOf(" b/", offset);
+    if (index < 0) break;
+    const oldPath = trimmed.slice(0, index);
+    const newPath = trimmed.slice(index + 1);
+    if (oldPath.startsWith("a/") && newPath.startsWith("b/")) {
+      const oldBase = oldPath.slice(2).split("/").at(-1);
+      const newBase = newPath.slice(2).split("/").at(-1);
+      candidates.push({
+        oldPath,
+        newPath,
+        score: oldPath.slice(2) === newPath.slice(2) ? 3 : oldBase === newBase ? 2 : 1,
+        index
+      });
+    }
+    offset = index + 1;
+  }
+  const selected = candidates.sort(
+    (left, right) => right.score - left.score || left.index - right.index
+  )[0];
+  return selected === void 0 ? null : [stripDiffPrefix(selected.oldPath), stripDiffPrefix(selected.newPath)];
+}
+function parseBinaryPair(value) {
+  const candidates = [];
+  let offset = 0;
+  while (offset < value.length) {
+    const index = value.indexOf(" and ", offset);
+    if (index < 0) break;
+    const left = value.slice(0, index);
+    const right = value.slice(index + 5).replace(/ differ$/, "");
+    if (left === NULL_PATH || left.startsWith("a/") || right.startsWith("b/"))
+      candidates.push([left, right]);
+    offset = index + 1;
+  }
+  const selected = candidates.at(-1);
+  return selected === void 0 ? null : [stripDiffPrefix(selected[0]), stripDiffPrefix(selected[1])];
+}
+function parseHunkHeader(line) {
+  if (!/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/.test(line)) return null;
+  return { header: line, additions: 0, deletions: 0 };
+}
+function inferStatus(file) {
+  if (file.isNewFile) return "added";
+  if (file.isDeletedFile) return "deleted";
+  if (file.oldPath === null && file.newPath !== null) return "added";
+  if (file.newPath === null && file.oldPath !== null) return "deleted";
+  if (file.renameFrom !== null || file.renameTo !== null || file.similarity !== null)
+    return "renamed";
+  if (file.hunks.length === 0 && file.oldMode !== null && file.newMode !== null) return "mode-only";
+  return "modified";
+}
+function finalize(current) {
+  const status = inferStatus(current);
+  const modeOnly = status === "mode-only";
+  const additions = current.binary || modeOnly ? null : current.hunks.reduce((sum, hunk) => sum + hunk.additions, 0);
+  const deletions = current.binary || modeOnly ? null : current.hunks.reduce((sum, hunk) => sum + hunk.deletions, 0);
+  const oldPath = current.isNewFile ? null : current.renameFrom ?? current.oldPath;
+  const newPath = current.isDeletedFile ? null : current.renameTo ?? current.newPath;
+  return {
+    oldPath,
+    newPath,
+    displayPath: newPath ?? oldPath ?? "<unknown path>",
+    status,
+    additions,
+    deletions,
+    binary: current.binary,
+    modeOnly,
+    oldMode: current.oldMode,
+    newMode: current.newMode,
+    similarity: current.similarity,
+    surfaces: [],
+    generated: false
+  };
+}
+function parseUnifiedDiff(input) {
+  const lines = input.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
+  const files = [];
+  const diagnostics = [];
+  let current = null;
+  const flush = () => {
+    if (current !== null) files.push(finalize(current));
+    current = null;
+  };
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const lineNumber = index + 1;
+    if (line.startsWith("diff --git ")) {
+      flush();
+      const pair = parseGitPair(line.slice("diff --git ".length));
+      current = {
+        oldPath: pair?.[0] ?? null,
+        newPath: pair?.[1] ?? null,
+        oldMode: null,
+        newMode: null,
+        similarity: null,
+        binary: false,
+        hunks: [],
+        renameFrom: null,
+        renameTo: null,
+        isNewFile: false,
+        isDeletedFile: false,
+        activeHunk: null
+      };
+      if (pair === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "Could not parse diff --git paths.",
+          line: lineNumber
+        });
+      continue;
+    }
+    if (current === null) {
+      if (line.startsWith("--- ") || line.startsWith("+++ "))
+        diagnostics.push({
+          code: "unrecognized-file-header",
+          message: "File header appeared without diff --git.",
+          line: lineNumber
+        });
+      continue;
+    }
+    if (current.activeHunk !== null) {
+      if (line.startsWith("@@ ")) {
+        const hunk = parseHunkHeader(line);
+        if (hunk !== null) {
+          current.hunks.push(hunk);
+          current.activeHunk = hunk;
+        }
+      } else if (line !== "\\ No newline at end of file") {
+        if (line.startsWith("+")) current.activeHunk.additions += 1;
+        else if (line.startsWith("-")) current.activeHunk.deletions += 1;
+      }
+      continue;
+    }
+    if (line.startsWith("new file mode ")) {
+      current.isNewFile = true;
+      current.oldMode = null;
+      current.newMode = line.slice("new file mode ".length).trim();
+    } else if (line.startsWith("deleted file mode ")) {
+      current.isDeletedFile = true;
+      current.oldMode = line.slice("deleted file mode ".length).trim();
+      current.newMode = null;
+    } else if (line.startsWith("old mode "))
+      current.oldMode = line.slice("old mode ".length).trim();
+    else if (line.startsWith("new mode ")) current.newMode = line.slice("new mode ".length).trim();
+    else if (line.startsWith("similarity index ")) {
+      const value = Number.parseInt(line.slice("similarity index ".length), 10);
+      current.similarity = Number.isFinite(value) ? value : null;
+    } else if (line.startsWith("rename from "))
+      current.renameFrom = decodeGitQuoted(line.slice("rename from ".length));
+    else if (line.startsWith("rename to "))
+      current.renameTo = decodeGitQuoted(line.slice("rename to ".length));
+    else if (line.startsWith("Binary files ")) {
+      current.binary = true;
+      const pair = parseBinaryPair(line.slice("Binary files ".length));
+      if (pair !== null) {
+        current.oldPath = pair[0];
+        current.newPath = pair[1];
+      }
+    } else if (line === "GIT binary patch") current.binary = true;
+    else if (line.startsWith("--- ")) current.oldPath = stripDiffPrefix(line.slice(4));
+    else if (line.startsWith("+++ ")) current.newPath = stripDiffPrefix(line.slice(4));
+    else if (line.startsWith("@@ ")) {
+      const hunk = parseHunkHeader(line);
+      if (hunk !== null) {
+        current.hunks.push(hunk);
+        current.activeHunk = hunk;
+      }
+    }
+  }
+  flush();
+  return { files, diagnostics };
+}
+
+// packages/core/src/detectors/shared.ts
+function normalizedPath(path) {
+  return path.replaceAll("\\", "/").toLowerCase();
+}
+function basename(path) {
+  const normalized = path.replaceAll("\\", "/");
+  return normalized.slice(normalized.lastIndexOf("/") + 1).toLowerCase();
+}
+function hasSegment(path, segment) {
+  const normalized = normalizedPath(path);
+  const needle = normalizedPath(segment).replace(/^\/+|\/+$/g, "");
+  if (needle.includes("/")) {
+    return normalized === needle || normalized.startsWith(`${needle}/`) || normalized.endsWith(`/${needle}`) || normalized.includes(`/${needle}/`);
+  }
+  return normalized.split("/").includes(needle);
+}
+function hasPathPrefix(path, prefix) {
+  const normalized = normalizedPath(path).replace(/^\/+/, "");
+  const needle = normalizedPath(prefix).replace(/^\/+|\/+$/g, "");
+  return normalized === needle || normalized.startsWith(`${needle}/`);
+}
+function extension(path) {
+  const name = basename(path);
+  const dot = name.lastIndexOf(".");
+  return dot > -1 ? name.slice(dot) : "";
+}
+function isDependencyManifest(path) {
+  const name = basename(path);
+  return (/* @__PURE__ */ new Set([
+    "package.json",
+    "requirements.txt",
+    "pyproject.toml",
+    "pipfile",
+    "cargo.toml",
+    "go.mod",
+    "gemfile",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "composer.json"
+  ])).has(name);
+}
+function isLockfile(path) {
+  const name = basename(path);
+  return (/* @__PURE__ */ new Set([
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "poetry.lock",
+    "pipfile.lock",
+    "cargo.lock",
+    "go.sum",
+    "gemfile.lock",
+    "composer.lock",
+    "gradle.lockfile"
+  ])).has(name);
+}
+function isTestPath(path) {
+  const normalized = normalizedPath(path);
+  const name = basename(path);
+  return ["test", "tests", "spec", "specs", "__tests__", "fixtures"].some(
+    (segment) => hasSegment(normalized, segment)
+  ) || /(^|[._-])(test|spec)([._-]|$)/.test(name) || name.endsWith("_test.go") || name.startsWith("test_");
+}
+function isDocumentationPath(path) {
+  const name = basename(path);
+  const normalized = normalizedPath(path);
+  return hasSegment(normalized, "docs") || /^(readme|changelog|contributing|security|code_of_conduct)(\.|$)/.test(name) || name.startsWith("release-notes") || name.endsWith(".md") || name.endsWith(".mdx");
+}
+function isGeneratedPath(path) {
+  const normalized = normalizedPath(path);
+  const name = basename(path);
+  if (isLockfile(path)) return false;
+  return hasSegment(normalized, "dist") || hasSegment(normalized, "build") || hasSegment(normalized, "generated") || name.endsWith(".generated.ts") || name.endsWith(".generated.js") || name.endsWith(".min.js") || name.endsWith(".map");
+}
+
+// packages/core/src/detectors/registry.ts
+var codeExtensions = /* @__PURE__ */ new Set([
+  ".c",
+  ".cc",
+  ".cpp",
+  ".cs",
+  ".ex",
+  ".exs",
+  ".go",
+  ".java",
+  ".js",
+  ".jsx",
+  ".kt",
+  ".php",
+  ".py",
+  ".rb",
+  ".rs",
+  ".sh",
+  ".swift",
+  ".ts",
+  ".tsx"
+]);
+var detectors = [
+  {
+    id: "ci-build",
+    title: "CI / Build",
+    description: "Workflow, pipeline, or build-system files changed.",
+    matches: (path) => {
+      const normalized = normalizedPath(path);
+      const name = basename(path);
+      return normalized.startsWith(".github/workflows/") || normalized.startsWith(".github/actions/") || [
+        "jenkinsfile",
+        "buildkite.yml",
+        "azure-pipelines.yml",
+        "circle.yml",
+        "makefile",
+        "taskfile.yml"
+      ].includes(name) || hasSegment(normalized, ".circleci");
+    }
+  },
+  {
+    id: "auth-access",
+    title: "Authentication / Access",
+    description: "Authentication, authorization, permissions, or access-control paths changed.",
+    matches: (path) => {
+      const normalized = normalizedPath(path);
+      const name = basename(path);
+      return hasSegment(normalized, "auth") || hasSegment(normalized, "authorization") || hasSegment(normalized, "permissions") || hasSegment(normalized, "rbac") || hasSegment(normalized, "acl") || hasSegment(normalized, "access-control") || /(^|[-_.])(auth|identity|session|permission|authorization)([-_.]|$)/.test(name);
+    }
+  },
+  {
+    id: "database-schema",
+    title: "Database / Schema",
+    description: "Schema definitions or migration conventions changed.",
+    matches: (path) => {
+      const normalized = normalizedPath(path);
+      const name = basename(path);
+      return hasSegment(normalized, "migrations") || hasSegment(normalized, "migration") || hasSegment(normalized, "alembic") || hasSegment(normalized, "prisma") || hasPathPrefix(normalized, "db/migrate") || hasPathPrefix(normalized, "drizzle") || hasPathPrefix(normalized, "db/drizzle") || name === "schema.prisma" || name === "schema.sql" || name.endsWith(".migration.sql");
+    }
+  },
+  {
+    id: "dependencies",
+    title: "Dependencies",
+    description: "Dependency manifests or lockfiles changed.",
+    matches: (path) => isDependencyManifest(path) || isLockfile(path)
+  },
+  {
+    id: "api-contracts",
+    title: "API / Contracts",
+    description: "Explicit API, GraphQL, protobuf, OpenAPI, or Swagger definitions changed.",
+    matches: (path) => {
+      const normalized = normalizedPath(path);
+      const name = basename(path);
+      return name === "openapi.yml" || name === "openapi.yaml" || name === "openapi.json" || name === "swagger.yml" || name === "swagger.yaml" || name === "swagger.json" || extension(path) === ".graphql" || extension(path) === ".gql" || extension(path) === ".proto" || hasSegment(normalized, "openapi") || hasPathPrefix(normalized, "api") && /(^|[-_.])(schema|contract)([-_.]|$)/.test(name);
+    }
+  },
+  {
+    id: "configuration",
+    title: "Configuration",
+    description: "Application, build, or tooling configuration changed.",
+    matches: (path) => {
+      const name = basename(path);
+      const normalized = normalizedPath(path);
+      return hasSegment(normalized, "config") || /(^|\.)config\.[^.]+$/.test(name) || name.endsWith(".config.js") || name.endsWith(".config.ts") || name === "tsconfig.json" || name === ".env.example" || name === "vite.config.ts";
+    }
+  },
+  {
+    id: "infrastructure",
+    title: "Infrastructure / Deployment",
+    description: "Container, infrastructure-as-code, orchestration, or deployment manifests changed.",
+    matches: (path) => {
+      const normalized = normalizedPath(path);
+      const name = basename(path);
+      return name === "dockerfile" || name.startsWith("dockerfile.") || name.startsWith("docker-compose") || extension(path) === ".tf" || extension(path) === ".tfvars" || hasSegment(normalized, "terraform") || hasSegment(normalized, "kubernetes") || hasSegment(normalized, "k8s") || hasSegment(normalized, "helm") || hasSegment(normalized, "deploy") || hasSegment(normalized, "manifests");
+    }
+  },
+  {
+    id: "tests",
+    title: "Tests",
+    description: "Test files or test fixtures changed.",
+    matches: (path) => isTestPath(path)
+  },
+  {
+    id: "documentation",
+    title: "Documentation / Changelog",
+    description: "Documentation, README, changelog, or release-note files changed.",
+    matches: (path) => isDocumentationPath(path)
+  },
+  {
+    id: "generated",
+    title: "Generated Files",
+    description: "Files matching conservative generated-output conventions changed.",
+    matches: (path) => isGeneratedPath(path)
+  },
+  {
+    id: "runtime",
+    title: "Runtime Implementation",
+    description: "Application or library implementation files changed.",
+    matches: (path) => codeExtensions.has(extension(path)) && !isTestPath(path) && !isDocumentationPath(path) && !isGeneratedPath(path)
+  }
+];
+function classifyFile(file) {
+  const path = file.displayPath;
+  const surfaces = detectors.filter((detector) => detector.matches(path)).map((detector) => detector.id);
+  return { ...file, surfaces, generated: surfaces.includes("generated") };
+}
+
+// packages/core/src/analyze.ts
+var reviewPriority = [
+  "ci-build",
+  "auth-access",
+  "database-schema",
+  "infrastructure",
+  "api-contracts",
+  "runtime",
+  "dependencies",
+  "configuration",
+  "tests",
+  "documentation",
+  "generated"
+];
+var attentionDescriptions = Object.fromEntries(
+  detectors.map((detector) => [
+    detector.id,
+    { title: detector.title, description: detector.description }
+  ])
+);
+function levelFor(surface) {
+  if (["ci-build", "auth-access", "database-schema", "infrastructure"].includes(surface))
+    return "FOCUS";
+  if (["api-contracts", "runtime", "dependencies", "configuration"].includes(surface))
+    return "CHECK";
+  return "NOTE";
+}
+function compareCanonicalText(left, right) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+function sortFiles(files) {
+  return [...files].sort((a, b) => compareCanonicalText(a.displayPath, b.displayPath));
+}
+function surfaceObservation(surface, files) {
+  const matching = sortFiles(files.filter((file) => file.surfaces.includes(surface)));
+  return {
+    surface,
+    title: attentionDescriptions[surface]?.title ?? surface,
+    description: attentionDescriptions[surface]?.description ?? "Changed files matched this surface.",
+    level: levelFor(surface),
+    fileCount: matching.length,
+    additions: matching.reduce((sum, file) => sum + (file.additions ?? 0), 0),
+    deletions: matching.reduce((sum, file) => sum + (file.deletions ?? 0), 0),
+    files: matching.map((file) => file.displayPath)
+  };
+}
+function evidenceFor(files) {
+  const sorted = sortFiles(files);
+  const testFiles = sorted.filter((file) => file.surfaces.includes("tests") && !file.modeOnly);
+  const runtimeFiles = sorted.filter((file) => file.surfaces.includes("runtime") && !file.modeOnly);
+  const authFiles = sorted.filter((file) => file.surfaces.includes("auth-access"));
+  const databaseFiles = sorted.filter((file) => file.surfaces.includes("database-schema"));
+  const manifests = sorted.filter((file) => isDependencyManifest(file.displayPath));
+  const lockfiles = sorted.filter((file) => isLockfile(file.displayPath));
+  const contracts = sorted.filter((file) => file.surfaces.includes("api-contracts"));
+  const docs = sorted.filter((file) => file.surfaces.includes("documentation"));
+  const generated = sorted.filter((file) => file.generated);
+  const totalChangedLines = sorted.reduce(
+    (sum, file) => sum + (file.additions ?? 0) + (file.deletions ?? 0),
+    0
+  );
+  const generatedChangedLines = generated.reduce(
+    (sum, file) => sum + (file.additions ?? 0) + (file.deletions ?? 0),
+    0
+  );
+  const observations = [];
+  const names = (items) => items.map((file) => file.displayPath);
+  if (runtimeFiles.length > 0 && testFiles.length === 0) {
+    observations.push({
+      kind: "runtime-without-tests",
+      title: "Runtime changes without observed test-file changes",
+      message: "Runtime files changed, but no test-file changes were observed in this diff. Confirm existing coverage is sufficient.",
+      relatedFiles: names(runtimeFiles)
+    });
+  }
+  if (authFiles.length > 0 && testFiles.length === 0) {
+    observations.push({
+      kind: "auth-without-tests",
+      title: "Authentication/access changes without observed test-file changes",
+      message: "Authentication or authorization files changed. No test-file changes were observed in this diff.",
+      relatedFiles: names(authFiles)
+    });
+  }
+  if (databaseFiles.length > 0 && testFiles.length === 0) {
+    observations.push({
+      kind: "database-without-tests",
+      title: "Database/schema changes without observed test-file changes",
+      message: "Database or schema files changed. No test-file changes were observed in this diff.",
+      relatedFiles: names(databaseFiles)
+    });
+  }
+  if (manifests.length > 0 && lockfiles.length === 0) {
+    observations.push({
+      kind: "manifest-without-lockfile",
+      title: "Dependency manifest without observed lockfile change",
+      message: "A dependency manifest changed. No lockfile change was observed in this diff.",
+      relatedFiles: names(manifests)
+    });
+  }
+  if (lockfiles.length > 0 && manifests.length === 0) {
+    observations.push({
+      kind: "lockfile-without-manifest",
+      title: "Lockfile without observed dependency manifest change",
+      message: "A lockfile changed. No dependency manifest change was observed in this diff.",
+      relatedFiles: names(lockfiles)
+    });
+  }
+  if (contracts.length > 0 && docs.length === 0) {
+    observations.push({
+      kind: "contract-without-docs",
+      title: "Contract definition without observed documentation change",
+      message: "An API or contract definition changed. No documentation or changelog change was observed in this diff.",
+      relatedFiles: names(contracts)
+    });
+  }
+  const fileShare = sorted.length === 0 ? 0 : generated.length / sorted.length;
+  const lineShare = totalChangedLines === 0 ? 0 : generatedChangedLines / totalChangedLines;
+  if (generated.length >= 2 && (fileShare >= 0.5 || lineShare >= 0.5)) {
+    observations.push({
+      kind: "generated-volume",
+      title: "Generated-file volume",
+      message: "Generated-file changes account for a large share of this diff and may obscure the smaller hand-written change set.",
+      relatedFiles: names(generated),
+      metrics: {
+        generatedFiles: generated.length,
+        changedFiles: sorted.length,
+        generatedFileShare: fileShare,
+        generatedChangedLines,
+        totalChangedLines,
+        generatedLineShare: lineShare
+      }
+    });
+  }
+  return observations;
+}
+function makeReviewOrder(files) {
+  const entries = [];
+  for (const surface of reviewPriority) {
+    const matching = sortFiles(files.filter((file) => file.surfaces.includes(surface)));
+    if (matching.length === 0) continue;
+    entries.push({
+      position: entries.length + 1,
+      surface,
+      title: attentionDescriptions[surface]?.title ?? surface,
+      reason: `DiffBeacon recommends looking at ${attentionDescriptions[surface]?.title ?? surface} earlier in this review.`,
+      files: matching.map((file) => file.displayPath)
+    });
+  }
+  return entries;
+}
+function analyzeDiff(input) {
+  const parsed = parseUnifiedDiff(input);
+  const files = sortFiles(parsed.files.map(classifyFile));
+  const attention = reviewPriority.filter((surface) => files.some((file) => file.surfaces.includes(surface))).map((surface) => surfaceObservation(surface, files));
+  return {
+    schemaVersion: "1",
+    summary: {
+      changedFiles: files.length,
+      additions: files.reduce((sum, file) => sum + (file.additions ?? 0), 0),
+      deletions: files.reduce((sum, file) => sum + (file.deletions ?? 0), 0),
+      binaryFiles: files.filter((file) => file.binary).length,
+      modeOnlyFiles: files.filter((file) => file.modeOnly).length,
+      generatedFiles: files.filter((file) => file.generated).length,
+      diagnostics: parsed.diagnostics.length
+    },
+    files,
+    attention,
+    evidence: evidenceFor(files),
+    reviewOrder: makeReviewOrder(files)
+  };
+}
+
+// packages/core/src/model.ts
+var MAX_DIFF_BYTES = 8 * 1024 * 1024;
+
+// packages/core/src/render.ts
+function number(value) {
+  return value === null ? "\u2014" : new Intl.NumberFormat("en-US").format(value);
+}
+function escapeMarkdown(value) {
+  return value.replaceAll("\\", "\\\\").replaceAll("|", "\\|").replaceAll("`", "\\`").replaceAll("*", "\\*").replaceAll("_", "\\_").replaceAll("[", "\\[").replaceAll("]", "\\]").replaceAll("(", "\\(").replaceAll(")", "\\)").replaceAll("#", "\\#").replaceAll("!", "\\!").replaceAll(">", "\\>").replaceAll("~", "\\~").replaceAll("<", "&lt;").replaceAll("\n", " ");
+}
+function markdownCode(value) {
+  return `\`${value.replaceAll("\r", " ").replaceAll("\n", " ").replaceAll("`", "&#96;")}\``;
+}
+function renderMarkdown(report) {
+  const lines = [
+    "# DiffBeacon review",
+    "",
+    "> DiffBeacon maps review attention from observable diff evidence. It does not determine whether a pull request is safe to merge.",
+    "",
+    "## Summary",
+    "",
+    "| Metric | Value |",
+    "| --- | ---: |",
+    `| Changed files | ${number(report.summary.changedFiles)} |`,
+    `| Additions | +${number(report.summary.additions)} |`,
+    `| Deletions | -${number(report.summary.deletions)} |`,
+    `| Binary files | ${number(report.summary.binaryFiles)} |`,
+    `| Mode-only files | ${number(report.summary.modeOnlyFiles)} |`,
+    "",
+    "## Review attention",
+    "",
+    "| Level | Surface | Observation | Files |",
+    "| --- | --- | --- | ---: |",
+    ...report.attention.map(
+      (item) => `| ${escapeMarkdown(item.level)} | ${escapeMarkdown(item.title)} | ${escapeMarkdown(item.description)} | ${number(item.fileCount)} |`
+    ),
+    ...report.attention.length === 0 ? [
+      "| NOTE | No mapped surfaces | No changed-file surfaces were recognized in this diff. | 0 |"
+    ] : [],
+    "",
+    "## Evidence observed",
+    "",
+    ...report.evidence.length === 0 ? ["No evidence relationships were triggered by this diff."] : report.evidence.flatMap((item) => [
+      `### ${markdownCode(item.title)}`,
+      "",
+      escapeMarkdown(item.message),
+      "",
+      `Observed in: ${item.relatedFiles.map(markdownCode).join(", ")}`,
+      ""
+    ]),
+    "## Review order",
+    "",
+    ...report.reviewOrder.length === 0 ? [
+      "No review order was produced because the diff was empty or contained no recognized files."
+    ] : report.reviewOrder.map(
+      (item) => `${item.position}. **${escapeMarkdown(item.title)}** \u2014 ${escapeMarkdown(item.reason)}`
+    ),
+    "",
+    "## Changed files",
+    "",
+    "| Status | Path | Additions | Deletions | Surfaces |",
+    "| --- | --- | ---: | ---: | --- |",
+    ...report.files.length === 0 ? ["| \u2014 | No files observed | \u2014 | \u2014 | \u2014 |"] : report.files.map(
+      (file) => `| ${escapeMarkdown(file.status)} | ${markdownCode(file.displayPath)} | ${number(file.additions)} | ${number(file.deletions)} | ${file.surfaces.map(escapeMarkdown).join(", ") || "unclassified"} |`
+    ),
+    ""
+  ];
+  return lines.join("\n");
+}
+
+// packages/cli/src/git.ts
+import { execFileSync, spawn } from "node:child_process";
+import process from "node:process";
+
+// packages/cli/src/revisions.ts
+var INVALID_REVISION = /[\u0000-\u001f\u007f\s$;|&<>`]/;
+function validateRevision(value) {
+  if (value.length === 0 || value.length > 240 || value.startsWith("-") || INVALID_REVISION.test(value)) {
+    throw new Error(`Invalid revision input: ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+function validateRange(value) {
+  const range = validateRevision(value);
+  const parts = range.split("...");
+  if (parts.length === 2) {
+    validateRevision(parts[0] ?? "");
+    validateRevision(parts[1] ?? "");
+  } else if (range.includes("..")) {
+    const doubleDot = range.split("..");
+    if (doubleDot.length !== 2) throw new Error(`Invalid revision range: ${JSON.stringify(value)}`);
+    validateRevision(doubleDot[0] ?? "");
+    validateRevision(doubleDot[1] ?? "");
+  }
+  return range;
+}
+
+// packages/cli/src/git.ts
+var DiffSizeLimitError = class extends Error {
+  constructor(limitBytes = MAX_DIFF_BYTES) {
+    super(`DiffBeacon analysis limit exceeded: the diff is larger than ${limitBytes} bytes.`);
+    this.limitBytes = limitBytes;
+    this.name = "DiffSizeLimitError";
+  }
+  limitBytes;
+};
+function gitArgs(range) {
+  return [
+    "diff",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--no-color",
+    "--default-prefix",
+    "--ignore-submodules=none",
+    "--submodule=short",
+    "--diff-algorithm=myers",
+    "--find-renames=50%",
+    "-l1000",
+    "--unified=3",
+    range,
+    "--"
+  ];
+}
+function gitSmall(args, cwd) {
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+    shell: false,
+    maxBuffer: 256 * 1024
+  });
+}
+function repositoryRoot(cwd) {
+  return gitSmall(["rev-parse", "--show-toplevel"], cwd).trim();
+}
+function resolveRevision(revision, cwd) {
+  validateRevision(revision);
+  return gitSmall(
+    ["rev-parse", "--verify", "--quiet", "--end-of-options", `${revision}^{commit}`],
+    cwd
+  ).trim();
+}
+function rangeParts(range) {
+  const safeRange = validateRange(range);
+  if (safeRange.includes("...")) return safeRange.split("...");
+  if (safeRange.includes("..")) return safeRange.split("..");
+  return [safeRange];
+}
+function validateRepositoryRange(range, cwd) {
+  const root = repositoryRoot(cwd);
+  const safeRange = validateRange(range);
+  for (const part of rangeParts(safeRange)) resolveRevision(part ?? "", root);
+  return { root, range: safeRange };
+}
+async function collectGitDiffAsync(range, cwd = process.cwd()) {
+  const { root, range: safeRange } = validateRepositoryRange(range, cwd);
+  const child = spawn("git", gitArgs(safeRange), {
+    cwd: root,
+    shell: false,
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  const stdout = [];
+  const stderr = [];
+  let bytes = 0;
+  let exceeded = false;
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    if (exceeded) return;
+    bytes += Buffer.byteLength(chunk, "utf8");
+    if (bytes > MAX_DIFF_BYTES) {
+      exceeded = true;
+      child.kill();
+      return;
+    }
+    stdout.push(chunk);
+  });
+  child.stderr.on("data", (chunk) => {
+    if (stderr.join("").length < 64 * 1024) stderr.push(chunk);
+  });
+  return await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      if (exceeded) {
+        reject(new DiffSizeLimitError());
+        return;
+      }
+      if (code !== 0) {
+        reject(
+          new Error(`git diff failed${signal ? ` with ${signal}` : ""}: ${stderr.join("").trim()}`)
+        );
+        return;
+      }
+      resolve(stdout.join(""));
+    });
+  });
+}
+
+// packages/action/src/logic.ts
+function sha(value) {
+  if (typeof value !== "string" || !/^[0-9a-f]{7,64}$/i.test(value))
+    throw new Error("Pull request event did not contain a valid commit SHA.");
+  return value;
+}
+function pullRequestRange(event) {
+  return { base: sha(event.pull_request?.base?.sha), head: sha(event.pull_request?.head?.sha) };
+}
+
+// packages/action/src/index.ts
+async function runAction(env = process2.env) {
+  if (!env.GITHUB_EVENT_PATH) throw new Error("GITHUB_EVENT_PATH is required.");
+  const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, "utf8"));
+  const range = pullRequestRange(
+    event
+  );
+  const diff = await collectGitDiffAsync(`${range.base}...${range.head}`);
+  const report = analyzeDiff(diff);
+  const markdown = renderMarkdown(report);
+  if (env.GITHUB_STEP_SUMMARY)
+    appendFileSync(env.GITHUB_STEP_SUMMARY, `${markdown}
+`, { encoding: "utf8" });
+  return markdown;
+}
+if (import.meta.url === `file://${process2.argv[1]}`) {
+  try {
+    await runAction();
+  } catch (error) {
+    process2.stderr.write(
+      `DiffBeacon Action error: ${error instanceof Error ? error.message : "Unknown failure."}
+`
+    );
+    process2.exitCode = 1;
+  }
+}
+export {
+  runAction
+};

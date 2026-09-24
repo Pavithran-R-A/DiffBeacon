@@ -1,0 +1,55 @@
+{
+  "name": "diffbeacon-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DiffBeacon monorepo: deterministic attention routing for pull requests.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:core": "tsc -p packages/core/tsconfig.json",
+    "build:cli": "node scripts/build-cli.mjs",
+    "build:action": "node scripts/build-action.mjs",
+    "build:web": "vite build",
+    "package-smoke": "node scripts/package-smoke.mjs",
+    "action-smoke": "node scripts/action-smoke.mjs",
+    "manifest": "node scripts/generate-source-manifest.mjs",
+    "dev": "vite",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "node scripts/verify.mjs",
+    "check": "npm run verify",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "esbuild": "^0.27.0",
+    "lucide-react": "^0.453.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "vite": "^8.2.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.7.0",
+    "@types/react": "^19.2.1",
+    "@types/react-dom": "^19.2.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "globals": "^16.0.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.46.3",
+    "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

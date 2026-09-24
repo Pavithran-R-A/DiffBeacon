@@ -1,0 +1,32 @@
+name: Detector proposal
+description: Propose a conservative detector or ecosystem convention.
+title: 'detector: '
+labels: [detector]
+body:
+  - type: input
+    id: id
+    attributes:
+      label: Proposed detector ID
+    validations:
+      required: true
+  - type: textarea
+    id: positive
+    attributes:
+      label: Positive examples
+      description: List paths that should match.
+    validations:
+      required: true
+  - type: textarea
+    id: negative
+    attributes:
+      label: Negative examples
+      description: List plausible paths that should not match.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: False-positive boundary
+      description: State what the detector intentionally does not claim.
+    validations:
+      required: true
