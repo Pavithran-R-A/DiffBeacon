@@ -376,12 +376,11 @@ passes in every cell.
   changed.
 - `npm run verify` — which includes the manifest and boundary checks — passes in every cell, so the
   tracked/manifest sets agree.
-- Recurring host debris reappeared after every commit this stage made. Four regenerations were captured
-  in this session (2026-09-26 01:55, 01:59, 02:00 and 02:08, quarantined as occurrences 9–12 in
-  `../stage3/host-residue/`); the commit carrying this sentence is expected to produce another, which is
-  handled the same way. The host regenerates `pnpm-lock.yaml` and `pnpm-workspace.yaml` in the working
-  repository. Neither is tracked, so neither reaches the manifest; neither was ever staged. Measured
-  digests: every `pnpm-workspace.yaml` here is `d6d0c244…a97ce1`, identical to every earlier quarantined
+- Recurring host debris reappeared after every commit this stage made — including the commit that
+  first described the pattern. Five regenerations were captured in this session (2026-09-26 01:55,
+  01:59, 02:00, 02:08 and 02:13, quarantined as occurrences 9–13 in `../stage3/host-residue/`). The
+  host regenerates `pnpm-lock.yaml` and `pnpm-workspace.yaml` in the working repository. Neither is
+  tracked, so neither reaches the manifest; neither was ever staged. Measured digests: every `pnpm-workspace.yaml` here is `d6d0c244…a97ce1`, identical to every earlier quarantined
   copy, and every `pnpm-lock.yaml` in this session is `96924946…024aaba`, which differs from the
   `348ddf66…5e6970fd` content of the Stage 1 and Stage 2 quarantined copies. So the regeneration is
   self-consistent within a session but not historically stable: its content is host behaviour, not
