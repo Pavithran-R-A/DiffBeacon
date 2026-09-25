@@ -359,11 +359,11 @@ with `noUncheckedIndexedAccess` clean; ESLint `--max-warnings=0` clean; Prettier
 
 ## ACTION BUNDLE
 
-|                            | SHA-256                                                                                                                                                                                                                 |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Before Stage 3 (`0d0d320`) | `36603e8eed3dbe3f4c08c51b9da7f73bfa3d03c46b0f2e5545380a1f00e9a965`                                                                                                                                                      |
-| After Stage 3 (`eb7902d`)  | `4df4bbd75c2c95b5ec056742055260c1db25501b02cfeccd62344db77f54679f`                                                                                                                                                      |
-| Reproducibility            | Rebuilt from clean clones of `eb7902d` on Windows/Node 24, Windows/Node 22 and Linux/Node 24 (container-native, from the same bundle); all three produced exactly this digest, byte-identical to the working-tree build |
+|                            | SHA-256                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before Stage 3 (`0d0d320`) | `36603e8eed3dbe3f4c08c51b9da7f73bfa3d03c46b0f2e5545380a1f00e9a965`                                                                                                                                                                                                                                                                                                                                                  |
+| After Stage 3 (`eb7902d`)  | `4df4bbd75c2c95b5ec056742055260c1db25501b02cfeccd62344db77f54679f`                                                                                                                                                                                                                                                                                                                                                  |
+| Reproducibility            | Three independent rebuilds of `eb7902d` all produced exactly this digest: Linux/Node 24 container-native from the same bundle (`../stage3/cells/linux24-bundle-hash.txt`), Windows/Node 22 inside the clean cell clone (whose `git status` was empty after `npm run build`, so its rebuild matched the committed bundle byte-for-byte), and the Windows/Node 24 build of the tracked file in the working repository |
 
 The Action contract was not altered: same `action.yml`, same inputs, same Job Summary output, no
 comment posting, no repository writes, no PAT, no LLM key, no `pull-requests: write`. `action-smoke`
@@ -376,16 +376,15 @@ passes in every cell.
   changed.
 - `npm run verify` — which includes the manifest and boundary checks — passes in every cell, so the
   tracked/manifest sets agree.
-- Recurring host debris reappeared a tenth time in this session, immediately after this report was
-  committed: the host regenerated `pnpm-lock.yaml` and `pnpm-workspace.yaml` in the working
-  repository. Neither is tracked, so neither reaches the manifest; both were moved to
-  `../stage3/host-residue/` and never staged. Measured digests: `pnpm-workspace.yaml` is
-  `d6d0c244…a97ce1`, identical to every earlier quarantined copy, while this occurrence of
-  `pnpm-lock.yaml` is `96924946…024aaba`, which differs from the `348ddf66…5e6970fd` content of the
-  Stage 1 and Stage 2 quarantined copies — the host regenerates it, so its content is not stable and
-  is no evidence about this repository. An earlier occurrence on 2026-09-25 matched the copies it was
-  compared against; that count and comparison are recorded here rather than restated as a general
-  property.
+- Recurring host debris reappeared three times in this session, each time within seconds of a commit
+  (2026-09-26 01:55, 01:59 and 02:00): the host regenerated `pnpm-lock.yaml` and
+  `pnpm-workspace.yaml` in the working repository. Neither is tracked, so neither reaches the manifest;
+  all six files were moved to `../stage3/host-residue/` as occurrences 9–11 and never staged. Measured
+  digests: every `pnpm-workspace.yaml` is `d6d0c244…a97ce1`, identical to every earlier quarantined
+  copy, and every `pnpm-lock.yaml` here is `96924946…024aaba`, which differs from the
+  `348ddf66…5e6970fd` content of the Stage 1 and Stage 2 quarantined copies. So the regeneration is
+  self-consistent but not historically stable: its content is host behaviour, not evidence about this
+  repository, and the count of "which occurrence" is only a session-local label.
 
 ## QUALIFICATION MATRIX — FOUR CELLS
 
@@ -438,11 +437,11 @@ than resolving it.
   started. Nothing in the workflow ever executed, so this run carries no information about the code —
   the same signature as `36146813041`, captured once in
   `../stage3/ci/run-36186137572.txt`.
-- A documentation-only follow-up commit, added after the observation above because it records that
-  observation, is pushed as a second ref update. The report therefore states exactly what happened
-  rather than a tidier single-push story; no hosted workflow was re-run by hand, and no Action
-  configuration was touched. The run that push itself creates is captured in `../stage3/ci/` beside
-  `run-36186137572.txt`, since a report cannot name the commit that carries it.
+- Documentation-only commits were added after the observation above, because what they record can only
+  be observed after a push. Each is a plain fast-forward ref update on the same branch. The report
+  therefore states exactly what happened rather than a tidier single-push story; no hosted workflow was
+  re-run by hand, and no Action configuration was touched. Any run those updates create is captured in
+  `../stage3/ci/` beside `run-36186137572.txt`, since a report cannot name the commit that carries it.
 - CI configuration was not modified to disguise that condition, and hosted runs were not repeatedly
   re-triggered during Stage 3 development.
 
@@ -495,6 +494,17 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "<cells-dir>":/evidence node:24 bash -lc \
   'git clone -q --no-hardlinks -b rescue/stage0-source /evidence/diffbeacon-stage3.bundle /tmp/r \
    && cd /tmp/r && npm ci --silent && npm run build --silent \
    && sha256sum packages/action/dist/index.js'
+
+# commit and push the documentation-only report (no identity is configured, so it is passed inline;
+# no force, no merge, no tag, no PR)
+git add docs/audits/stage3-detector-system.md
+git -c user.name="Qoder Stage3" -c user.email="stage3-detectors@local.invalid" commit -m "..."
+git push origin rescue/stage0-source
+
+# observe the run that push created, once, and keep the capture outside the repository
+gh run list --branch rescue/stage0-source --limit 5
+gh api repos/Pavithran-R-A/DiffBeacon/actions/runs/36186137572/jobs \
+  --jq '.jobs[] | "\(.name) | runner=\"\(.runner_name)\" | steps=\(.steps|length) | \(.conclusion)"'
 ```
 
 ## WORKING TREE STATE
