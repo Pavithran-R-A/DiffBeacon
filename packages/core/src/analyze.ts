@@ -8,12 +8,28 @@ import type {
   AttentionLevel,
   ChangedFile,
   EvidenceObservation,
+  ParseDiagnostic,
+  ParseDiagnosticCode,
   ReviewAttentionMap,
   ReviewOrderEntry,
   SurfaceId,
   SurfaceObservation,
 } from './model.js';
-import { classifyFile, detectors, isDependencyManifest, isLockfile } from './detectors/registry.js';
+import {
+  classifyFile,
+  detectors,
+  isDependencyManifest,
+  isLockfile,
+  matchesSurface,
+} from './detectors/registry.js';
+
+// Diagnostics that prove a hunk's line accounting is wrong, which is the only
+// reason a reported line count would mislead a share calculation.
+const countDiagnostics: ParseDiagnosticCode[] = [
+  'malformed-hunk',
+  'truncated-hunk',
+  'hunk-count-mismatch',
+];
 
 const reviewPriority: SurfaceId[] = [
   'ci-build',
@@ -70,18 +86,30 @@ function surfaceObservation(surface: SurfaceId, files: ChangedFile[]): SurfaceOb
   };
 }
 
-function evidenceFor(files: ChangedFile[]): EvidenceObservation[] {
+function evidenceFor(files: ChangedFile[], diagnostics: ParseDiagnostic[]): EvidenceObservation[] {
   const sorted = sortFiles(files);
-  const testFiles = sorted.filter((file) => file.surfaces.includes('tests') && !file.modeOnly);
-  const runtimeFiles = sorted.filter((file) => file.surfaces.includes('runtime') && !file.modeOnly);
-  const authFiles = sorted.filter((file) => file.surfaces.includes('auth-access'));
-  const databaseFiles = sorted.filter((file) => file.surfaces.includes('database-schema'));
-  const manifests = sorted.filter((file) => isDependencyManifest(file.displayPath));
-  const lockfiles = sorted.filter((file) => isLockfile(file.displayPath));
-  const contracts = sorted.filter((file) => file.surfaces.includes('api-contracts'));
-  const docs = sorted.filter((file) => file.surfaces.includes('documentation'));
-  const generated = sorted.filter((file) => file.generated);
-  const totalChangedLines = sorted.reduce(
+  // A pure mode change carries no content, so it cannot support a statement about a
+  // companion file being absent. Classification still labels the file; only the
+  // relationship evidence is drawn from files whose content the diff shows.
+  const contentBearing = sorted.filter((file) => !file.modeOnly);
+  const onSurface = (surface: SurfaceId) =>
+    contentBearing.filter((file) => file.surfaces.includes(surface));
+  const testFiles = onSurface('tests');
+  const runtimeFiles = onSurface('runtime');
+  const authFiles = onSurface('auth-access');
+  const databaseFiles = onSurface('database-schema');
+  const contracts = onSurface('api-contracts');
+  const docs = onSurface('documentation');
+  const manifests = contentBearing.filter((file) => matchesSurface(file, isDependencyManifest));
+  const lockfiles = contentBearing.filter((file) => matchesSurface(file, isLockfile));
+  const generated = contentBearing.filter((file) => file.generated);
+  // Nullable counts are unknown, not zero, and a diagnostic hunk has already
+  // proved its counts unreliable, so a line share computed from either would be a
+  // number the diff never showed. File counts stay provable, so those stand alone.
+  const countsTrustworthy =
+    !diagnostics.some((diagnostic) => countDiagnostics.includes(diagnostic.code)) &&
+    contentBearing.every((file) => file.additions !== null && file.deletions !== null);
+  const totalChangedLines = contentBearing.reduce(
     (sum, file) => sum + (file.additions ?? 0) + (file.deletions ?? 0),
     0,
   );
@@ -97,7 +125,7 @@ function evidenceFor(files: ChangedFile[]): EvidenceObservation[] {
       kind: 'runtime-without-tests',
       title: 'Runtime changes without observed test-file changes',
       message:
-        'Runtime files changed, but no test-file changes were observed in this diff. Confirm existing coverage is sufficient.',
+        'Runtime files changed, but no test-file content changes were observed in this diff.',
       relatedFiles: names(runtimeFiles),
     });
   }
@@ -106,7 +134,7 @@ function evidenceFor(files: ChangedFile[]): EvidenceObservation[] {
       kind: 'auth-without-tests',
       title: 'Authentication/access changes without observed test-file changes',
       message:
-        'Authentication or authorization files changed. No test-file changes were observed in this diff.',
+        'Authentication or authorization files changed. No test-file content changes were observed in this diff.',
       relatedFiles: names(authFiles),
     });
   }
@@ -114,7 +142,8 @@ function evidenceFor(files: ChangedFile[]): EvidenceObservation[] {
     observations.push({
       kind: 'database-without-tests',
       title: 'Database/schema changes without observed test-file changes',
-      message: 'Database or schema files changed. No test-file changes were observed in this diff.',
+      message:
+        'Database or schema files changed. No test-file content changes were observed in this diff.',
       relatedFiles: names(databaseFiles),
     });
   }
@@ -122,7 +151,8 @@ function evidenceFor(files: ChangedFile[]): EvidenceObservation[] {
     observations.push({
       kind: 'manifest-without-lockfile',
       title: 'Dependency manifest without observed lockfile change',
-      message: 'A dependency manifest changed. No lockfile change was observed in this diff.',
+      message:
+        'A dependency manifest content change was observed. No lockfile content change was observed in this diff.',
       relatedFiles: names(manifests),
     });
   }
@@ -130,7 +160,8 @@ function evidenceFor(files: ChangedFile[]): EvidenceObservation[] {
     observations.push({
       kind: 'lockfile-without-manifest',
       title: 'Lockfile without observed dependency manifest change',
-      message: 'A lockfile changed. No dependency manifest change was observed in this diff.',
+      message:
+        'A lockfile content change was observed. No dependency manifest content change was observed in this diff.',
       relatedFiles: names(lockfiles),
     });
   }
@@ -139,27 +170,36 @@ function evidenceFor(files: ChangedFile[]): EvidenceObservation[] {
       kind: 'contract-without-docs',
       title: 'Contract definition without observed documentation change',
       message:
-        'An API or contract definition changed. No documentation or changelog change was observed in this diff.',
+        'An API or contract definition changed. No documentation or changelog content change was observed in this diff.',
       relatedFiles: names(contracts),
     });
   }
-  const fileShare = sorted.length === 0 ? 0 : generated.length / sorted.length;
+  const fileShare = contentBearing.length === 0 ? 0 : generated.length / contentBearing.length;
   const lineShare = totalChangedLines === 0 ? 0 : generatedChangedLines / totalChangedLines;
-  if (generated.length >= 2 && (fileShare >= 0.5 || lineShare >= 0.5)) {
+  const volumeTriggered =
+    generated.length >= 2 && (fileShare >= 0.5 || (countsTrustworthy && lineShare >= 0.5));
+  if (volumeTriggered) {
     observations.push({
       kind: 'generated-volume',
       title: 'Generated-file volume',
-      message:
-        'Generated-file changes account for a large share of this diff and may obscure the smaller hand-written change set.',
+      message: countsTrustworthy
+        ? 'Generated-file changes account for a large share of this diff and may obscure the smaller hand-written change set.'
+        : 'Generated files account for a large share of this content-bearing change set by file count. Not every file reports line counts, so no share of changed lines is stated.',
       relatedFiles: names(generated),
-      metrics: {
-        generatedFiles: generated.length,
-        changedFiles: sorted.length,
-        generatedFileShare: fileShare,
-        generatedChangedLines,
-        totalChangedLines,
-        generatedLineShare: lineShare,
-      },
+      metrics: countsTrustworthy
+        ? {
+            generatedFiles: generated.length,
+            changedFiles: contentBearing.length,
+            generatedFileShare: fileShare,
+            generatedChangedLines,
+            totalChangedLines,
+            generatedLineShare: lineShare,
+          }
+        : {
+            generatedFiles: generated.length,
+            changedFiles: contentBearing.length,
+            generatedFileShare: fileShare,
+          },
     });
   }
   return observations;
@@ -200,7 +240,7 @@ export function analyzeDiff(input: string): ReviewAttentionMap {
     },
     files,
     attention,
-    evidence: evidenceFor(files),
+    evidence: evidenceFor(files, parsed.diagnostics),
     reviewOrder: makeReviewOrder(files),
   };
 }

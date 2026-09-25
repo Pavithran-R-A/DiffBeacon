@@ -4,6 +4,7 @@ import process3 from "node:process";
 
 // packages/core/src/model.ts
 var MAX_DIFF_BYTES = 8 * 1024 * 1024;
+var UNKNOWN_PATH_SENTINEL = "<unknown path>";
 
 // packages/core/src/parser.ts
 var NULL_PATH = "/dev/null";
@@ -155,7 +156,7 @@ function finalize(current) {
   return {
     oldPath,
     newPath,
-    displayPath: newPath ?? oldPath ?? "<unknown path>",
+    displayPath: newPath ?? oldPath ?? UNKNOWN_PATH_SENTINEL,
     status,
     additions,
     deletions,
@@ -457,6 +458,10 @@ function isLockfile(path) {
     "gradle.lockfile"
   ])).has(name);
 }
+function isConfigFilename(path) {
+  const name = basename(path);
+  return /^(\w+[-.])?config\.[^.]+$/.test(name) || name === "tsconfig.json" || name === ".env.example";
+}
 function isTestPath(path) {
   const normalized = normalizedPath(path);
   const name = basename(path);
@@ -473,7 +478,10 @@ function isGeneratedPath(path) {
   const normalized = normalizedPath(path);
   const name = basename(path);
   if (isLockfile(path)) return false;
-  return hasSegment(normalized, "dist") || hasSegment(normalized, "build") || hasSegment(normalized, "generated") || name.endsWith(".generated.ts") || name.endsWith(".generated.js") || name.endsWith(".min.js") || name.endsWith(".map");
+  return hasSegment(normalized, "dist") || // Only the repository-root `build/` output directory proves generated output. A
+  // nested `build` segment is as often a hand-written module whose domain is
+  // building, which would silently vanish from the runtime surface.
+  normalized.startsWith("build/") || hasSegment(normalized, "generated") || name.endsWith(".generated.ts") || name.endsWith(".generated.js") || name.endsWith(".min.js") || name.endsWith(".map");
 }
 
 // packages/core/src/detectors/registry.ts
@@ -556,11 +564,7 @@ var detectors = [
     id: "configuration",
     title: "Configuration",
     description: "Application, build, or tooling configuration changed.",
-    matches: (path) => {
-      const name = basename(path);
-      const normalized = normalizedPath(path);
-      return hasSegment(normalized, "config") || /(^|\.)config\.[^.]+$/.test(name) || name.endsWith(".config.js") || name.endsWith(".config.ts") || name === "tsconfig.json" || name === ".env.example" || name === "vite.config.ts";
-    }
+    matches: (path) => hasSegment(normalizedPath(path), "config") || isConfigFilename(path)
   },
   {
     id: "infrastructure",
@@ -594,16 +598,28 @@ var detectors = [
     id: "runtime",
     title: "Runtime Implementation",
     description: "Application or library implementation files changed.",
-    matches: (path) => codeExtensions.has(extension(path)) && !isTestPath(path) && !isDocumentationPath(path) && !isGeneratedPath(path)
+    matches: (path) => codeExtensions.has(extension(path)) && !isTestPath(path) && !isDocumentationPath(path) && !isGeneratedPath(path) && !isConfigFilename(path)
   }
 ];
+function consideredPaths(file) {
+  const paths = [file.oldPath, file.newPath];
+  return paths.filter((path) => path !== null && path !== UNKNOWN_PATH_SENTINEL);
+}
+function matchesSurface(file, predicate) {
+  return consideredPaths(file).some(predicate);
+}
 function classifyFile(file) {
-  const path = file.displayPath;
-  const surfaces = detectors.filter((detector) => detector.matches(path)).map((detector) => detector.id);
+  const paths = consideredPaths(file);
+  const surfaces = detectors.filter((detector) => paths.some((path) => detector.matches(path))).map((detector) => detector.id);
   return { ...file, surfaces, generated: surfaces.includes("generated") };
 }
 
 // packages/core/src/analyze.ts
+var countDiagnostics = [
+  "malformed-hunk",
+  "truncated-hunk",
+  "hunk-count-mismatch"
+];
 var reviewPriority = [
   "ci-build",
   "auth-access",
@@ -651,18 +667,21 @@ function surfaceObservation(surface, files) {
     files: matching.map((file) => file.displayPath)
   };
 }
-function evidenceFor(files) {
+function evidenceFor(files, diagnostics) {
   const sorted = sortFiles(files);
-  const testFiles = sorted.filter((file) => file.surfaces.includes("tests") && !file.modeOnly);
-  const runtimeFiles = sorted.filter((file) => file.surfaces.includes("runtime") && !file.modeOnly);
-  const authFiles = sorted.filter((file) => file.surfaces.includes("auth-access"));
-  const databaseFiles = sorted.filter((file) => file.surfaces.includes("database-schema"));
-  const manifests = sorted.filter((file) => isDependencyManifest(file.displayPath));
-  const lockfiles = sorted.filter((file) => isLockfile(file.displayPath));
-  const contracts = sorted.filter((file) => file.surfaces.includes("api-contracts"));
-  const docs = sorted.filter((file) => file.surfaces.includes("documentation"));
-  const generated = sorted.filter((file) => file.generated);
-  const totalChangedLines = sorted.reduce(
+  const contentBearing = sorted.filter((file) => !file.modeOnly);
+  const onSurface = (surface) => contentBearing.filter((file) => file.surfaces.includes(surface));
+  const testFiles = onSurface("tests");
+  const runtimeFiles = onSurface("runtime");
+  const authFiles = onSurface("auth-access");
+  const databaseFiles = onSurface("database-schema");
+  const contracts = onSurface("api-contracts");
+  const docs = onSurface("documentation");
+  const manifests = contentBearing.filter((file) => matchesSurface(file, isDependencyManifest));
+  const lockfiles = contentBearing.filter((file) => matchesSurface(file, isLockfile));
+  const generated = contentBearing.filter((file) => file.generated);
+  const countsTrustworthy = !diagnostics.some((diagnostic) => countDiagnostics.includes(diagnostic.code)) && contentBearing.every((file) => file.additions !== null && file.deletions !== null);
+  const totalChangedLines = contentBearing.reduce(
     (sum, file) => sum + (file.additions ?? 0) + (file.deletions ?? 0),
     0
   );
@@ -676,7 +695,7 @@ function evidenceFor(files) {
     observations.push({
       kind: "runtime-without-tests",
       title: "Runtime changes without observed test-file changes",
-      message: "Runtime files changed, but no test-file changes were observed in this diff. Confirm existing coverage is sufficient.",
+      message: "Runtime files changed, but no test-file content changes were observed in this diff.",
       relatedFiles: names(runtimeFiles)
     });
   }
@@ -684,7 +703,7 @@ function evidenceFor(files) {
     observations.push({
       kind: "auth-without-tests",
       title: "Authentication/access changes without observed test-file changes",
-      message: "Authentication or authorization files changed. No test-file changes were observed in this diff.",
+      message: "Authentication or authorization files changed. No test-file content changes were observed in this diff.",
       relatedFiles: names(authFiles)
     });
   }
@@ -692,7 +711,7 @@ function evidenceFor(files) {
     observations.push({
       kind: "database-without-tests",
       title: "Database/schema changes without observed test-file changes",
-      message: "Database or schema files changed. No test-file changes were observed in this diff.",
+      message: "Database or schema files changed. No test-file content changes were observed in this diff.",
       relatedFiles: names(databaseFiles)
     });
   }
@@ -700,7 +719,7 @@ function evidenceFor(files) {
     observations.push({
       kind: "manifest-without-lockfile",
       title: "Dependency manifest without observed lockfile change",
-      message: "A dependency manifest changed. No lockfile change was observed in this diff.",
+      message: "A dependency manifest content change was observed. No lockfile content change was observed in this diff.",
       relatedFiles: names(manifests)
     });
   }
@@ -708,7 +727,7 @@ function evidenceFor(files) {
     observations.push({
       kind: "lockfile-without-manifest",
       title: "Lockfile without observed dependency manifest change",
-      message: "A lockfile changed. No dependency manifest change was observed in this diff.",
+      message: "A lockfile content change was observed. No dependency manifest content change was observed in this diff.",
       relatedFiles: names(lockfiles)
     });
   }
@@ -716,25 +735,30 @@ function evidenceFor(files) {
     observations.push({
       kind: "contract-without-docs",
       title: "Contract definition without observed documentation change",
-      message: "An API or contract definition changed. No documentation or changelog change was observed in this diff.",
+      message: "An API or contract definition changed. No documentation or changelog content change was observed in this diff.",
       relatedFiles: names(contracts)
     });
   }
-  const fileShare = sorted.length === 0 ? 0 : generated.length / sorted.length;
+  const fileShare = contentBearing.length === 0 ? 0 : generated.length / contentBearing.length;
   const lineShare = totalChangedLines === 0 ? 0 : generatedChangedLines / totalChangedLines;
-  if (generated.length >= 2 && (fileShare >= 0.5 || lineShare >= 0.5)) {
+  const volumeTriggered = generated.length >= 2 && (fileShare >= 0.5 || countsTrustworthy && lineShare >= 0.5);
+  if (volumeTriggered) {
     observations.push({
       kind: "generated-volume",
       title: "Generated-file volume",
-      message: "Generated-file changes account for a large share of this diff and may obscure the smaller hand-written change set.",
+      message: countsTrustworthy ? "Generated-file changes account for a large share of this diff and may obscure the smaller hand-written change set." : "Generated files account for a large share of this content-bearing change set by file count. Not every file reports line counts, so no share of changed lines is stated.",
       relatedFiles: names(generated),
-      metrics: {
+      metrics: countsTrustworthy ? {
         generatedFiles: generated.length,
-        changedFiles: sorted.length,
+        changedFiles: contentBearing.length,
         generatedFileShare: fileShare,
         generatedChangedLines,
         totalChangedLines,
         generatedLineShare: lineShare
+      } : {
+        generatedFiles: generated.length,
+        changedFiles: contentBearing.length,
+        generatedFileShare: fileShare
       }
     });
   }
@@ -772,7 +796,7 @@ function analyzeDiff(input) {
     },
     files,
     attention,
-    evidence: evidenceFor(files),
+    evidence: evidenceFor(files, parsed.diagnostics),
     reviewOrder: makeReviewOrder(files)
   };
 }

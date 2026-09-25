@@ -72,6 +72,13 @@ export function isLockfile(path: string): boolean {
   ]).has(name);
 }
 
+export function isConfigFilename(path: string): boolean {
+  const name = basename(path);
+  return (
+    /^(\w+[-.])?config\.[^.]+$/.test(name) || name === 'tsconfig.json' || name === '.env.example'
+  );
+}
+
 export function isTestPath(path: string): boolean {
   const normalized = normalizedPath(path);
   const name = basename(path);
@@ -103,7 +110,10 @@ export function isGeneratedPath(path: string): boolean {
   if (isLockfile(path)) return false;
   return (
     hasSegment(normalized, 'dist') ||
-    hasSegment(normalized, 'build') ||
+    // Only the repository-root `build/` output directory proves generated output. A
+    // nested `build` segment is as often a hand-written module whose domain is
+    // building, which would silently vanish from the runtime surface.
+    normalized.startsWith('build/') ||
     hasSegment(normalized, 'generated') ||
     name.endsWith('.generated.ts') ||
     name.endsWith('.generated.js') ||

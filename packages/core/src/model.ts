@@ -27,6 +27,12 @@ export type SurfaceId = (typeof SURFACE_IDS)[number];
 export const ATTENTION_LEVELS = ['FOCUS', 'CHECK', 'NOTE'] as const;
 export type AttentionLevel = (typeof ATTENTION_LEVELS)[number];
 
+/**
+ * Presentation placeholder for a file whose paths the parser could not prove.
+ * It is not a filename: detectors must never match against it.
+ */
+export const UNKNOWN_PATH_SENTINEL = '<unknown path>' as const;
+
 export interface Hunk {
   header: string;
   additions: number;

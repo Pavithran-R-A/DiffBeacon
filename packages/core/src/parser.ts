@@ -6,7 +6,7 @@
  */
 
 import type { ChangedFile, FileStatus, Hunk, ParsedDiff, ParseDiagnostic } from './model.js';
-import { MAX_DIFF_BYTES } from './model.js';
+import { MAX_DIFF_BYTES, UNKNOWN_PATH_SENTINEL } from './model.js';
 
 const NULL_PATH = '/dev/null';
 
@@ -218,7 +218,7 @@ function finalize(current: Omit<CurrentFile, 'activeHunk'>): ChangedFile {
   return {
     oldPath,
     newPath,
-    displayPath: newPath ?? oldPath ?? '<unknown path>',
+    displayPath: newPath ?? oldPath ?? UNKNOWN_PATH_SENTINEL,
     status,
     additions,
     deletions,

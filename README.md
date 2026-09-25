@@ -8,7 +8,7 @@ DiffBeacon helps a maintainer understand a pull request before reading every cha
 
 ## What it does
 
-DiffBeacon reports changed surfaces such as CI/build, authentication/access, database/schema, infrastructure, explicit API contracts, dependencies, tests, documentation, generated files, and runtime implementation. Its evidence language is deliberately narrow: “no test-file changes were observed in this diff” is valid; “this pull request has no tests” is not.
+DiffBeacon reports changed surfaces such as CI/build, authentication/access, database/schema, infrastructure, explicit API contracts, dependencies, tests, documentation, generated files, and runtime implementation. Its evidence language is deliberately narrow: “no test-file content changes were observed in this diff” is valid; “this pull request has no tests” is not. A renamed file is classified from both its old and new path, so moving code out of `src/auth/` still reports the authentication/access surface. A pure file-mode change is classified but never used to claim that a companion file is missing, and a line share is only stated when the diff actually reported the line counts behind it.
 
 The core engine has no runtime network requirement and can run in Node or in a browser. The browser demo analyzes pasted unified diffs locally. No source upload, backend, account, database, analytics, telemetry, or runtime LLM is part of v0.1.
 
@@ -52,7 +52,7 @@ CHECK  Dependencies
 
 EVIDENCE
 ────────
-Authentication or authorization files changed. No test-file changes were observed in this diff.
+Authentication or authorization files changed. No test-file content changes were observed in this diff.
 
 REVIEW ORDER
 ────────────

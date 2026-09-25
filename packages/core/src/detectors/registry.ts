@@ -4,11 +4,13 @@
  */
 
 import type { ChangedFile, SurfaceId } from '../model.js';
+import { UNKNOWN_PATH_SENTINEL } from '../model.js';
 import {
   basename,
   extension,
   hasSegment,
   hasPathPrefix,
+  isConfigFilename,
   isDependencyManifest,
   isDocumentationPath,
   isGeneratedPath,
@@ -140,19 +142,7 @@ export const detectors: Detector[] = [
     id: 'configuration',
     title: 'Configuration',
     description: 'Application, build, or tooling configuration changed.',
-    matches: (path) => {
-      const name = basename(path);
-      const normalized = normalizedPath(path);
-      return (
-        hasSegment(normalized, 'config') ||
-        /(^|\.)config\.[^.]+$/.test(name) ||
-        name.endsWith('.config.js') ||
-        name.endsWith('.config.ts') ||
-        name === 'tsconfig.json' ||
-        name === '.env.example' ||
-        name === 'vite.config.ts'
-      );
-    },
+    matches: (path) => hasSegment(normalizedPath(path), 'config') || isConfigFilename(path),
   },
   {
     id: 'infrastructure',
@@ -203,14 +193,29 @@ export const detectors: Detector[] = [
       codeExtensions.has(extension(path)) &&
       !isTestPath(path) &&
       !isDocumentationPath(path) &&
-      !isGeneratedPath(path),
+      !isGeneratedPath(path) &&
+      !isConfigFilename(path),
   },
 ];
 
+/**
+ * The paths a diff actually proves for one file. `displayPath` is presentation
+ * only, so a rename that moves a file out of a surface is classified from both
+ * sides; an unproven path contributes nothing.
+ */
+export function consideredPaths(file: ChangedFile): string[] {
+  const paths = [file.oldPath, file.newPath];
+  return paths.filter((path): path is string => path !== null && path !== UNKNOWN_PATH_SENTINEL);
+}
+
+export function matchesSurface(file: ChangedFile, predicate: (path: string) => boolean): boolean {
+  return consideredPaths(file).some(predicate);
+}
+
 export function classifyFile(file: ChangedFile): ChangedFile {
-  const path = file.displayPath;
+  const paths = consideredPaths(file);
   const surfaces = detectors
-    .filter((detector) => detector.matches(path))
+    .filter((detector) => paths.some((path) => detector.matches(path)))
     .map((detector) => detector.id);
   return { ...file, surfaces, generated: surfaces.includes('generated') };
 }
@@ -222,6 +227,7 @@ export function detectorById(id: SurfaceId): Detector {
 }
 
 export {
+  isConfigFilename,
   isDependencyManifest,
   isDocumentationPath,
   isGeneratedPath,
