@@ -16,9 +16,9 @@ Seven measured defects were repaired under TDD. The detector count did not chang
 ```text
 STARTING SHA:   0d0d32008a77438f144a792c5f315e39b5fdeb01  docs: record DiffBeacon Stage 2 closure CI observation
 FIX COMMIT:     eb7902d7c45b4908e2c578337f4407f35e9133f6  fix: qualify DiffBeacon detector system
-ENDING SHA:     documentation-only commits on top of the qualified tree: 37dfc1703de339ac40b832685de36354ce11a9a3
-                (this report) plus the commit carrying its final corrections. Both touch only
-                docs/audits/, so neither changes any hashed file.
+ENDING SHA:     documentation-only commits on top of the qualified tree; `3722129` is the tip the
+                single CI observation below was made against, and the commit that carries this
+                sentence follows it. All of them touch only `docs/audits/`, so no hashed file changes.
 BRANCH:         rescue/stage0-source
 ORIGIN MAIN:    e0ff98143bfe39c80338518d006525a846a8739  (not merged, no PR, no tag, no npm publish)
 REPOSITORY:     https://github.com/Pavithran-R-A/DiffBeacon.git
@@ -425,11 +425,29 @@ disk. (os error 112)`, `Error: ENOSPC: no space left on device, write` and
 
 ## GITHUB HOSTED ACTIONS
 
-Observed, not altered: `EXTERNAL CI BLOCKED` is the standing condition. The auditor's recorded run
-`36146813041` shows four jobs with zero runners assigned, zero steps executed and zero billable time,
-which is a billing/runner condition outside this repository. CI configuration was not modified to
-disguise it, and hosted runs were not repeatedly re-triggered during Stage 3 development. This stage
-pushes once and observes the automatically created run once.
+Observed, not altered: `EXTERNAL CI BLOCKED` is the standing condition, and Stage 3 confirms it rather
+than resolving it.
+
+- Auditor's recorded Stage 2 run `36146813041`: four jobs, zero runners assigned, zero steps, zero
+  billable time.
+- The stage push (`0d0d320..3722129`, fast-forward, no force, one command) automatically created run
+  `36186137572` for `headSha` `3722129704fc85ba59fc437605fb6663038d950e`: workflow `CI`, event `push`,
+  run number 11, `status=completed`, `conclusion=failure`, and every one of its four jobs
+  (`Node 24 / windows-latest`, `Node 22 / windows-latest`, `Node 22 / ubuntu-latest`,
+  `Node 24 / ubuntu-latest`) reports `runner=""` with `steps=0` and finished 2–5 seconds after it
+  started. Nothing in the workflow ever executed, so this run carries no information about the code —
+  the same signature as `36146813041`, captured once in
+  `../stage3/ci/run-36186137572.txt`.
+- A documentation-only follow-up commit, added after the observation above because it records that
+  observation, is pushed as a second ref update. The report therefore states exactly what happened
+  rather than a tidier single-push story; no hosted workflow was re-run by hand, and no Action
+  configuration was touched. The run that push itself creates is captured in `../stage3/ci/` beside
+  `run-36186137572.txt`, since a report cannot name the commit that carries it.
+- CI configuration was not modified to disguise that condition, and hosted runs were not repeatedly
+  re-triggered during Stage 3 development.
+
+Consequently the platform evidence for Stage 3 is the four local clean-clone cells, and hosted CI
+remains an unresolved external prerequisite for any later stage.
 
 ## EXACT COMMANDS RUN
 
@@ -482,16 +500,17 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "<cells-dir>":/evidence node:24 bash -lc \
 ## WORKING TREE STATE
 
 Before this report was committed, `git status --porcelain` listed exactly one entry: this file,
-`docs/audits/stage3-detector-system.md`. The commit that carries it (`37dfc17`, one file, 557
-insertions, no source change) leaves the tracked tree clean. Nothing forbidden is present in the
+`docs/audits/stage3-detector-system.md`. The first commit carrying it (`37dfc17`, one file, 557
+insertions) and the documentation-only commits after it change no source, schema, test or manifest
+path. Nothing forbidden is present in the
 index: no `pnpm-lock.yaml`, no `pnpm-workspace.yaml`, no `node_modules`, no Docker evidence, no
 disposable clone, no local log, no test temp repository, no portable Node runtime, no tarball.
-Immediately after that commit the host regenerated the two pnpm files again (see `## MANIFEST`),
+Immediately after `37dfc17` the host regenerated the two pnpm files again (see `## MANIFEST`),
 which is expected behaviour for this workspace; they were quarantined rather than staged, so the tree
 is clean in the sense that nothing untracked survives. All Stage 3 forensics (probe battery, RED
-evidence, cell clones, logs, bundle) live outside the repository in `../stage3/`, and `docs/audits/`
-is excluded from `SOURCE_MANIFEST.txt` by design, so committing this report does not move the
-101-entry manifest.
+evidence, cell clones, logs, bundle, CI capture) live outside the repository in `../stage3/`, and
+`docs/audits/` is excluded from `SOURCE_MANIFEST.txt` by design, so committing this report does not
+move the 101-entry manifest.
 
 ## CAVEATS, INVALIDATED ATTEMPTS AND SESSION INTEGRITY
 
