@@ -477,9 +477,10 @@ These are recorded rather than hidden, per `AGENTS.md` audit discipline.
    condition described in (3). Both had already produced their evidence, which lives outside them
    in `../stage2/logs-*`, and both were clean checkouts at `a2f5a14` at the time of deletion. No
    user work, source file, or evidence record was removed.
-8. **The pnpm regeneration described in (4) recurred during the closure** (fifth observed
-   occurrence). It was quarantined again byte-identically under
-   `../stage2/local-debris/2026-09-25-regen-5/` and was never staged in either closure commit.
+8. **The pnpm regeneration described in (4) recurred twice during the closure** (fifth and sixth
+   observed occurrences; hashes unchanged at `348ddf66…` / `d6d0c244…`). Both pairs were quarantined
+   again byte-identically under `../stage2/local-debris/2026-09-25-regen-{5,6}/` and were never
+   staged in any closure commit.
 
 ## REMAINING PARSER LIMITATIONS
 
@@ -715,10 +716,31 @@ Manifest file hash `263868958e684f6e94e29cc9f67d7772ab4cf2583b827463d9cc9c14c0a9
 
 ## HOSTED CI
 
-Per instruction, CI configuration was not changed. The closure push was observed once; the result is
-recorded in the follow-up CI record. The prior Stage-2 observation stands: runs queue but receive
-zero runners and execute zero steps, which is an external capacity/billing condition and not
-evidence about this code.
+Per instruction, CI configuration was not changed. The closure push
+(`cccac13..9d60895` → `rescue/stage0-source`) carried two commits — `dd317da`, the repair whose tree
+the four local cells qualified, and `9d60895`, this report — and was observed once.
+
+**`EXTERNAL CI BLOCKED`.**
+
+```text
+run            36145158577  https://github.com/Pavithran-R-A/DiffBeacon/actions/runs/36145158577
+head SHA       9d6089579e01b6328228193db2214c17e86dfcf9   (the closure docs commit)
+event / branch push / rescue/stage0-source
+started        2026-09-25T14:05:23Z      updated 2026-09-25T14:05:29Z   (6 s total)
+conclusion     failure
+jobs           4 — Node 24/ubuntu, Node 22/ubuntu, Node 24/windows, Node 22/windows
+steps          [] for all four jobs
+logs           `gh run view --log` -> "log not found: 108104361773"
+```
+
+Four jobs were created and each completed in 2–4 seconds with zero steps and no retrievable log, so
+no command from the qualification matrix ran on the hosted runners at all. This is the same signature
+as the Stage-1 and Stage-2 observations on this branch, and is read as an external runner-capacity or
+billing condition on the account, not as a failure of this code: the identical tree passes all ten
+commands on four local platform cells (see WINDOWS RESULT / LINUX RESULT). No rerun was triggered, no
+workflow file was edited, and no conclusion about the code is drawn from this run. The follow-up
+commit that records this observation was not itself observed, to avoid an unbounded chain of
+CI-recording pushes.
 
 ## STAGE 2 FINAL DECISION
 
