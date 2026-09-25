@@ -2,8 +2,16 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import process3 from "node:process";
 
+// packages/core/src/model.ts
+var MAX_DIFF_BYTES = 8 * 1024 * 1024;
+
 // packages/core/src/parser.ts
 var NULL_PATH = "/dev/null";
+function exceedsDiffLimit(value) {
+  if (value.length > MAX_DIFF_BYTES) return true;
+  if (value.length * 3 <= MAX_DIFF_BYTES) return false;
+  return new TextEncoder().encode(value).length > MAX_DIFF_BYTES;
+}
 function decodeGitQuoted(value) {
   const trimmed = value.trim();
   if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) return trimmed;
@@ -73,63 +81,68 @@ function parseQuotedPair(value) {
     }
     tokens.push(trimmed.slice(start, cursor));
   }
-  return tokens.length === 2 ? [stripDiffPrefix(tokens[0]), stripDiffPrefix(tokens[1])] : null;
+  if (tokens.length !== 2) return null;
+  const oldPath = stripDiffPrefix(tokens[0]);
+  const newPath = stripDiffPrefix(tokens[1]);
+  return oldPath === "" || newPath === "" ? null : [oldPath, newPath];
 }
 function parseGitPair(value) {
   const trimmed = value.trim();
   const quoted = parseQuotedPair(trimmed);
-  if (quoted !== null) return quoted;
-  const candidates = [];
+  if (quoted !== null)
+    return {
+      reason: "proven",
+      pair: { oldPath: quoted[0], newPath: quoted[1] }
+    };
+  return resolvePair(trimmed, " b/", 2);
+}
+function parseBinaryPair(value) {
+  return resolvePair(value.trim().replace(/ differ$/, ""), " and ", 0);
+}
+var isOldSide = (value) => value === NULL_PATH || value.startsWith("a/");
+var isNewSide = (value) => value === NULL_PATH || value.startsWith("b/");
+var isGitHeader = (line) => line.startsWith("diff --git ") || line.trimEnd() === "diff --git";
+function resolvePair(value, marker, keep) {
+  const accepted = [];
   let offset = 0;
-  while (offset < trimmed.length) {
-    const index = trimmed.indexOf(" b/", offset);
+  while (offset < value.length) {
+    const index = value.indexOf(marker, offset);
     if (index < 0) break;
-    const oldPath = trimmed.slice(0, index);
-    const newPath = trimmed.slice(index + 1);
-    if (oldPath.startsWith("a/") && newPath.startsWith("b/")) {
-      const oldBase = oldPath.slice(2).split("/").at(-1);
-      const newBase = newPath.slice(2).split("/").at(-1);
-      candidates.push({
-        oldPath,
-        newPath,
-        score: oldPath.slice(2) === newPath.slice(2) ? 3 : oldBase === newBase ? 2 : 1,
-        index
-      });
+    const left = value.slice(0, index);
+    const right = value.slice(index + marker.length - keep);
+    if (isOldSide(left) && isNewSide(right)) {
+      const oldPath = stripDiffPrefix(left);
+      const newPath = stripDiffPrefix(right);
+      if (oldPath !== "" && newPath !== "") accepted.push({ oldPath, newPath });
     }
     offset = index + 1;
   }
-  const selected = candidates.sort(
-    (left, right) => right.score - left.score || left.index - right.index
-  )[0];
-  return selected === void 0 ? null : [stripDiffPrefix(selected.oldPath), stripDiffPrefix(selected.newPath)];
-}
-function parseBinaryPair(value) {
-  const candidates = [];
-  let offset = 0;
-  while (offset < value.length) {
-    const index = value.indexOf(" and ", offset);
-    if (index < 0) break;
-    const left = value.slice(0, index);
-    const right = value.slice(index + 5).replace(/ differ$/, "");
-    if (left === NULL_PATH || left.startsWith("a/") || right.startsWith("b/"))
-      candidates.push([left, right]);
-    offset = index + 1;
-  }
-  const selected = candidates.at(-1);
-  return selected === void 0 ? null : [stripDiffPrefix(selected[0]), stripDiffPrefix(selected[1])];
+  if (accepted.length === 0) return { reason: "unprovable", pair: null };
+  if (accepted.length === 1) return { reason: "proven", pair: accepted[0] };
+  const agreeing = accepted.filter(
+    (candidate) => candidate.oldPath === candidate.newPath && candidate.oldPath !== null
+  );
+  const distinct = new Set(agreeing.map((candidate) => candidate.oldPath));
+  return distinct.size === 1 ? { reason: "proven", pair: agreeing[0] } : { reason: "ambiguous", pair: null };
 }
 function parseHunkHeader(line) {
-  if (!/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/.test(line)) return null;
-  return { header: line, additions: 0, deletions: 0 };
+  const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
+  if (match === null) return null;
+  return {
+    oldCount: Number.parseInt(match[2] ?? "1", 10),
+    newCount: Number.parseInt(match[4] ?? "1", 10)
+  };
 }
 function inferStatus(file) {
   if (file.isNewFile) return "added";
   if (file.isDeletedFile) return "deleted";
+  if (file.isCopy) return "added";
   if (file.oldPath === null && file.newPath !== null) return "added";
   if (file.newPath === null && file.oldPath !== null) return "deleted";
   if (file.renameFrom !== null || file.renameTo !== null || file.similarity !== null)
     return "renamed";
-  if (file.hunks.length === 0 && file.oldMode !== null && file.newMode !== null) return "mode-only";
+  if (file.hunks.length === 0 && !file.binary && file.oldMode !== null && file.newMode !== null)
+    return "mode-only";
   return "modified";
 }
 function finalize(current) {
@@ -137,8 +150,8 @@ function finalize(current) {
   const modeOnly = status === "mode-only";
   const additions = current.binary || modeOnly ? null : current.hunks.reduce((sum, hunk) => sum + hunk.additions, 0);
   const deletions = current.binary || modeOnly ? null : current.hunks.reduce((sum, hunk) => sum + hunk.deletions, 0);
-  const oldPath = current.isNewFile ? null : current.renameFrom ?? current.oldPath;
-  const newPath = current.isDeletedFile ? null : current.renameTo ?? current.newPath;
+  const oldPath = current.isNewFile || current.isCopy ? null : current.renameFrom ?? current.oldPath;
+  const newPath = current.isDeletedFile ? null : current.renameTo ?? current.copyTo ?? current.newPath;
   return {
     oldPath,
     newPath,
@@ -155,24 +168,83 @@ function finalize(current) {
     generated: false
   };
 }
+function openHunk(current, line, lineNumber, counts) {
+  const hunk = { header: line, additions: 0, deletions: 0 };
+  current.hunks.push(hunk);
+  current.activeHunk = {
+    hunk,
+    headerLine: lineNumber,
+    declaredOld: counts.oldCount,
+    declaredNew: counts.newCount,
+    seenOld: 0,
+    seenNew: 0
+  };
+}
+function closeHunk(current, diagnostics) {
+  const account = current.activeHunk;
+  if (account === null) return;
+  if (account.seenOld < account.declaredOld || account.seenNew < account.declaredNew) {
+    diagnostics.push({
+      code: "truncated-hunk",
+      message: `Hunk declared ${account.declaredOld} old and ${account.declaredNew} new lines but only ${account.seenOld} and ${account.seenNew} arrived.`,
+      line: account.headerLine
+    });
+  } else if (account.seenOld > account.declaredOld || account.seenNew > account.declaredNew) {
+    diagnostics.push({
+      code: "hunk-count-mismatch",
+      message: `Hunk body exceeded its declared ${account.declaredOld} old and ${account.declaredNew} new lines with ${account.seenOld} and ${account.seenNew}.`,
+      line: account.headerLine
+    });
+  }
+  current.activeHunk = null;
+}
+function consumeHunkLine(line, account) {
+  if (line === "\\ No newline at end of file") return;
+  if (line.startsWith("+")) {
+    account.hunk.additions += 1;
+    account.seenNew += 1;
+  } else if (line.startsWith("-")) {
+    account.hunk.deletions += 1;
+    account.seenOld += 1;
+  } else if (line.startsWith(" ")) {
+    account.seenOld += 1;
+    account.seenNew += 1;
+  }
+}
 function parseUnifiedDiff(input) {
+  if (exceedsDiffLimit(input))
+    return {
+      files: [],
+      diagnostics: [
+        {
+          code: "input-too-large",
+          message: `Input is larger than the ${MAX_DIFF_BYTES} byte analysis limit, so nothing was parsed.`,
+          line: 1
+        }
+      ]
+    };
   const lines = input.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
   const files = [];
   const diagnostics = [];
   let current = null;
+  let skippingDialect = false;
   const flush = () => {
-    if (current !== null) files.push(finalize(current));
+    if (current !== null) {
+      closeHunk(current, diagnostics);
+      files.push(finalize(current));
+    }
     current = null;
   };
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     const lineNumber = index + 1;
-    if (line.startsWith("diff --git ")) {
+    if (isGitHeader(line)) {
       flush();
-      const pair = parseGitPair(line.slice("diff --git ".length));
+      skippingDialect = false;
+      const resolution = parseGitPair(line.slice("diff --git".length));
       current = {
-        oldPath: pair?.[0] ?? null,
-        newPath: pair?.[1] ?? null,
+        oldPath: resolution.pair?.oldPath ?? null,
+        newPath: resolution.pair?.newPath ?? null,
         oldMode: null,
         newMode: null,
         similarity: null,
@@ -182,9 +254,17 @@ function parseUnifiedDiff(input) {
         renameTo: null,
         isNewFile: false,
         isDeletedFile: false,
+        isCopy: false,
+        copyTo: null,
         activeHunk: null
       };
-      if (pair === null)
+      if (resolution.reason === "ambiguous")
+        diagnostics.push({
+          code: "ambiguous-path",
+          message: "Could not prove which paths the diff --git header names.",
+          line: lineNumber
+        });
+      else if (resolution.reason === "unprovable")
         diagnostics.push({
           code: "malformed-header",
           message: "Could not parse diff --git paths.",
@@ -192,8 +272,26 @@ function parseUnifiedDiff(input) {
         });
       continue;
     }
+    const inHunk = current !== null && current.activeHunk !== null;
+    if (!inHunk && (line.startsWith("diff --cc ") || line.startsWith("diff --combined "))) {
+      flush();
+      skippingDialect = true;
+      diagnostics.push({
+        code: "unsupported-dialect",
+        message: "Combined merge diffs are outside the supported patch vector.",
+        line: lineNumber
+      });
+      continue;
+    }
+    if (skippingDialect) continue;
     if (current === null) {
-      if (line.startsWith("--- ") || line.startsWith("+++ "))
+      if (line.startsWith("@@ "))
+        diagnostics.push({
+          code: "unrecognized-hunk-header",
+          message: "Hunk header appeared without diff --git.",
+          line: lineNumber
+        });
+      else if (line.startsWith("--- ") || line.startsWith("+++ "))
         diagnostics.push({
           code: "unrecognized-file-header",
           message: "File header appeared without diff --git.",
@@ -201,16 +299,13 @@ function parseUnifiedDiff(input) {
         });
       continue;
     }
-    if (current.activeHunk !== null) {
-      if (line.startsWith("@@ ")) {
-        const hunk = parseHunkHeader(line);
-        if (hunk !== null) {
-          current.hunks.push(hunk);
-          current.activeHunk = hunk;
-        }
-      } else if (line !== "\\ No newline at end of file") {
-        if (line.startsWith("+")) current.activeHunk.additions += 1;
-        else if (line.startsWith("-")) current.activeHunk.deletions += 1;
+    const active = current.activeHunk;
+    if (active !== null) {
+      const counts = line.startsWith("@@ ") ? parseHunkHeader(line) : null;
+      if (counts === null) consumeHunkLine(line, active);
+      else {
+        closeHunk(current, diagnostics);
+        openHunk(current, line, lineNumber, counts);
       }
       continue;
     }
@@ -232,22 +327,49 @@ function parseUnifiedDiff(input) {
       current.renameFrom = decodeGitQuoted(line.slice("rename from ".length));
     else if (line.startsWith("rename to "))
       current.renameTo = decodeGitQuoted(line.slice("rename to ".length));
-    else if (line.startsWith("Binary files ")) {
+    else if (line.startsWith("copy from ") || line.startsWith("copy to ")) {
+      if (!current.isCopy) {
+        current.isCopy = true;
+        diagnostics.push({
+          code: "unsupported-dialect",
+          message: "Copy detection is outside the supported patch vector.",
+          line: lineNumber
+        });
+      }
+      if (line.startsWith("copy to "))
+        current.copyTo = decodeGitQuoted(line.slice("copy to ".length));
+    } else if (line.startsWith("Binary files ")) {
       current.binary = true;
-      const pair = parseBinaryPair(line.slice("Binary files ".length));
-      if (pair !== null) {
-        current.oldPath = pair[0];
-        current.newPath = pair[1];
-      }
+      const resolution = parseBinaryPair(line.slice("Binary files ".length));
+      if (resolution.reason === "proven" && resolution.pair !== null) {
+        current.oldPath = resolution.pair.oldPath;
+        current.newPath = resolution.pair.newPath;
+      } else
+        diagnostics.push({
+          code: "ambiguous-path",
+          message: "Could not prove which paths the Binary files line names.",
+          line: lineNumber
+        });
     } else if (line === "GIT binary patch") current.binary = true;
-    else if (line.startsWith("--- ")) current.oldPath = stripDiffPrefix(line.slice(4));
-    else if (line.startsWith("+++ ")) current.newPath = stripDiffPrefix(line.slice(4));
-    else if (line.startsWith("@@ ")) {
-      const hunk = parseHunkHeader(line);
-      if (hunk !== null) {
-        current.hunks.push(hunk);
-        current.activeHunk = hunk;
-      }
+    else if (line.startsWith("--- ") || line.startsWith("+++ ")) {
+      const path = stripDiffPrefix(line.slice(4));
+      if (path === "")
+        diagnostics.push({
+          code: "malformed-header",
+          message: "File header named no path.",
+          line: lineNumber
+        });
+      else if (line.startsWith("--- ")) current.oldPath = path;
+      else current.newPath = path;
+    } else if (line.startsWith("@@ ")) {
+      const counts = parseHunkHeader(line);
+      if (counts === null)
+        diagnostics.push({
+          code: "malformed-hunk",
+          message: "Could not parse hunk line counts.",
+          line: lineNumber
+        });
+      else openHunk(current, line, lineNumber, counts);
     }
   }
   flush();
@@ -631,9 +753,6 @@ function analyzeDiff(input) {
     reviewOrder: makeReviewOrder(files)
   };
 }
-
-// packages/core/src/model.ts
-var MAX_DIFF_BYTES = 8 * 1024 * 1024;
 
 // packages/core/src/render.ts
 function number(value) {

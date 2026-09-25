@@ -43,7 +43,7 @@ const SAMPLE_DIFF = `diff --git a/.github/workflows/release.yml b/.github/workfl
 index 18a3a20..a1e2f91 100644
 --- a/.github/workflows/release.yml
 +++ b/.github/workflows/release.yml
-@@ -8,6 +8,8 @@ jobs:
+@@ -8,4 +8,6 @@ jobs:
    release:
      runs-on: ubuntu-latest
 +    permissions:
@@ -54,7 +54,7 @@ diff --git a/src/auth/session.ts b/src/auth/session.ts
 index c6b1f11..a5f9912 100644
 --- a/src/auth/session.ts
 +++ b/src/auth/session.ts
-@@ -12,7 +12,11 @@ export function readSession(token: string) {
+@@ -12,2 +12,3 @@ export function readSession(token: string) {
 -  return decode(token);
 +  const session = decode(token);
 +  return session && session.expiresAt > Date.now() ? session : null;
@@ -72,7 +72,7 @@ diff --git a/package.json b/package.json
 index 2d1d4a1..7ed1ab4 100644
 --- a/package.json
 +++ b/package.json
-@@ -14,6 +14,7 @@
+@@ -14,3 +14,4 @@
      "scripts": {
        "test": "vitest"
      },
@@ -81,7 +81,7 @@ diff --git a/src/review/attention.test.ts b/src/review/attention.test.ts
 new file mode 100644
 --- /dev/null
 +++ b/src/review/attention.test.ts
-@@ -0,0 +1,7 @@
+@@ -0,0 +1,4 @@
 +import { describe, it, expect } from 'vitest';
 +describe('attention', () => {
 +  it('captures session expiry', () => expect(true).toBe(true));

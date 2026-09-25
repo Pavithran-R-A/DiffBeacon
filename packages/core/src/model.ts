@@ -49,8 +49,19 @@ export interface ChangedFile {
   generated: boolean;
 }
 
+export type ParseDiagnosticCode =
+  | 'malformed-header'
+  | 'ambiguous-path'
+  | 'unrecognized-file-header'
+  | 'malformed-hunk'
+  | 'truncated-hunk'
+  | 'hunk-count-mismatch'
+  | 'unrecognized-hunk-header'
+  | 'unsupported-dialect'
+  | 'input-too-large';
+
 export interface ParseDiagnostic {
-  code: 'malformed-header' | 'unrecognized-file-header';
+  code: ParseDiagnosticCode;
   message: string;
   line: number;
 }
