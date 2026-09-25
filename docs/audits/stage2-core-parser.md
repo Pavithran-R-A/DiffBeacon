@@ -12,6 +12,11 @@ shipped Git command vector cross-checked against Git itself, malformed and trunc
 as diagnostics instead of invented facts, hostile input proven inert, and the direct parser bounded
 by the shared byte limit.
 
+> **READ THIS FIRST.** The `PASS` above was later overturned for one case by the auditor, and the
+> defect was repaired and re-qualified. See
+> [`STAGE 2 CLOSURE — COMPLETED-HUNK STRUCTURAL BOUNDARY`](#stage-2-closure--completed-hunk-structural-boundary)
+> at the end of this file for the final ruling, which supersedes the text above.
+
 ```text
 STARTING SHA:   124af30cca5feead6440faf3fb3b908804ae9cf6  docs: record DiffBeacon Stage 1 hosted CI observation
 FIX COMMIT:     a2f5a14eee165ce30538d7cc20b8f7b39a60944a  fix: qualify DiffBeacon core diff parser
@@ -461,6 +466,20 @@ These are recorded rather than hidden, per `AGENTS.md` audit discipline.
    never staged, and their regeneration is not caused by any Stage-2 command.
 5. **One intermediate commit was discarded before qualification** (`826ab054…`), by soft reset,
    because it contained the Windows-only fixture described in (2). Only `a2f5a14` is qualified.
+6. **A closure control probe initially disagreed with the test suite.** An inline
+   `node --input-type=module -e` run reported `hunk-count-mismatch` for the no-newline-marker case
+   that `tests/stage2.hunk-accounting.test.ts` passes. The shell had mangled the backslash in the
+   marker string, so the probe fed the parser a different input than the test does. The file-based
+   probe (`../stage2/closure/probe-controls.mjs`) reproduces the test result exactly
+   (`diagnostics: []`, counts `1`/`1`). Recorded as a probe artifact; no parser behaviour is
+   claimed from the broken inline run.
+7. **Two Stage-2 disposable cells were deleted during the closure**, to relieve the `ENOSPC`
+   condition described in (3). Both had already produced their evidence, which lives outside them
+   in `../stage2/logs-*`, and both were clean checkouts at `a2f5a14` at the time of deletion. No
+   user work, source file, or evidence record was removed.
+8. **The pnpm regeneration described in (4) recurred during the closure** (fifth observed
+   occurrence). It was quarantined again byte-identically under
+   `../stage2/local-debris/2026-09-25-regen-5/` and was never staged in either closure commit.
 
 ## REMAINING PARSER LIMITATIONS
 
@@ -489,6 +508,13 @@ Deliberate, tested, and documented — not gaps discovered later:
    `review-attention-map.schema.json` (`additionalProperties: false`), so per-file diagnostic detail
    is available to in-process consumers of `ParsedDiff` but is not currently surfaced per file in
    the JSON report.
+7. **An oversatisfied hunk does not diagnose its trailing prose.** The completed-boundary rule added
+   in the closure fires only when the declared counts are met _exactly_. Once a hunk has exceeded
+   them (`hunk-count-mismatch` territory, typical of `git format-patch` `-- ` signature trailers)
+   further prefix-free lines stay inert content, because naming each one would turn one real defect
+   into a diagnostic storm. The single `hunk-count-mismatch` for that hunk is still emitted. Empty
+   lines are inert everywhere at a boundary, because `input.split('\n')` yields a final empty
+   element for every newline-terminated patch. See the closure section for the accepted cases.
 
 ## STAGE 2 DECISION
 
@@ -522,3 +548,192 @@ Two Stage-2 outputs should feed it, and both are cheap:
    detector suite.
 
 No work beyond Stage 2 was attempted. This stage stops here.
+
+---
+
+# STAGE 2 CLOSURE — COMPLETED-HUNK STRUCTURAL BOUNDARY
+
+Narrow re-audit of the Stage-2 parser after the auditor rejected one behavioural claim. Scope was
+one state-machine boundary and its tests: no Stage-3 detector work, no parser redesign, no new
+supported dialect, no detector or ordering change, no merge, tag, release or publish.
+
+## PREVIOUS STAGE-2 CLAIM
+
+`PASS`, recorded above on commit `a2f5a14`, on the strength of the statement that a combined merge
+diff "is named instead of being quietly read as something the parser does support".
+
+## AUDITOR RULING
+
+**REPAIR REQUIRED.** That claim holds only for a combined block that starts the stream or follows a
+file at a metadata boundary. It does not hold for a combined block that follows a **fully satisfied
+hunk**, where the parser swallowed the dialect header as hunk content and reported the following
+`---`/`+++` lines as changes to the previous file. The Stage-2 requirement
+"unsupported combined diffs must be explicitly named rather than misread" was therefore not met on
+every path, and the general boundary behind it — a completed hunk must not absorb whatever comes
+next — was unqualified.
+
+## ROOT CAUSE
+
+Two conditions in `packages/core/src/parser.ts` combined:
+
+1. `closeHunk()` only recorded a diagnostic and cleared `activeHunk` at flush time, so a hunk whose
+   `seenOld === declaredOld && seenNew === declaredNew` **stayed open indefinitely**. The parser had
+   no notion of "this hunk is finished"; it only had "short" and "over".
+2. The combined-dialect branch was gated on `!inHunk`, i.e.
+   `current !== null && current.activeHunk !== null` suppressed it.
+
+So after an exactly satisfied hunk, `diff --cc` / `diff --combined` could not be recognized, fell
+through into `consumeHunkLine()`, and its `--- a/x` / `+++ b/x` metadata lines were counted as a
+deletion and an addition against the preceding file. The same gap covered any prefix-free line at a
+completed boundary: `format-patch` prose, a stray `@@` header, a bare filename.
+
+## PRE-FIX REPRODUCTION
+
+Reproduced out of process against an esbuild bundle of the pre-fix parser
+(`../stage2/closure/pre-fix-parser.mjs`, probe `probe-closure.mjs`, output `pre-fix-probe.txt`).
+Input: a well-formed single-hunk change to `ordinary.txt` (`@@ -1 +1 @@`, `-old`, `+new`), followed
+by the captured real `diff --cc both.txt` block used in the dialect suite.
+
+| Case                                            | Pre-fix files                               | Pre-fix diagnostics                                            |
+| ----------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------- |
+| ordinary → combined                             | `ordinary.txt` modified `5`/`2`             | `hunk-count-mismatch@5` — **no** `unsupported-dialect`         |
+| ordinary → combined → ordinary                  | `ordinary.txt` `5`/`2`, `later.txt` `1`/`1` | `hunk-count-mismatch@5` — **no** `unsupported-dialect`         |
+| completed hunk → bare `@@ not a real header @@` | `ordinary.txt` `1`/`1`                      | `[]` — the line vanished silently                              |
+| completed hunk → bare prefix-free line          | `ordinary.txt` `1`/`1`                      | `[]` — silently accepted                                       |
+| completed hunk → three prose lines              | `ordinary.txt` `1`/`1`                      | `[]` — silently accepted                                       |
+| bare `@@` inside an _unsatisfied_ hunk          | `f.ts` `0`/`0`                              | `truncated-hunk@4` only; the header-shaped line itself unnamed |
+
+The corrupted counts are the damaging part: `ordinary.txt` is a one-line change reported as
+`+5 -2`, with a confident `modified` status and a mismatch diagnostic that blames the _ordinary_
+hunk rather than naming the real cause. Post-fix, the same inputs give
+`ordinary.txt` `1`/`1` + `unsupported-dialect@8`, both ordinary files intact at `1`/`1`, and one
+`malformed-hunk` naming each of the three boundary cases.
+
+## REPAIR
+
+`dd317dabf2bf581f478e18a51139348e614bfb80` — `fix: close parser structural boundary`
+(5 files, `+236 / -22`; parser now 535 lines).
+
+The active-hunk branch was rewritten to distinguish the three states the defect conflated, and the
+dialect gate was de-scoped from `!inHunk` to unconditional:
+
+- **Case A — hunk still consuming** (`seen < declared`). Body lines behave exactly as before, so a
+  truncated hunk still closes at the next real `@@` header and reports `truncated-hunk`. One new
+  addition: a bare `@@ ` line that fails `parseHunkHeader()` while the hunk is short is now named
+  once with `malformed-hunk` _and_ stays inert for the counts, so the accounting is unchanged and
+  the reason a header-shaped line was not read is visible.
+- **Case B — hunk exactly satisfied.** A line that is not a recognized body line ends the hunk
+  immediately: one `malformed-hunk` naming it, `closeHunk()`, and the next line is parsed from the
+  metadata state — which is what lets `diff --cc`, `diff --combined`, `diff --git` and a valid next
+  `@@` be seen at all.
+- **Case C — hunk already exceeded.** Deliberately unchanged. `git format-patch` puts a bare
+  `-- ` signature trailer and prose after a hunk, and once a hunk has overshot its counts the file
+  is already diagnosed by `hunk-count-mismatch`; emitting a diagnostic per remaining line would
+  trade one honest signal for a storm.
+
+What keeps the metadata-inoculation guarantee intact is `isBodyLine()`: a line is content if it
+starts with `' '`, `'+'` or `'-'`. Git emits every real hunk body line with one of those prefixes,
+so the only forms exempted as count-neutral are `\ No newline at end of file` and the empty string —
+and the empty string must stay inert because `input.split('\n')` yields a trailing `''` for every
+newline-terminated patch. That is why `+diff --cc this-is-content`, `-@@ …`, `' @@ …'` and
+`--- b/fake.ts` inside a hunk all remain content with zero diagnostics, while a bare
+`diff --cc …` at a completed boundary is structure. No diagnostic enum was expanded; the existing
+`malformed-hunk` code was reused.
+
+## NEW TESTS
+
+Thirteen added, one contract rewritten (`No existing parser tests may be deleted merely to obtain
+green` — nothing was deleted; one test was split in two because it pinned the exact behaviour the
+auditor rejected).
+
+`tests/stage2.hunk-accounting.test.ts` 22 → 33 tests. New describe
+`structural boundary after an exactly completed hunk`: input ends cleanly / trailing empty line stays
+silent / no-newline marker produces no diagnostic / next valid hunk opens / prefixed `+extra` still
+yields `hunk-count-mismatch` `2`/`1` / prefixed `' @@ -1 +1 @@'` yields `hunk-count-mismatch`
+`1`/`1` (proving a prefixed header-shaped line is counted, not treated as structure) / bare
+`@@ not a real header @@` → `malformed-hunk@7` with paths and counts intact / bare prefix-free line
+→ `malformed-hunk@7` / a hunk after a named violation is still read / determinism over four boundary
+bodies. Rewritten contract: `treats an invalid @@ line inside a hunk as content rather than a new
+header` became two tests — `treats a prefixed @@ line inside a hunk as content rather than a new
+header` (no diagnostic) and `names a bare @@ line inside a hunk instead of treating it as content`
+(`malformed-hunk` then `truncated-hunk`).
+
+`tests/stage2.patch-dialects.test.ts` 6 → 8 tests: `names a combined block that follows a fully
+satisfied hunk` and `keeps the ordinary files on both sides of a combined block intact`, each run
+over both captured real fixtures (`diff --cc` and `diff --combined`). All four orderings are covered
+between these and the pre-existing dialect tests: combined-only, combined → ordinary, ordinary →
+combined, ordinary → combined → ordinary, with exactly one `unsupported-dialect` per combined block
+and no combined parsing introduced.
+
+## FINAL TEST TOTAL
+
+`178` collected, up from the Stage-2 baseline of `165` (+13), across 18 test files.
+
+## WINDOWS RESULT
+
+Qualified on fresh clones of `dd317da` from `../stage2/closure/diffbeacon-closure.bundle`, all ten
+commands each, run serially:
+
+- **W1** host Node `v24.21.0` / npm `11.19.0` / Git `2.55.0.windows.5`, `core.autocrlf=true` —
+  **10/10 PASS**, `Test Files 18 passed (18)`, `Tests 178 passed (178)`.
+- **W2** portable Node `v22.23.3` / npm `10.9.9`, same Git and `autocrlf=true` —
+  **10/10 PASS**, `178 passed (178)`.
+
+## LINUX RESULT
+
+Container-native checkouts at `/tmp/work/repo` (never `/mnt/c`), same bundle, same script copy
+(`run-linux-cell.sh`, sha256 `0f8ca9a25b7a2dcb…` for the shared Windows runner):
+
+- **L1** `node:24` — Node `v24.21.0` / npm `11.19.0` / Git `2.39.5`, `autocrlf` unset —
+  **10/10 PASS**, `Tests 177 passed | 1 skipped (178)`.
+- **L2** `node:22` — Node `v22.23.3` / npm `10.9.9` / Git `2.39.5` — **10/10 PASS**, `177 + 1 skipped`.
+
+The single skip is the pre-existing Windows-only environment assertion at
+`tests/stage3c.release.test.ts:123`, unchanged from the Stage-2 baseline. Logs:
+`../stage2/closure/logs-{win24,win22,linux24,linux22}/`.
+
+## ACTION BUNDLE
+
+`packages/action/dist/index.js` rebuilt from the repaired parser:
+
+```text
+before   bd4fbbaccd44f8aaeecfc5a65f64bd5be53b076618a73517662aa861638f95c4
+after    36603e8eed3dbe3f4c08c51b9da7f73bfa3d03c46b0f2e5545380a1f00e9a965
+rebuilt  36603e8eed3dbe3f4c08c51b9da7f73bfa3d03c46b0f2e5545380a1f00e9a965   (byte-identical)
+```
+
+The committed bundle is the `after` hash, and the rebuild under a second `npm run build` reproduced
+it exactly. `npm run action-smoke` green in all four cells and on the host.
+
+## MANIFEST
+
+`npm run manifest` regenerated `SOURCE_MANIFEST.txt`: still **98 entries**, exactly **4** digests
+changed (the Action bundle, `packages/core/src/parser.ts`, and the two dialect/accounting suites),
+and `git diff -- SOURCE_MANIFEST.txt` showed nothing but those four pairs — no unexplained
+additions, removals or path changes. Post-regeneration `npm run verify` reported no manifest drift.
+Manifest file hash `263868958e684f6e94e29cc9f67d7772ab4cf2583b827463d9cc9c14c0a93235`.
+
+## HOSTED CI
+
+Per instruction, CI configuration was not changed. The closure push was observed once; the result is
+recorded in the follow-up CI record. The prior Stage-2 observation stands: runs queue but receive
+zero runners and execute zero steps, which is an external capacity/billing condition and not
+evidence about this code.
+
+## STAGE 2 FINAL DECISION
+
+**PASS**, scoped to commit `dd317dabf2bf581f478e18a51139348e614bfb80` and not to `a2f5a14`.
+
+The ruling that opened this closure is now closed: an unsupported combined diff is named no matter
+what preceded it, and the more general property it exposed — a finished hunk cannot silently absorb
+the lines that follow it — is implemented, tested on both sides (prefixed content stays content,
+prefix-free structure is named), and qualified on all four platform cells. Ten defects repaired in
+total across Stage 2: R1–R9 from the original pass plus this completed-hunk boundary.
+
+Known and accepted, stated rather than hidden: the boundary rule covers exactly-satisfied hunks
+only (case C above), empty lines are inert by necessity of `split('\n')`, and the `-- ` signature
+trailer of `git format-patch` is still absorbed as content. None of those is a false fact: each
+either produces its existing diagnostic or produces no claim at all.
+
+**Stage 3 is not authorized here.** No detector work was started, and this closure stops at the
+Stage-2 boundary.
