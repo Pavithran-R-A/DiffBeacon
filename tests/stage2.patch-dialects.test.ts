@@ -61,6 +61,55 @@ describe('combined merge diffs', () => {
     });
   });
 
+  // A combined block that follows a hunk whose declared counts arrived in full is
+  // still a dialect boundary: the finished hunk must hand the stream over instead of
+  // swallowing `diff --cc` as body text and the block's `---`/`+++` lines as changes.
+  const ORDINARY_HEAD = [
+    'diff --git a/ordinary.txt b/ordinary.txt',
+    'index 1111111..2222222 100644',
+    '--- a/ordinary.txt',
+    '+++ b/ordinary.txt',
+    '@@ -1 +1 @@',
+    '-old',
+    '+new',
+  ].join('\n');
+  const ORDINARY_TAIL = [
+    'diff --git a/later.txt b/later.txt',
+    '--- a/later.txt',
+    '+++ b/later.txt',
+    '@@ -1 +1 @@',
+    '-x',
+    '+y',
+  ].join('\n');
+
+  it('names a combined block that follows a fully satisfied hunk', () => {
+    for (const combined of [REAL_COMBINED_CC, REAL_COMBINED_FULL]) {
+      const parsed = parseUnifiedDiff(`${ORDINARY_HEAD}\n${combined}`);
+      expect(codes(parsed)).toEqual(['unsupported-dialect']);
+      expect(parsed.diagnostics[0]).toMatchObject({ line: 8 });
+      expect(parsed.files).toHaveLength(1);
+      expect(parsed.files[0]).toMatchObject({
+        displayPath: 'ordinary.txt',
+        status: 'modified',
+        additions: 1,
+        deletions: 1,
+      });
+    }
+  });
+
+  it('keeps the ordinary files on both sides of a combined block intact', () => {
+    for (const combined of [REAL_COMBINED_CC, REAL_COMBINED_FULL]) {
+      const parsed = parseUnifiedDiff(`${ORDINARY_HEAD}\n${combined}\n${ORDINARY_TAIL}`);
+      expect(codes(parsed)).toEqual(['unsupported-dialect']);
+      expect(parsed.files.map((file) => file.displayPath)).toEqual(['ordinary.txt', 'later.txt']);
+      expect(parsed.files.map((file) => [file.additions, file.deletions])).toEqual([
+        [1, 1],
+        [1, 1],
+      ]);
+      expect(parsed.files.map((file) => file.status)).toEqual(['modified', 'modified']);
+    }
+  });
+
   it('keeps a diff --cc line inside a hunk as content', () => {
     const parsed = parseUnifiedDiff(
       [

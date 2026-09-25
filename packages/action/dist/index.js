@@ -198,8 +198,9 @@ function closeHunk(current, diagnostics) {
   }
   current.activeHunk = null;
 }
+var NO_NEWLINE_MARKER = "\\ No newline at end of file";
 function consumeHunkLine(line, account) {
-  if (line === "\\ No newline at end of file") return;
+  if (line === NO_NEWLINE_MARKER) return;
   if (line.startsWith("+")) {
     account.hunk.additions += 1;
     account.seenNew += 1;
@@ -210,6 +211,12 @@ function consumeHunkLine(line, account) {
     account.seenOld += 1;
     account.seenNew += 1;
   }
+}
+function isBodyLine(line) {
+  return line.startsWith(" ") || line.startsWith("+") || line.startsWith("-") || line === NO_NEWLINE_MARKER || line === "";
+}
+function hasSatisfiedCounts(account) {
+  return account.seenOld === account.declaredOld && account.seenNew === account.declaredNew;
 }
 function parseUnifiedDiff(input) {
   if (exceedsDiffLimit(input))
@@ -272,8 +279,7 @@ function parseUnifiedDiff(input) {
         });
       continue;
     }
-    const inHunk = current !== null && current.activeHunk !== null;
-    if (!inHunk && (line.startsWith("diff --cc ") || line.startsWith("diff --combined "))) {
+    if (line.startsWith("diff --cc ") || line.startsWith("diff --combined ")) {
       flush();
       skippingDialect = true;
       diagnostics.push({
@@ -302,11 +308,28 @@ function parseUnifiedDiff(input) {
     const active = current.activeHunk;
     if (active !== null) {
       const counts = line.startsWith("@@ ") ? parseHunkHeader(line) : null;
-      if (counts === null) consumeHunkLine(line, active);
-      else {
+      if (counts !== null) {
         closeHunk(current, diagnostics);
         openHunk(current, line, lineNumber, counts);
+        continue;
       }
+      if (!isBodyLine(line) && hasSatisfiedCounts(active)) {
+        diagnostics.push({
+          code: "malformed-hunk",
+          message: "Line after a completed hunk is neither hunk content nor a known header.",
+          line: lineNumber
+        });
+        closeHunk(current, diagnostics);
+        continue;
+      }
+      if (line.startsWith("@@ ")) {
+        diagnostics.push({
+          code: "malformed-hunk",
+          message: "Hunk-header line inside a hunk body could not be read as a header.",
+          line: lineNumber
+        });
+      }
+      consumeHunkLine(line, active);
       continue;
     }
     if (line.startsWith("new file mode ")) {

@@ -211,11 +211,25 @@ describe('malformed hunk headers', () => {
     expect(codes(parsed)).toEqual(['malformed-hunk']);
   });
 
-  it('treats an invalid @@ line inside a hunk as content rather than a new header', () => {
+  it('treats a prefixed @@ line inside a hunk as content rather than a new header', () => {
+    // Hunk content always carries its unified-diff prefix, so header-shaped source
+    // text stays inert data and cannot reopen structure.
     const parsed = parseUnifiedDiff(
-      fileWith('@@ -1,2 +1,2 @@', [' ctx', '@@ still inside the hunk', ' tail']),
+      fileWith('@@ -1,3 +1,3 @@', [' ctx', ' @@ still inside the hunk', ' tail']),
     );
     expect(codes(parsed)).toEqual([]);
+    expect(parsed.files[0]).toMatchObject({ additions: 0, deletions: 0 });
+  });
+
+  it('names a bare @@ line inside a hunk instead of treating it as content', () => {
+    // Without a content prefix a `@@` line makes no valid hunk body claim, so it is
+    // named and stays out of the accounting, which leaves the hunk short as well.
+    const parsed = parseUnifiedDiff(
+      fileWith('@@ -1,3 +1,3 @@', [' ctx', '@@ still inside the hunk', ' tail']),
+    );
+    expect(codes(parsed)).toEqual(['malformed-hunk', 'truncated-hunk']);
+    expect(parsed.diagnostics[0]).toMatchObject({ line: 6 });
+    expect(parsed.diagnostics[1]).toMatchObject({ line: 4 });
     expect(parsed.files[0]).toMatchObject({ additions: 0, deletions: 0 });
   });
 
@@ -241,6 +255,92 @@ describe('malformed hunk headers', () => {
       fileWith('@@ broken @@', ['-a', '+b']),
     ];
     for (const input of inputs) {
+      expect(JSON.stringify(parseUnifiedDiff(input))).toBe(JSON.stringify(parseUnifiedDiff(input)));
+    }
+  });
+});
+
+// Stage 2 closure: a hunk that has received exactly its declared old and new lines is
+// finished. A body line always arrives with a unified-diff content prefix, so once the
+// counts are satisfied a prefix-free structural line has to end the hunk and be named,
+// while prefixed lines keep counting so overflow stays visible.
+describe('structural boundary after an exactly completed hunk', () => {
+  const satisfied = ['@@ -1 +1 @@', '-a', '+b'];
+  const afterBoundary = (body: string[]) =>
+    ['diff --git a/f.ts b/f.ts', '--- a/f.ts', '+++ b/f.ts', ...satisfied, ...body].join('\n');
+  const firstFile = (parsed: ParsedDiff) => parsed.files[0];
+
+  it('accepts a completed hunk that simply ends the input', () => {
+    const parsed = parseUnifiedDiff(afterBoundary([]));
+    expect(parsed.diagnostics).toEqual([]);
+    expect(firstFile(parsed)).toMatchObject({ additions: 1, deletions: 1 });
+  });
+
+  it('keeps the trailing empty line a final newline leaves behind silent', () => {
+    // Real patch text ends with a newline, which splits into a final empty element.
+    const parsed = parseUnifiedDiff(`${afterBoundary([])}\n`);
+    expect(parsed.diagnostics).toEqual([]);
+    expect(firstFile(parsed)).toMatchObject({ additions: 1, deletions: 1 });
+  });
+
+  it('keeps the no-newline marker after a completed hunk free of any diagnostic', () => {
+    const parsed = parseUnifiedDiff(afterBoundary(['\\ No newline at end of file']));
+    expect(parsed.diagnostics).toEqual([]);
+    expect(firstFile(parsed)).toMatchObject({ additions: 1, deletions: 1 });
+  });
+
+  it('opens the next hunk that follows a completed one', () => {
+    const parsed = parseUnifiedDiff(afterBoundary(['@@ -10 +10 @@', '-c', '+d']));
+    expect(parsed.diagnostics).toEqual([]);
+    expect(firstFile(parsed)).toMatchObject({ additions: 2, deletions: 2 });
+  });
+
+  it('keeps prefixed overflow content countable as a mismatch', () => {
+    const parsed = parseUnifiedDiff(afterBoundary(['+extra']));
+    expect(codes(parsed)).toEqual(['hunk-count-mismatch']);
+    expect(firstFile(parsed)).toMatchObject({ additions: 2, deletions: 1 });
+  });
+
+  it('keeps prefixed header-shaped text countable as overflow, not structure', () => {
+    const parsed = parseUnifiedDiff(afterBoundary([' @@ -1 +1 @@']));
+    expect(codes(parsed)).toEqual(['hunk-count-mismatch']);
+    expect(firstFile(parsed)).toMatchObject({ additions: 1, deletions: 1 });
+  });
+
+  it('names a bare malformed @@ line that follows a completed hunk', () => {
+    const parsed = parseUnifiedDiff(afterBoundary(['@@ not a real header @@']));
+    expect(codes(parsed)).toEqual(['malformed-hunk']);
+    expect(parsed.diagnostics[0]).toMatchObject({ line: 7 });
+    expect(firstFile(parsed)).toMatchObject({ additions: 1, deletions: 1 });
+  });
+
+  it('names a bare prefix-free line that follows a completed hunk', () => {
+    const parsed = parseUnifiedDiff(afterBoundary(['this has no unified-diff prefix']));
+    expect(codes(parsed)).toEqual(['malformed-hunk']);
+    expect(parsed.diagnostics[0]).toMatchObject({ line: 7 });
+    expect(firstFile(parsed)).toMatchObject({
+      status: 'modified',
+      oldPath: 'f.ts',
+      newPath: 'f.ts',
+      additions: 1,
+      deletions: 1,
+    });
+  });
+
+  it('reads a hunk that follows a named boundary violation', () => {
+    const parsed = parseUnifiedDiff(afterBoundary(['stray prose', '@@ -10 +10 @@', ' ctx']));
+    expect(codes(parsed)).toEqual(['malformed-hunk']);
+    expect(firstFile(parsed)).toMatchObject({ additions: 1, deletions: 1 });
+  });
+
+  it('is deterministic across repeated parses of boundary input', () => {
+    for (const body of [
+      ['@@ not a real header @@'],
+      ['this has no unified-diff prefix'],
+      ['\\ No newline at end of file'],
+      ['+extra'],
+    ]) {
+      const input = afterBoundary(body);
       expect(JSON.stringify(parseUnifiedDiff(input))).toBe(JSON.stringify(parseUnifiedDiff(input)));
     }
   });

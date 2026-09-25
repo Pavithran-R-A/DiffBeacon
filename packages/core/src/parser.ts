@@ -1,7 +1,8 @@
 /**
  * DiffBeacon parser: explicit unified-diff state machine. Metadata is parsed
- * only outside hunks; hunk content is always treated as content, even when it
- * resembles Git headers such as `---`, `+++`, `diff --git`, or `index`.
+ * only outside hunks; a hunk body line carries its unified-diff prefix, so content
+ * that resembles Git headers such as `---`, `+++`, `diff --git`, or `index` stays
+ * content, while a prefix-free line at a completed hunk boundary is reported.
  */
 
 import type { ChangedFile, FileStatus, Hunk, ParsedDiff, ParseDiagnostic } from './model.js';
@@ -298,10 +299,12 @@ function closeHunk(current: CurrentFile, diagnostics: ParseDiagnostic[]): void {
   current.activeHunk = null;
 }
 
+const NO_NEWLINE_MARKER = '\\ No newline at end of file';
+
 function consumeHunkLine(line: string, account: HunkAccount): void {
-  // The no-newline marker annotates the previous line and the `@@` restart of a
-  // malformed header are both inert: neither side gains a line.
-  if (line === '\\ No newline at end of file') return;
+  // The no-newline marker annotates the previous line and a structural-looking line
+  // is inert: neither side gains a line.
+  if (line === NO_NEWLINE_MARKER) return;
   if (line.startsWith('+')) {
     account.hunk.additions += 1;
     account.seenNew += 1;
@@ -312,6 +315,23 @@ function consumeHunkLine(line: string, account: HunkAccount): void {
     account.seenOld += 1;
     account.seenNew += 1;
   }
+}
+
+// A real hunk body line always carries a unified-diff content prefix. The marker
+// and the empty element a final newline leaves behind are the two recognized forms
+// that do not change either side's count.
+function isBodyLine(line: string): boolean {
+  return (
+    line.startsWith(' ') ||
+    line.startsWith('+') ||
+    line.startsWith('-') ||
+    line === NO_NEWLINE_MARKER ||
+    line === ''
+  );
+}
+
+function hasSatisfiedCounts(account: HunkAccount): boolean {
+  return account.seenOld === account.declaredOld && account.seenNew === account.declaredNew;
 }
 
 export function parseUnifiedDiff(input: string): ParsedDiff {
@@ -378,9 +398,9 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
     }
     // A combined merge diff describes one file against several parents, which the
     // supported `base...head` vector never produces. Say so and skip the block
-    // rather than emitting misleading file-header diagnostics for its lines.
-    const inHunk = current !== null && current.activeHunk !== null;
-    if (!inHunk && (line.startsWith('diff --cc ') || line.startsWith('diff --combined '))) {
+    // rather than emitting misleading file-header diagnostics for its lines. A
+    // completed hunk must hand the stream over here, not swallow the header.
+    if (line.startsWith('diff --cc ') || line.startsWith('diff --combined ')) {
       flush();
       skippingDialect = true;
       diagnostics.push({
@@ -407,16 +427,38 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       continue;
     }
 
-    // Once a hunk exists, every line is hunk content. This is the critical
+    // Once a hunk exists, prefixed lines are hunk content. This is the critical
     // state boundary that prevents SQL/YAML/front-matter from corrupting paths.
     const active = current.activeHunk;
     if (active !== null) {
       const counts = line.startsWith('@@ ') ? parseHunkHeader(line) : null;
-      if (counts === null) consumeHunkLine(line, active);
-      else {
+      if (counts !== null) {
         closeHunk(current, diagnostics);
         openHunk(current, line, lineNumber, counts);
+        continue;
       }
+      if (!isBodyLine(line) && hasSatisfiedCounts(active)) {
+        // The declared body already arrived in full, so a prefix-free line cannot be
+        // its content. End the hunk and name the line instead of consuming it, which
+        // is what keeps a finished file from absorbing what follows it.
+        diagnostics.push({
+          code: 'malformed-hunk',
+          message: 'Line after a completed hunk is neither hunk content nor a known header.',
+          line: lineNumber,
+        });
+        closeHunk(current, diagnostics);
+        continue;
+      }
+      if (line.startsWith('@@ ')) {
+        // Still inside the declared body, so this header-shaped line is inert for the
+        // accounting, but it cannot pass for content either.
+        diagnostics.push({
+          code: 'malformed-hunk',
+          message: 'Hunk-header line inside a hunk body could not be read as a header.',
+          line: lineNumber,
+        });
+      }
+      consumeHunkLine(line, active);
       continue;
     }
 
