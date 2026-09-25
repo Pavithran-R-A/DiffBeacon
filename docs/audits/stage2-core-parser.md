@@ -738,9 +738,13 @@ no command from the qualification matrix ran on the hosted runners at all. This 
 as the Stage-1 and Stage-2 observations on this branch, and is read as an external runner-capacity or
 billing condition on the account, not as a failure of this code: the identical tree passes all ten
 commands on four local platform cells (see WINDOWS RESULT / LINUX RESULT). No rerun was triggered, no
-workflow file was edited, and no conclusion about the code is drawn from this run. The follow-up
-commit that records this observation was not itself observed, to avoid an unbounded chain of
-CI-recording pushes.
+workflow file was edited, and no conclusion about the code is drawn from this run.
+
+The run produced by the commit that records this observation was checked once as well, and shows the
+identical signature: run `36146090660`, head `5293a455833242350558fcb8e2e421322c37ff9a`,
+`2026-09-25T14:13:57Z` → `14:14:01Z`, four jobs (`Node 22/24` × `ubuntu-latest`/`windows-latest`),
+each `failure` with **0 steps**. Observation stops here; the commit carrying this paragraph is not
+observed, so the chain does not grow.
 
 ## STAGE 2 FINAL DECISION
 
