@@ -15,7 +15,9 @@ by the shared byte limit.
 ```text
 STARTING SHA:   124af30cca5feead6440faf3fb3b908804ae9cf6  docs: record DiffBeacon Stage 1 hosted CI observation
 FIX COMMIT:     a2f5a14eee165ce30538d7cc20b8f7b39a60944a  fix: qualify DiffBeacon core diff parser
-ENDING SHA:     the documentation-only successor of a2f5a14 (this report)
+DOCS COMMITS:   4625de1e91bdf9db27e532d1b402fab01dad5c93  docs: record DiffBeacon Stage 2 parser qualification
+                + this report's CI-observation successor (see GITHUB HOSTED ACTIONS)
+ENDING SHA:     branch head after Stage 2; documentation-only, on top of the qualified tree
 BRANCH:         rescue/stage0-source  (local and origin were both at 124af30 before this work)
 ORIGIN MAIN:    e0ff98143bfe39c80c338518d006525a846a8739  (re-read with git ls-remote; untouched,
                 not merged, no PR, no tag, no npm publish)
@@ -336,15 +338,30 @@ final candidate commit.
 
 ## GITHUB HOSTED ACTIONS
 
-Not observed at the time this report was committed: Phase 16 sequences the two commits before the
-push, so the run created by this push is observed once **after** it lands and is reported in the
-Stage 2 final response rather than asserted here in advance.
+`EXTERNAL CI BLOCKED — zero runners started. This is not a Stage-2 parser failure.`
 
-Carried-forward external context from Stage 1: the last observed run produced zero runners and was
-recorded as `EXTERNAL CI BLOCKED`. `.github/workflows/ci.yml` was not edited for this stage — not
-to work around a blocked account and not for any other reason. If the same condition recurs it is
-an external billing/permissions state, not a Stage-2 parser failure, and it does not gate local
-qualification.
+The push of `124af30..4625de1` to `rescue/stage0-source` triggered one workflow run, observed once:
+
+| Field                   | Value                                                                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run ID                  | `36114034616` (workflow `CI`, event `push`)                                                                                                                                     |
+| Head SHA                | `4625de1e91bdf9db27e532d1b402fab01dad5c93`                                                                                                                                      |
+| Run conclusion          | `failure`                                                                                                                                                                       |
+| Jobs                    | 4 — `Node 22 / windows-latest` (108003786476), `Node 22 / ubuntu-latest` (108003786626), `Node 24 / windows-latest` (108003786667), `Node 24 / ubuntu-latest` (108003786775)    |
+| Runner IDs              | `null` on all four jobs — no runner was ever assigned                                                                                                                           |
+| Steps executed          | `0` on all four jobs                                                                                                                                                            |
+| Job timing              | started `2026-09-25T08:38:35Z`, completed `08:38:37Z`–`08:38:38Z` (2–3 s each)                                                                                                  |
+| Billable time           | 0 runner-minutes; nothing ran                                                                                                                                                   |
+| Annotation on every job | `The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings` |
+
+`.github/workflows/ci.yml` was not edited for this stage — not to work around a blocked account and
+not for any other reason. The condition is identical to the one recorded for Stage 1, so the
+account-level billing state, not DiffBeacon code, is what keeps hosted CI red. The run was observed
+once and not rerun repeatedly.
+
+Because hosted CI could not execute, the platform evidence in this report comes entirely from the
+four local cells that did run against `a2f5a14` (WINDOWS, LINUX NODE 24, LINUX NODE 22). No hosted
+matrix result is claimed.
 
 ## EXACT COMMANDS RUN
 
@@ -381,13 +398,20 @@ real-Git fixture timings meaningless, and a cell whose timing is not trustworthy
 
 ## WORKING TREE STATE
 
-`git status --short` after the fix commit and after `npm run check`: clean. `git diff --check`:
-exit 0, no whitespace errors. Nothing under `node_modules`, no build output beyond the Action
-bundle that is legitimately tracked, no tarball, no portable runtime, no Docker file, no test
-repository, and no local evidence log was staged — all of that lives outside the repository in
-`../stage2/`. Two pre-commit notes: `git commit` needed a per-invocation identity
-(`-c user.name=… -c user.email=…`) because no global Git identity exists; `git config` was never
-modified. A `Can't find lefthook in PATH` warning appears on commit and does not block it.
+`git status --short` after the fix commit and after `npm run check`: clean — only the report file
+below it was added, and the two regenerated pnpm files described in CAVEATS were quarantined
+outside the repository. `git diff --check`: exit 0, no whitespace errors. Nothing under
+`node_modules`, no build output beyond the Action bundle that is legitimately tracked, no tarball,
+no portable runtime, no Docker file, no test repository, and no local evidence log was staged — all
+of that lives outside the repository in `../stage2/`. Two pre-commit notes: `git commit` needed a
+per-invocation identity (`-c user.name=… -c user.email=…`) because no global Git identity exists;
+`git config` was never modified. A `Can't find lefthook in PATH` warning appears on commit and does
+not block it.
+
+Push: `git push origin rescue/stage0-source` fast-forwarded `124af30..4625de1` as an ordinary
+commit — no force, no `--no-verify`, no amended published history. `rescue/stage0-source` on origin
+now equals the qualified candidate plus documentation; `main` on origin is unchanged at
+`e0ff9814`. No merge, no PR, no tag, no release, no npm publish.
 
 ## SESSION INTEGRITY DISCLOSURE
 
