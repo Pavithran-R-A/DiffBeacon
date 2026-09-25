@@ -16,9 +16,9 @@ Seven measured defects were repaired under TDD. The detector count did not chang
 ```text
 STARTING SHA:   0d0d32008a77438f144a792c5f315e39b5fdeb01  docs: record DiffBeacon Stage 2 closure CI observation
 FIX COMMIT:     eb7902d7c45b4908e2c578337f4407f35e9133f6  fix: qualify DiffBeacon detector system
-ENDING SHA:     documentation-only commits on top of the qualified tree; `3722129` is the tip the
-                single CI observation below was made against, and the commit that carries this
-                sentence follows it. All of them touch only `docs/audits/`, so no hashed file changes.
+ENDING SHA:     documentation-only commits on top of the qualified tree; the CI observations below
+                were made against `3722129` and its documentation-only successors. All of them touch
+                only `docs/audits/`, so no hashed file changes.
 BRANCH:         rescue/stage0-source
 ORIGIN MAIN:    e0ff98143bfe39c80338518d006525a846a8739  (not merged, no PR, no tag, no npm publish)
 REPOSITORY:     https://github.com/Pavithran-R-A/DiffBeacon.git
@@ -376,11 +376,20 @@ passes in every cell.
   changed.
 - `npm run verify` — which includes the manifest and boundary checks — passes in every cell, so the
   tracked/manifest sets agree.
-- Recurring host debris reappeared after every commit this stage made — including the commit that
-  first described the pattern. Five regenerations were captured in this session (2026-09-26 01:55,
-  01:59, 02:00, 02:08 and 02:13, quarantined as occurrences 9–13 in `../stage3/host-residue/`). The
-  host regenerates `pnpm-lock.yaml` and `pnpm-workspace.yaml` in the working repository. Neither is
-  tracked, so neither reaches the manifest; neither was ever staged. Measured digests: every `pnpm-workspace.yaml` here is `d6d0c244…a97ce1`, identical to every earlier quarantined
+- Recurring host debris reappeared after every commit this stage made, including the commits that
+  describe the pattern, so the count keeps rising as this report is finalised: seven regenerations had
+  been captured by 2026-09-26 02:16, starting at 01:55 and quarantined as occurrences 9–15 in
+  `../stage3/host-residue/`. It was also once found already present when a gate run started (02:16),
+  which matters because an untracked `pnpm-workspace.yaml` on disk is not harmless here:
+  `scripts/verify.mjs` asserts it is absent as part of the obsolete-template-surface check, so its
+  mere presence makes `npm run verify` fail in the working tree with
+  `Obsolete template surface remains: pnpm-workspace.yaml`. That failure is host residue, not repo
+  state, and is why the authoritative gate results in this report are the four clean-clone cells:
+  there the file never exists and `verify` passes without any workaround. The working-tree sequence
+  used was: quarantine the pair, re-run the gate, commit, quarantine the pair the commit produced. The
+  host writes `pnpm-lock.yaml` and `pnpm-workspace.yaml` into the working repository; neither is
+  tracked, so neither reaches the manifest and neither was ever staged. Measured digests: every
+  `pnpm-workspace.yaml` captured here is `d6d0c244…a97ce1`, identical to every earlier quarantined
   copy, and every `pnpm-lock.yaml` in this session is `96924946…024aaba`, which differs from the
   `348ddf66…5e6970fd` content of the Stage 1 and Stage 2 quarantined copies. So the regeneration is
   self-consistent within a session but not historically stable: its content is host behaviour, not
@@ -440,8 +449,14 @@ than resolving it.
 - Documentation-only commits were added after the observation above, because what they record can only
   be observed after a push. Each is a plain fast-forward ref update on the same branch. The report
   therefore states exactly what happened rather than a tidier single-push story; no hosted workflow was
-  re-run by hand, and no Action configuration was touched. Any run those updates create is captured in
-  `../stage3/ci/` beside `run-36186137572.txt`, since a report cannot name the commit that carries it.
+  re-run by hand, and no Action configuration was touched. Three such updates have now been observed
+  once each — run `36186529626` (number 12, `2acc215`), run `36186955600` (number 13, `75281b0`) and
+  run `36187737386` (number 14, `057475b`) — each with `status=completed`, `conclusion=failure` and all
+  four jobs reporting `runner=""` with `steps=0`, 1–3 seconds after starting, i.e. the identical
+  zero-runner signature. Their job records are in `../stage3/ci/run-<id>.txt`. This sentence cannot
+  name the commit that carries it, and the push it produces will create a fifth run of the same shape;
+  that run is deliberately not re-polled, because the condition is external, already measured four
+  times, and re-running hosted Actions repeatedly is forbidden for this stage.
 - CI configuration was not modified to disguise that condition, and hosted runs were not repeatedly
   re-triggered during Stage 3 development.
 
@@ -515,9 +530,11 @@ insertions) and the documentation-only commits after it change no source, schema
 path. Nothing forbidden is present in the
 index: no `pnpm-lock.yaml`, no `pnpm-workspace.yaml`, no `node_modules`, no Docker evidence, no
 disposable clone, no local log, no test temp repository, no portable Node runtime, no tarball.
-Immediately after `37dfc17` the host regenerated the two pnpm files again (see `## MANIFEST`),
-which is expected behaviour for this workspace; they were quarantined rather than staged, so the tree
-is clean in the sense that nothing untracked survives. All Stage 3 forensics (probe battery, RED
+Immediately after `37dfc17` the host regenerated the two pnpm files again, and it has done so after
+every commit since (see `## MANIFEST`); each pair was quarantined rather than staged, so each commit
+records a tree containing nothing forbidden, and a regeneration existing only in the working directory
+after the commit you are reading is expected host behaviour, not staged content. All Stage 3
+forensics (probe battery, RED
 evidence, cell clones, logs, bundle, CI capture) live outside the repository in `../stage3/`, and
 `docs/audits/` is excluded from `SOURCE_MANIFEST.txt` by design, so committing this report does not
 move the 101-entry manifest.
