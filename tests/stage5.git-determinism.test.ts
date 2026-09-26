@@ -28,10 +28,11 @@ afterEach(() => {
   for (const fixture of fixtures.splice(0)) removeFixtureRepository(fixture.root);
 });
 
-// Measured on Windows Node 24 with host Git hooks isolated: the multi-repository
-// cases here need 5-8 s, versus Vitest's 5 s default. The budget is per file and
-// leaves headroom for slower runners; pure unit suites keep the default.
-vi.setConfig({ testTimeout: 20_000, hookTimeout: 30_000 });
+// Measured on Windows with host Git hooks isolated: the multi-repository cases here need
+// 5-15 s versus Vitest's 5 s default, and the same case that took 14.9 s when this file ran
+// alone took over 20 s inside the Action bundle verification run, where another Vitest process
+// competes for the same disk. The budget is per file; pure unit suites keep the default.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 30_000 });
 
 /** Command vectors a document tells a reader to run: fenced blocks and the table row. */
 function prescribedGitVector(doc: string): string {
