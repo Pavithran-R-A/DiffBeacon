@@ -168,6 +168,25 @@ describe('where the command is run decides which repository is read', () => {
     expect(result.stdout).toContain('2 files changed');
   }, 40_000);
 
+  it('reviews a repository located in a path containing Unicode and spaces', async () => {
+    const repo = createFixtureRepository({
+      prefix: 'diffbeacon-stage5-unicode-',
+      identity: 'diffbeacon-stage5-unicode',
+      nestedPath: 'répo été 報告',
+    });
+    roots.push(repo.root);
+    expect(repo.cwd).toContain('répo été 報告');
+    writeRepositoryFile(repo.cwd, 'src/app.ts', 'export const value = 1;\n');
+    repo.commit('one');
+    writeRepositoryFile(repo.cwd, 'src/app.ts', 'export const value = 2;\n');
+    repo.commit('two');
+
+    const result = await review(repo.cwd, ['HEAD~1...HEAD']);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain('1 file changed');
+    expect(result.stdout).toContain('src/app.ts');
+  }, 40_000);
+
   it('reports a repository without any commit as unresolvable history', async () => {
     const repo = createFixtureRepository({
       prefix: 'diffbeacon-stage5-empty-',

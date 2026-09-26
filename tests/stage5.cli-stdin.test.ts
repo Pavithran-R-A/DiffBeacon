@@ -1,7 +1,7 @@
 import { StringDecoder } from 'node:string_decoder';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MAX_DIFF_BYTES } from '../packages/core/src/model.js';
-import { DiffSizeLimitError, readStdinDiff } from '../packages/cli/src/index.js';
+import { DiffSizeLimitError, main, readStdinDiff } from '../packages/cli/src/index.js';
 
 // Stage 5 qualifies stdin as a byte stream, not a text stream. Git emits UTF-8
 // bytes and a pipe chooses its own chunk boundaries, so a multi-byte sequence can
@@ -80,5 +80,54 @@ describe('stdin size bound counts input bytes, not chunk boundaries', () => {
     await expect(readStdinDiff(endless())).rejects.toBeInstanceOf(DiffSizeLimitError);
     // Eight chunks reach the limit exactly; the ninth crosses it and stops the read.
     expect(pulled).toBe(9);
+  });
+});
+
+describe('an empty stdin is a report of nothing rather than a failure', () => {
+  const undo: (() => void)[] = [];
+
+  afterEach(() => {
+    for (const restore of undo.splice(0)) restore();
+  });
+
+  /** Drive the shipped `main()` with an empty pipe, as `: | diffbeacon review --stdin` does. */
+  async function reviewEmptyStdin(args: string[]) {
+    const previous = process.stdin;
+    let stdout = '';
+    let stderr = '';
+    const out = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      stdout += String(chunk);
+      return true;
+    });
+    const err = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      stderr += String(chunk);
+      return true;
+    });
+    Object.defineProperty(process, 'stdin', {
+      value: stream(),
+      configurable: true,
+      writable: true,
+    });
+    undo.push(() => {
+      Object.defineProperty(process, 'stdin', {
+        value: previous,
+        configurable: true,
+        writable: true,
+      });
+      out.mockRestore();
+      err.mockRestore();
+    });
+    return { code: await main(args), stdout, stderr };
+  }
+
+  it('reads zero bytes as an empty diff instead of raising', async () => {
+    expect(await readStdinDiff(stream())).toBe('');
+  });
+
+  it('reports zero changed files with exit 0 for an empty pipe', async () => {
+    const result = await reviewEmptyStdin(['review', '--stdin', '--format', 'json']);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout).summary.changedFiles).toBe(0);
   });
 });
