@@ -9,6 +9,11 @@ function number(value: number | null): string {
   return value === null ? '—' : new Intl.NumberFormat('en-US').format(value);
 }
 
+/** A count that names its unit in the grammar the count actually calls for. */
+function countNoun(value: number | null, singular: string): string {
+  return value === null ? '—' : `${number(value)} ${value === 1 ? singular : `${singular}s`}`;
+}
+
 function terminalText(value: string): string {
   return value
     .replace(/[\u0000-\u001f\u007f\u001b]/g, (character) => (character === '\t' ? ' ' : '�'))
@@ -147,8 +152,8 @@ export function renderPretty(
     'DiffBeacon',
     '──────────',
     '',
-    `${number(report.summary.changedFiles)} files changed    +${number(report.summary.additions)}  -${number(report.summary.deletions)}`,
-    report.summary.binaryFiles > 0 ? `${number(report.summary.binaryFiles)} binary files` : '',
+    `${countNoun(report.summary.changedFiles, 'file')} changed    +${number(report.summary.additions)}  -${number(report.summary.deletions)}`,
+    report.summary.binaryFiles > 0 ? countNoun(report.summary.binaryFiles, 'binary file') : '',
     '',
     'REVIEW ATTENTION',
     '────────────────',
@@ -156,7 +161,7 @@ export function renderPretty(
       ? ['NOTE   No mapped surfaces observed.']
       : report.attention.flatMap((item) => [
           `${level(item.level, color)}  ${terminalText(item.title)}`,
-          `       ${number(item.fileCount)} files · +${number(item.additions)}  -${number(item.deletions)}`,
+          `       ${countNoun(item.fileCount, 'file')} · +${number(item.additions)}  -${number(item.deletions)}`,
         ])),
     '',
     'EVIDENCE',

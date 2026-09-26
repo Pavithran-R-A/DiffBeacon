@@ -969,38 +969,92 @@ function renderMarkdown(report) {
 import { execFileSync, spawn } from "node:child_process";
 import process2 from "node:process";
 
+// packages/cli/src/errors.ts
+var MAX_ECHO_CHARS = 120;
+var MAX_DETAIL_CHARS = 512;
+var CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+function echo(value) {
+  const printable = value.replace(CONTROL_CHARS, " ");
+  return printable.length <= MAX_ECHO_CHARS ? JSON.stringify(printable) : `${JSON.stringify(printable.slice(0, MAX_ECHO_CHARS))} ...(truncated)`;
+}
+function boundedSingleLine(value, limit = MAX_DETAIL_CHARS) {
+  const line = value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+  return line.length <= limit ? line : `${line.slice(0, limit)} ...(truncated)`;
+}
+var UsageError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "UsageError";
+  }
+};
+var DiffUnavailableError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "DiffUnavailableError";
+  }
+};
+
 // packages/cli/src/revisions.ts
 var INVALID_REVISION = /[\u0000-\u001f\u007f\s$;|&<>`]/;
+var MAX_REVISION_CHARS = 240;
+function isUsableRevision(value) {
+  return value.length > 0 && value.length <= MAX_REVISION_CHARS && !value.startsWith("-") && !INVALID_REVISION.test(value);
+}
 function validateRevision(value) {
-  if (value.length === 0 || value.length > 240 || value.startsWith("-") || INVALID_REVISION.test(value)) {
-    throw new Error(`Invalid revision input: ${JSON.stringify(value)}`);
-  }
+  if (!isUsableRevision(value))
+    throw new UsageError(
+      `Invalid revision input: ${echo(value)}. A revision is one opaque Git name with no whitespace, no shell metacharacters, and no leading dash.`
+    );
   return value;
+}
+function rangeOperator(range) {
+  if (range.includes("...")) return "...";
+  if (range.includes("..")) return "..";
+  return null;
 }
 function validateRange(value) {
   const range = validateRevision(value);
-  const parts = range.split("...");
-  if (parts.length === 2) {
-    validateRevision(parts[0] ?? "");
-    validateRevision(parts[1] ?? "");
-  } else if (range.includes("..")) {
-    const doubleDot = range.split("..");
-    if (doubleDot.length !== 2) throw new Error(`Invalid revision range: ${JSON.stringify(value)}`);
-    validateRevision(doubleDot[0] ?? "");
-    validateRevision(doubleDot[1] ?? "");
-  }
+  const operator = rangeOperator(range);
+  if (operator === null)
+    throw new UsageError(
+      `Invalid revision range: ${echo(range)}. DiffBeacon needs a two-endpoint range such as <rev>...<rev> or <rev>..<rev>; a single revision is not accepted because comparing it with the working tree would analyse uncommitted state.`
+    );
+  const parts = range.split(operator);
+  if (parts.length !== 2 || !parts.every((part) => isUsableRevision(part ?? "")))
+    throw new UsageError(
+      `Invalid revision range: ${echo(range)}. Expected exactly one "${operator}" operator with a usable revision on each side.`
+    );
   return range;
 }
 
 // packages/cli/src/git.ts
-var DiffSizeLimitError = class extends Error {
+var DiffSizeLimitError = class extends DiffUnavailableError {
   constructor(limitBytes = MAX_DIFF_BYTES) {
-    super(`DiffBeacon analysis limit exceeded: the diff is larger than ${limitBytes} bytes.`);
+    super(
+      `No diff available: the diff is larger than the ${limitBytes} byte analysis limit. Narrow the range, or use --stdin with a bounded diff.`
+    );
     this.limitBytes = limitBytes;
     this.name = "DiffSizeLimitError";
   }
   limitBytes;
 };
+function stderrOf(error) {
+  if (error instanceof Error) {
+    const captured = error.stderr;
+    return captured === void 0 ? "" : captured.toString();
+  }
+  return "";
+}
+function gitFailure(error, command) {
+  const stderr = stderrOf(error);
+  if (/not a git repository/i.test(stderr))
+    return new DiffUnavailableError(
+      "No diff available: the working directory is not a Git repository. Run DiffBeacon inside a repository, or read a prepared diff with --stdin."
+    );
+  return new DiffUnavailableError(
+    `No diff available: git ${command} failed: ${boundedSingleLine(stderr) || boundedSingleLine(String(error))}`
+  );
+}
 function gitArgs(range) {
   return [
     "diff",
@@ -1030,14 +1084,24 @@ function gitSmall(args, cwd) {
   });
 }
 function repositoryRoot(cwd) {
-  return gitSmall(["rev-parse", "--show-toplevel"], cwd).trim();
+  try {
+    return gitSmall(["rev-parse", "--show-toplevel"], cwd).trim();
+  } catch (error) {
+    throw gitFailure(error, "rev-parse --show-toplevel");
+  }
 }
 function resolveRevision(revision, cwd) {
   validateRevision(revision);
-  return gitSmall(
-    ["rev-parse", "--verify", "--quiet", "--end-of-options", `${revision}^{commit}`],
-    cwd
-  ).trim();
+  try {
+    return gitSmall(
+      ["rev-parse", "--verify", "--quiet", "--end-of-options", `${revision}^{commit}`],
+      cwd
+    ).trim();
+  } catch {
+    throw new DiffUnavailableError(
+      `No diff available: git cannot resolve revision ${echo(revision)}. The ref may not exist, or history may be incomplete, as in a shallow or partial clone. Read a prepared diff with --stdin.`
+    );
+  }
 }
 function rangeParts(range) {
   const safeRange = validateRange(range);
@@ -1079,7 +1143,9 @@ async function collectGitDiffAsync(range, cwd = process2.cwd()) {
     if (stderr.join("").length < 64 * 1024) stderr.push(chunk);
   });
   return await new Promise((resolve2, reject) => {
-    child.once("error", reject);
+    child.once("error", () => {
+      reject(new DiffUnavailableError("No diff available: the git process could not be started."));
+    });
     child.once("close", (code, signal) => {
       if (exceeded) {
         reject(new DiffSizeLimitError());
@@ -1087,7 +1153,9 @@ async function collectGitDiffAsync(range, cwd = process2.cwd()) {
       }
       if (code !== 0) {
         reject(
-          new Error(`git diff failed${signal ? ` with ${signal}` : ""}: ${stderr.join("").trim()}`)
+          new DiffUnavailableError(
+            `No diff available: git diff exited ${code === null ? `on signal ${signal}` : `with code ${code}`}: ${boundedSingleLine(stderr.join("")) || "no detail from git"}`
+          )
         );
         return;
       }

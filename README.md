@@ -48,11 +48,11 @@ DiffBeacon
 REVIEW ATTENTION
 ────────────────
 FOCUS  Authentication / Access
-       1 files · +3  -1
+       1 file · +3  -1
 CHECK  Runtime Implementation
        3 files · +17  -4
 CHECK  Dependencies
-       1 files · +1  -1
+       1 file · +1  -1
 
 EVIDENCE
 ────────

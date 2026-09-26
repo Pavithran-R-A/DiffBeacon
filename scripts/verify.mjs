@@ -64,6 +64,7 @@ function assertSourceCompleteness() {
     'packages/core/package.json',
     'packages/core/schema/review-attention-map.schema.json',
     'packages/cli/src/index.ts',
+    'packages/cli/src/errors.ts',
     'packages/cli/src/git.ts',
     'packages/cli/src/revisions.ts',
     'packages/cli/package.json',

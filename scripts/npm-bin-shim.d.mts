@@ -10,6 +10,17 @@ export function windowsCmdInvocation(
   binPath: string,
   args?: string[],
 ): NpmBinShimInvocation;
+export function windowsReviewInvocation(
+  comSpec: string | undefined,
+  binPath: string,
+  args: string[],
+): NpmBinShimInvocation;
+export function npmReviewInvocation(
+  binPath: string,
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+): NpmBinShimInvocation;
+export function assertReviewArguments(args: string[]): string[];
 export function npmBinShimInvocation(
   binPath: string,
   args?: string[],
