@@ -191,8 +191,11 @@ function hostileRepository() {
     Buffer.from([0, 1, 2, 255, 0, 1]),
   );
   gitIn(repo.cwd, ['mv', 'renamed-before.ts', 'renamed-after.ts']);
-  // Recorded in the index rather than through the filesystem: Windows does not carry a usable
-  // executable bit, and a mode-only change is exactly the case Stage 6 must still report.
+  // A mode-only change has to survive the fixture's own `git add --all`. Windows has no
+  // usable executable bit, so the mode is recorded directly in the index; Linux reads the
+  // filesystem back, so the file is chmod'ed too. Doing only one of the two produced a
+  // repository with no mode change at all on the other platform.
+  chmodSync(path.join(repo.cwd, 'bin/launch-me.sh'), 0o755);
   gitIn(repo.cwd, ['update-index', '--chmod=+x', '--', 'bin/launch-me.sh']);
   repo.commit('head with adversarial paths');
   const head = gitIn(repo.cwd, ['rev-parse', 'HEAD']);
