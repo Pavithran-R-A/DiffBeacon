@@ -13,6 +13,11 @@ corpus, rename semantics, unproven-path safety, mode-only semantics and count-de
 Seven measured defects were repaired under TDD. The detector count did not change: 11 IDs before,
 11 IDs after, no additions and no removals.
 
+This verdict was itself re-audited and one part of it overturned: six relationship titles were not
+content-precise. That repair, its evidence and the final decision are in
+`## STAGE 3 CLOSURE — MODE-ONLY EVIDENCE TITLE TRUTHFULNESS` at the end of this file, which is the
+authoritative statement of the closing state.
+
 ```text
 STARTING SHA:   0d0d32008a77438f144a792c5f315e39b5fdeb01  docs: record DiffBeacon Stage 2 closure CI observation
 FIX COMMIT:     eb7902d7c45b4908e2c578337f4407f35e9133f6  fix: qualify DiffBeacon detector system
@@ -20,7 +25,7 @@ ENDING SHA:     documentation-only commits on top of the qualified tree; the CI 
                 were made against `3722129` and its documentation-only successors. All of them touch
                 only `docs/audits/`, so no hashed file changes.
 BRANCH:         rescue/stage0-source
-ORIGIN MAIN:    e0ff98143bfe39c80338518d006525a846a8739  (not merged, no PR, no tag, no npm publish)
+ORIGIN MAIN:    e0ff98143bfe39c80c338518d006525a846a8739  (not merged, no PR, no tag, no npm publish)
 REPOSITORY:     https://github.com/Pavithran-R-A/DiffBeacon.git
 QUALIFIED TREE: eb7902d7c45b4908e2c578337f4407f35e9133f6 — every platform cell cloned this commit
                 from a git bundle rather than from the working directory
@@ -619,3 +624,197 @@ Stage 4 — Attention Ordering. The ordering inputs this stage deliberately left
 against, and the rename/mode-only findings here are exactly what an ordering change must not break.
 
 **Do NOT begin Stage 4.** This stage stops here.
+
+---
+
+# STAGE 3 CLOSURE — MODE-ONLY EVIDENCE TITLE TRUTHFULNESS
+
+The auditor re-read this report and the qualified tree after the verdict above and overturned one
+part of it: the evidence _messages_ had been made content-precise while the evidence _titles_ had
+not. This section closes that gap. It changes no detector, no surface, no ordering and no schema.
+
+```text
+AUDITOR RULING:   REPAIR REQUIRED
+STARTING SHA:     7510eba24a0aed5c737050747aec5d2da243b55a  (Stage 3 report tip at re-audit)
+CLOSURE COMMIT:   8dd9953edb327475b043bba87ee4e37632ea1e5c  fix: make detector evidence titles content-precise
+QUALIFIED TREE:   8dd9953 — every closure cell cloned this commit from
+                  ../stage3/cells/diffbeacon-stage3-closure.bundle (sha256 9e781a46e4c58580…)
+ORIGIN MAIN:      e0ff98143bfe39c80c338518d006525a846a8739  (re-read at the identity gate; untouched)
+```
+
+## ROOT CAUSE
+
+The Stage-3 implementation correctly changed evidence messages to content-change semantics — each
+`*-without-*` rule reads its companion side from `contentBearing` files only — but left the six
+relationship titles claiming that no companion file change was observed at all. A pure file-mode
+change to a companion file _is_ an observed change, and the same report displays it (`modeOnlyFiles`,
+the file's own entry, its surface), so those titles contradicted observable facts in the very document
+that carried them. `AUDIT_HANDOFF.md` already described the intended semantics correctly ("without
+observed test-file content changes"), which is what identifies this as title drift rather than a
+behavioural error.
+
+## PRE-FIX EXAMPLES
+
+Each row was replayed through `analyzeDiff()` before the repair; the companion column is a mode-only
+change, i.e. `old mode 100644 / new mode 100755` with no hunks.
+
+| Scenario                                                       | Evidence kind               | Pre-fix title                                               | Pre-fix message                                                                                                  | Why the title contradicted the report                                                                                                                             |
+| -------------------------------------------------------------- | --------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| content change to `src/app.ts` + mode-only `tests/app.test.ts` | `runtime-without-tests`     | `Runtime changes without observed test-file changes`        | `Runtime files changed, but no test-file content changes were observed in this diff.`                            | The message is right; the title asserts no test-file change was observed, while `summary.modeOnlyFiles = 1` and `tests/app.test.ts` appears with `tests` surface. |
+| content change to `package.json` + mode-only `pnpm-lock.yaml`  | `manifest-without-lockfile` | `Dependency manifest without observed lockfile change`      | `A dependency manifest content change was observed. No lockfile content change was observed in this diff.`       | A lockfile change was observed — its mode. The title also said nothing about the manifest side being a content change.                                            |
+| content change to `openapi.yml` + mode-only `docs/api.md`      | `contract-without-docs`     | `Contract definition without observed documentation change` | `An API or contract definition changed. No documentation or changelog content change was observed in this diff.` | Same shape: the documentation file's change is in `files` and counted in `modeOnlyFiles`, so "without observed documentation change" is false.                    |
+
+`auth-without-tests` and `database-without-tests` carry the identical defect against a mode-only test
+file, and `lockfile-without-manifest` against a mode-only manifest. The truthfulness of the `title`
+half of the Stage 3 contract ("a sentence about observation") had therefore been claimed one level too
+broadly; the `REGISTRY INVARIANTS` section below enforced that ending for detector descriptions only,
+not for relationship titles — that gap is what this closure removes.
+
+## REPAIR
+
+Six user-visible titles in `packages/core/src/analyze.ts`, and nothing else:
+
+| From                                                               | To                                                                                 |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `Runtime changes without observed test-file changes`               | `Runtime changes without observed test-file content changes`                       |
+| `Authentication/access changes without observed test-file changes` | `Authentication/access changes without observed test-file content changes`         |
+| `Database/schema changes without observed test-file changes`       | `Database/schema changes without observed test-file content changes`               |
+| `Dependency manifest without observed lockfile change`             | `Dependency manifest content change without observed lockfile content change`      |
+| `Lockfile without observed dependency manifest change`             | `Lockfile content change without observed dependency manifest content change`      |
+| `Contract definition without observed documentation change`        | `Contract definition content change without observed documentation content change` |
+
+Unchanged by construction and re-measured, not asserted:
+
+- Evidence kinds: `EVIDENCE_KINDS` in `packages/core/src/model.ts` is byte-for-byte identical — all
+  seven IDs kept, including `runtime-without-tests`, `manifest-without-lockfile` and
+  `contract-without-docs`. Machine-facing vocabulary was not renamed for wording aesthetics.
+- Detector IDs, `SURFACE_IDS`, registration order and matcher logic: `packages/core/src/detectors/`
+  shows 0 changed files against `7510eba`.
+- Attention ordering: `reviewPriority` and `levelFor()` are untouched, still outside this stage's
+  authority.
+- Parser, schema and Action/CLI surfaces: `packages/core/src/parser.ts`, `model.ts`,
+  `schema.ts`, `packages/cli`, `packages/action/src`, `action.yml` — 0 changed files each.
+- Evidence messages and the `contentBearing` / `countsTrustworthy` logic: unchanged.
+
+`git diff --numstat 7510eba -- packages/core/src/analyze.ts` reports `6 6` — six lines out, six in —
+and every one of them is a `title:` line; the same is true of the built bundle.
+
+## NEW TESTS
+
+All in `tests/stage3.evidence.test.ts`, in a new `relationship titles are as precise as relationship
+messages` block, written first and run against the unfixed tree.
+
+| Test                                                                                          | Case                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6 × `titles a missing $kind companion as a missing content change, not a missing file change` | one per relationship kind: content change plus a mode-only companion (`src/app.ts`+`tests/app.test.ts`, `src/auth/session.ts`+`tests/session.test.ts`, `db/migrate/001_add_users.rb`+`tests/migrations.test.ts`, `package.json`+`pnpm-lock.yaml`, `pnpm-lock.yaml`+`package.json`, `openapi.yml`+`docs/api.md`). Asserts the evidence still fires, that `summary.modeOnlyFiles = 1`, that the companion path is present in `files` — and then that the **title** matches the content-precise claim (`/test-file content change/i`, `/lockfile content change/i`, `/manifest content change/i`, `/documentation content change/i`) and the message still mentions a content change. |
+| `keeps every "without observed ... change" clause about content`                              | the general language invariant over the six mode-only corpora plus four ordinary ones: any `without observed X change` phrase must have `content` inside `X`. This is what catches the class of defect rather than the six instances, and it is wording- and punctuation-tolerant.                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `stays accurate and readable when no companion file appears at all`                           | `src/app.ts` alone and `package.json` alone: still content-precise, still reads naturally, and the manifest claim must not imply a lockfile exists (`/missing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | stale | absent | forgotten | exists/i` rejected). |
+| `describes a contract change with no documentation in the diff at all`                        | `openapi.yml` alone: title says documentation _content_ change; no `undocumented` / `missing documentation` framing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+
+Existing forbidden-language checks were retained unchanged (`vulnerab*`, `unsafe`, `insecure`,
+`confidence`, `probabilit*`, `mergeab*`, `coverage`, `risk*`, `severity`, `safe`, `has no tests`,
+`percent`) and still run over evidence, attention and review-order copy.
+
+- **RED** (before any source edit): `Tests 9 failed | 42 passed (51)` — six per-kind title
+  assertions, the general invariant, and both readability cases. Full record:
+  `../stage3/closure-red.txt`, including the received strings such as
+  `expected 'Runtime changes without observed test…' to match /test-file content change/i`.
+- **GREEN** (after the six-line edit): `Tests 51 passed (51)` in that file, and no test was deleted,
+  skipped or weakened.
+
+## FINAL TEST TOTAL
+
+|                           | Stage 3 before closure | After closure              |
+| ------------------------- | ---------------------- | -------------------------- |
+| Test files                | 21                     | 21                         |
+| Tests (Windows)           | 425 passed             | **434 passed**             |
+| `stage3.evidence.test.ts` | 42                     | 51 (+9)                    |
+| Tests (Linux)             | 424 passed + 1 skipped | **433 passed + 1 skipped** |
+
+The single Linux skip remains `tests/stage3c.release.test.ts:123`, guarded by
+`it.runIf(process.platform === 'win32')` — the same intentional Windows-only test recorded in
+Stages 1–3, not a new condition.
+
+## ACTION BUNDLE
+
+`packages/action/dist/index.js` embeds `analyze.ts`, so it was rebuilt and re-committed.
+
+| Stage                                          | SHA-256                                                                 |
+| ---------------------------------------------- | ----------------------------------------------------------------------- |
+| Before (`7510eba`, as committed in Stage 3)    | `4df4bbd75c2c95b5ec056742055260c1db25501b02cfeccd62344db77f54679f`      |
+| After first rebuild                            | `04badcd97da60ed3e68892fc0fccd1a866cb584a754895c3f0fdd1aa16e42114`      |
+| After second rebuild (same working tree)       | `04badcd97da60ed3e68892fc0fccd1a866cb584a754895c3f0fdd1aa16e42114`      |
+| Clean-clone rebuild, Windows / Node 24         | `04badcd9…e42114`, `git status --porcelain` empty after `npm run build` |
+| Clean-clone rebuild, Linux / Node 24 container | `04badcd9…e42114`, `git status --porcelain` = `[]`                      |
+
+The committed bundle therefore equals a byte-for-byte clean rebuild on both platforms. Its whole
+content change is the six `title:` lines (`git diff --numstat` on the bundle: `6 6`), and
+`npm run action-smoke` stayed green (`bundled action wrote 1158 bytes; cliLeak=false;
+hostilePaths=true; oversizeRejected=true`).
+
+## MANIFEST
+
+- Entries: **101**, unchanged in count — no file was added or removed by the closure.
+- Drift: exactly three lines, all of them hashes of intentionally changed files —
+  `packages/core/src/analyze.ts`, `packages/action/dist/index.js`, `tests/stage3.evidence.test.ts`.
+- `SOURCE_MANIFEST.txt` digest after regeneration:
+  `9494b64e9b4d1fbe5e9364425f7ed8752e4930b510a5ccc9a729d6c2f09f4f6e`.
+- Status: `npm run verify` reports `DiffBeacon source-first verification passed`, so the tracked set
+  and the manifest agree. `docs/audits/` stays excluded by manifest policy, so this report moves no
+  hash.
+- Untracked pnpm residue (occurrences 18 and 19 during this closure; see `## MANIFEST` above) was
+  quarantined to `../stage3/host-residue/` and affected no manifest line and no commit.
+
+## WINDOWS / LINUX
+
+All four cells cloned `8dd9953` from the closure bundle. Ten gates each: `npm ci`, `format:check`,
+`lint`, `typecheck`, `test`, `build`, `package-smoke`, `action-smoke`, `verify`, `check`.
+
+| Cell              | Platform                              | Node     | npm     | Git              | `core.autocrlf` | Gates | Tests                 |
+| ----------------- | ------------------------------------- | -------- | ------- | ---------------- | --------------- | ----- | --------------------- |
+| `closure-win24`   | Windows                               | v24.21.0 | 11.19.0 | 2.55.0.windows.5 | `true`          | 10/10 | 434 passed (434)      |
+| `closure-win22`   | Windows                               | v22.23.3 | 10.9.9  | 2.55.0.windows.5 | `true`          | 10/10 | 434 passed (434)      |
+| `closure-linux24` | Linux (container-native, `/tmp` ext4) | v24.21.0 | 11.19.0 | 2.39.5           | unset           | 10/10 | 433 passed, 1 skipped |
+| `closure-linux22` | Linux (container-native, `/tmp` ext4) | v22.23.3 | 10.9.9  | 2.39.5           | unset           | 10/10 | 433 passed, 1 skipped |
+
+Node 22 cells were reused cheaply as promised in the closure prompt: the portable Windows
+`node-v22.23.3-win-x64` from `../stage1/node22/` and the cached `node:22` image. Logs and
+per-command records: `../stage3/cells/closure-summary.txt` plus each cell directory.
+
+## HOSTED CI
+
+`EXTERNAL CI BLOCKED` — unchanged, and the reason platform evidence stays local.
+
+- `36188474495` (run number 15, `headSha 7510eba`) is the run the closure prompt cites. It was
+  re-read once and confirmed independently: four jobs, every one `runner=""`, `steps=0`,
+  `conclusion=failure`. Record: `../stage3/ci/run-36188474495.txt`.
+- Pushing the closure commit `8dd9953` auto-created run `36213961490` (number 16):
+  `status=completed`, `conclusion=failure`, and all four jobs — `Node 22 / ubuntu-latest`,
+  `Node 22 / windows-latest`, `Node 24 / windows-latest`, `Node 24 / ubuntu-latest` — report
+  `runner=""` with `steps=0`, each finishing 2 seconds after starting. Zero billable time.
+  Record: `../stage3/ci/run-36213961490.txt`.
+- Nothing in the workflow executed, so the run carries no information about this code. The CI
+  definition was not modified, no run was retried, and the documentation push below creates one
+  further run of the identical shape that is deliberately not polled.
+
+## DOCUMENTATION DEFECT CORRECTED WHILE CLOSING
+
+The identity gate re-read `git rev-parse origin/main` and found this report's own header carried a
+39-character SHA, `e0ff98143bfe39c80338518d006525a846a8739`, one character short of the real
+`e0ff98143bfe39c80c338518d006525a846a8739` that appears in the Stage 1 and Stage 2 reports. The
+header above has been corrected. Substance unaffected — every statement about `origin/main` (not
+merged, no PR, no tag, no release) holds — but a transcribed identifier that fails a length check is
+exactly the kind of thing a later auditor should not have to rediscover, so it is recorded here
+rather than fixed silently.
+
+## STAGE 3 FINAL DECISION
+
+`PASS`.
+
+The relationship titles now state precisely what the relationship premises can observe, that claim is
+enforced by a general invariant rather than six individual string expectations, and the repair is
+provably confined to user-visible copy: identical detector IDs, identical surfaces, identical
+ordering, identical schema vocabulary, identical evidence kinds, and a committed Action bundle that a
+clean rebuild reproduces byte-for-byte on Windows and Linux.
+
+Stage 4 — Attention Ordering — remains the recommended next stage and is **not** authorized here.
