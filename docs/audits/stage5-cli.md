@@ -393,20 +393,23 @@ were created outside the repository and removed by exact path.
 ## WORKING TREE STATE
 
 `git status --short --untracked-files=all` is empty at the candidate SHA, after the report commit,
-after the CI-observation commit and after the final push recorded here; `git diff --check` is clean
-at each point. Untracked `pnpm-lock.yaml` and `pnpm-workspace.yaml` reappeared seven separate times
-across this stage from outside the session — after the CLI commit, the entrypoint fix, the coverage
-commit, the report commit, the CI-observation commit, and after two subsequent git operations —
-always with the identical digests `96924946ca90b89e…` and `d6d0c24446d91ef7…`, matching every
-occurrence recorded in earlier stages. The files arrive after Git runs in this workspace, so the
-count can only be stated as of the last observation made for Stage 5; what does not change is the
-rule applied each time: hash the pair, move it outside the repository under
-`stage5/host-residue/2026-09-26-post-<trigger>/`, never stage it. Seven such copies are held there.
-Because they are not part of the tracked source set they cannot affect `SOURCE_MANIFEST.txt`:
-`npm run manifest` after the docs-only commits still reports 115 files with no diff, which is the
-proof that they added no drift. Nothing else was added to the repository: no tarball, no consumer,
-no cell log, no portable runtime and no evidence file lives inside it — all of that is under
-`stage5/` outside the repository.
+after the CI-observation commit and after each subsequent docs push recorded here; `git diff --check`
+is clean at each point. Untracked `pnpm-lock.yaml` and `pnpm-workspace.yaml` reappeared eight
+separate times across this stage from outside the session — after the CLI commit, the entrypoint fix,
+the coverage commit, the report commit, the CI-observation commit and three further Git operations.
+Every Stage-5 pair hashed `96924946ca90b89e…` (lock) and `d6d0c24446d91ef7…` (workspace); the
+workspace file also hashes `d6d0c244…` in every capture archived by Stages 1-3, while the lock file
+hashed `348ddf66…` in the Stage 1/2 captures before changing on 2026-09-26 — so the digest is
+evidence about the day it was taken, not proof of one unbroken lineage, and was re-hashed across all
+archived copies rather than assumed. The files arrive after Git runs in this workspace, so the count
+is stated as of the last observation made for Stage 5 and a ninth pair may appear after this commit is
+pushed; what does not change is the rule applied each time: hash the pair, move it outside the
+repository under `stage5/host-residue/2026-09-26-post-<trigger>/`, never stage it. Eight such copies
+are held there. Because the pair is not part of the tracked source set it cannot affect
+`SOURCE_MANIFEST.txt`: `npm run manifest` after the docs-only commits still reports 115 files with no
+diff, which is the proof that they added no drift. Nothing else was added to the repository: no
+tarball, no consumer, no cell log, no portable runtime and no evidence file lives inside it — all of
+that is under `stage5/` outside the repository.
 
 ## REMAINING CLI LIMITATIONS
 
@@ -464,3 +467,8 @@ No run was rerun, no workflow file was edited, no other branch was pushed to ind
 result, and the four local clean-clone cells (PHASE 26) remain the only cross-platform
 qualification evidence for Stage 5. Closing the external-CI gap is a Stage-9 (CI / package-release
 qualification) responsibility, not something this stage worked around.
+
+The docs-only commits after this observation also triggered hosted runs, and they were deliberately
+not polled: a second observation would add no information the first did not already establish, and
+re-polling Actions is out of scope for this stage. Each of those commits touched only this
+manifest-excluded file, so nothing in the qualified product tree changed after `ae1ec89a`.
