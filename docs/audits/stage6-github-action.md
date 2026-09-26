@@ -6,6 +6,8 @@ STATUS:                  PASS (local Action qualification; hosted E2E remains UN
 STARTING SHA:            7152152fb2356dac6556bc1afb31d7175eafaf86  (rescue/stage0-source tip at start)
 QUALIFIED PRODUCT SHA:   1287514c18bd4615d4c2ee6583e3cfd26e4b4aaa  (all four cells run this commit)
 ENDING BRANCH SHA:       this document's commit, 'docs: record DiffBeacon Stage 6 Action qualification'
+                         (5d877f0af13d34e3be38368b74116a623aa8a4d9), plus one docs-only commit that
+                         fills in the post-push CI OBSERVATION section below
 BRANCH:                  rescue/stage0-source
 ORIGIN MAIN SHA:         e0ff98143bfe39c80c338518d006525a846a8739  (unchanged; not merged, not moved)
 ```
@@ -451,10 +453,10 @@ is from the corrected run (`stage6/probe-after-3.json`).
 ## HOSTED GITHUB ACTIONS
 
 - Real hosted Action execution available: **NO**.
-- Ordinary CI run after the final push: inspected once, per the stage rule; the previous inspected
-  run `36234342955` had four jobs, no runner, zero steps and zero billable time. If the new run shows
-  the same shape this stage records `EXTERNAL CI BLOCKED` and does not rerun. The CI observation is
-  appended to the END OF THIS REPORT section below after the push.
+- Ordinary CI run after the final push: inspected once, per the stage rule. Run `36257143700`
+  reproduced the shape of the previously inspected run `36234342955` exactly — four jobs, no runner,
+  zero steps and zero billable time — so this stage records `EXTERNAL CI BLOCKED` and does not rerun.
+  The full observation is in the END OF THIS REPORT section below.
 - Runner allocation: none was granted; this is an account/billing condition outside DiffBeacon's
   source, and it did not change the local verdict.
 - **Hosted E2E remains unqualified.** Everything above was produced by executing the committed
@@ -578,3 +580,48 @@ E2E is explicitly recorded as unqualified.
 **Stage 7 — Browser Demo.** Stage 6 stops here; Stage 7 was not begun.
 
 ## END OF THIS REPORT — CI OBSERVATION
+
+Recorded after the normal (non-forced) push of the product and report commits:
+
+```text
+git push origin rescue/stage0-source
+   7152152..5d877f0  rescue/stage0-source -> rescue/stage0-source
+```
+
+One newly created run was inspected, and only once:
+
+| Field                     | Measured value                                                                                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Run ID                    | `36257143700`                                                                                                                                                                        |
+| Head SHA                  | `5d877f0af13d34e3be38368b74116a623aa8a4d9` (the report commit)                                                                                                                       |
+| Display title             | `docs: record DiffBeacon Stage 6 Action qualification`                                                                                                                               |
+| Created                   | `2026-09-26T16:54:40Z`                                                                                                                                                               |
+| Status / conclusion       | `completed` / `failure`                                                                                                                                                              |
+| Jobs                      | 4 — `Node 24 / ubuntu-latest` (`108445962263`), `Node 22 / ubuntu-latest` (`108445962409`), `Node 24 / windows-latest` (`108445962443`), `Node 22 / windows-latest` (`108445962400`) |
+| Steps per job             | `[]` — no step started in any job                                                                                                                                                    |
+| Job wall time             | 2–4 s each (`startedAt 16:54:41Z`, `completedAt 16:54:43Z`/`16:54:45Z`)                                                                                                              |
+| Billable time (`/timing`) | `UBUNTU total_ms 0` (2 job runs at 0 ms), `WINDOWS total_ms 0` (2 job runs at 0 ms), `run_duration_ms 6000`                                                                          |
+| Log (`gh run view --log`) | `log not found: 108445962263` — nothing was ever written                                                                                                                             |
+
+GitHub read APIs used for this observation: `gh run list --repo Pavithran-R-A/DiffBeacon --branch
+rescue/stage0-source --limit 5 --json ...`, `gh run view 36257143700 --json status,conclusion,jobs`,
+`gh api repos/Pavithran-R-A/DiffBeacon/actions/runs/36257143700/timing`, and
+`gh run view 36257143700 --log`. Read-only calls only — no re-run, no cancel, no workflow dispatch,
+no repository setting was touched.
+
+Verdict: `EXTERNAL CI BLOCKED`. The shape is identical to run `36234342955` inspected earlier in this
+stage: the workflow was accepted, jobs were created, no runner was ever assigned, no step ran and zero
+billable minutes were consumed. That is an account/runner-availability condition outside DiffBeacon's
+source, not an Action or test failure, and the failure conclusion carries no diagnostic content from
+this repository.
+
+Per the stage rule the run was **not** re-triggered, and no CI workflow file was added, edited or
+reordered to hide, soften or "fix" this observation:
+
+```text
+$ git diff --stat 7152152..HEAD -- .github/workflows/
+                # empty output — ci.yml and pages.yml are untouched across all Stage 6 commits
+```
+
+Consequently the Action remains **locally qualified only**; no hosted GitHub Actions execution of
+`action.yml` exists for any commit in this stage.
