@@ -8,10 +8,11 @@ PRODUCT COMMITS:         5a4789781554c9cec0ba83f50bda40de490d36d3  fix: qualify 
                          ae1ec89a04e0a011fbcd5bc8618076692f8a2066  test: cover empty stdin and a Unicode repository path
 ENDING SHA (qualification commit): ae1ec89a04e0a011fbcd5bc8618076692f8a2066
 REPORT COMMIT:                     this document, committed as 'docs: record DiffBeacon Stage 5 CLI qualification'
-FOLLOW-UP COMMITS:                 'docs: record DiffBeacon Stage 5 CI observation' and one further
-                                   docs-only correction to this file's WORKING TREE STATE section,
-                                   which the CI observation itself made stale. All of them edit only
-                                   this manifest-excluded file.
+FOLLOW-UP COMMITS:                 docs-only commits after the report commit: 'docs: record DiffBeacon
+                                   Stage 5 CI observation', then corrections that keep this file's
+                                   WORKING TREE STATE count honest as recurring host debris reappeared
+                                   after further Git operations. Every one of them edits only this
+                                   manifest-excluded file; no product file changed after `ae1ec89a`.
 BRANCH:                  rescue/stage0-source
 ORIGIN MAIN SHA:         e0ff98143bfe39c80c338518d006525a846a8739  (unchanged; not merged, not moved)
 PUSHED:                  yes — normal non-forced `git push origin rescue/stage0-source`. This line is
@@ -392,17 +393,20 @@ were created outside the repository and removed by exact path.
 ## WORKING TREE STATE
 
 `git status --short --untracked-files=all` is empty at the candidate SHA, after the report commit,
-and after the CI-observation commit; `git diff --check` is clean at each point. Untracked
-`pnpm-lock.yaml` and `pnpm-workspace.yaml` reappeared six separate times across this stage from
-outside the session — after the CLI commit, the entrypoint fix, the coverage commit, the report
-commit, the CI-observation commit and the final push — always with the identical digests
-`96924946ca90b89e…` and `d6d0c24446d91ef7…`, matching every occurrence recorded in earlier stages.
-Each copy was hashed and moved to `stage5/host-residue/2026-09-26-post-{cli-commit,entry-fix,coverage-commit,report-commit,ci-observation,ci-push}/`
-outside the repository; none was ever staged. Because the files are not part of the tracked source
-set they cannot affect `SOURCE_MANIFEST.txt`: `npm run manifest` after the docs-only commits still
-reports 115 files with no diff, which is the proof that they added no drift. Nothing else was added
-to the repository: no tarball, no consumer, no cell log, no portable runtime and no evidence file
-lives inside it — all of that is under `stage5/` outside the repository.
+after the CI-observation commit and after the final push recorded here; `git diff --check` is clean
+at each point. Untracked `pnpm-lock.yaml` and `pnpm-workspace.yaml` reappeared seven separate times
+across this stage from outside the session — after the CLI commit, the entrypoint fix, the coverage
+commit, the report commit, the CI-observation commit, and after two subsequent git operations —
+always with the identical digests `96924946ca90b89e…` and `d6d0c24446d91ef7…`, matching every
+occurrence recorded in earlier stages. The files arrive after Git runs in this workspace, so the
+count can only be stated as of the last observation made for Stage 5; what does not change is the
+rule applied each time: hash the pair, move it outside the repository under
+`stage5/host-residue/2026-09-26-post-<trigger>/`, never stage it. Seven such copies are held there.
+Because they are not part of the tracked source set they cannot affect `SOURCE_MANIFEST.txt`:
+`npm run manifest` after the docs-only commits still reports 115 files with no diff, which is the
+proof that they added no drift. Nothing else was added to the repository: no tarball, no consumer,
+no cell log, no portable runtime and no evidence file lives inside it — all of that is under
+`stage5/` outside the repository.
 
 ## REMAINING CLI LIMITATIONS
 
