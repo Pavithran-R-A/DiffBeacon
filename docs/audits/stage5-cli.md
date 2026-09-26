@@ -429,3 +429,27 @@ deterministic CLI bundle digest and a clean tree afterwards.
 **Stage 6 — GitHub Action.** Recommended, not started: this report ends at the Stage 5 boundary.
 
 ## CI OBSERVATION
+
+Recorded after the push; this is the only observation made for Stage 5.
+
+```text
+push:                  4e5bd44..0e6cbce rescue/stage0-source -> rescue/stage0-source (fast-forward, non-forced)
+run:                   36231520156
+workflow:              CI
+event / branch:        push / rescue/stage0-source
+created:               2026-09-26T09:01:29Z    status: completed    conclusion: failure (4s total)
+jobs:                  Node 22 / ubuntu-latest, Node 22 / windows-latest,
+                       Node 24 / ubuntu-latest, Node 24 / windows-latest
+steps per job:         0        startedAt-completedAt: 1-2 seconds each
+```
+
+All four matrix jobs were created and immediately failed with an empty `steps` array, so no
+checkout, install, gate or test ever ran. This is the identical signature recorded for Stage 0
+through Stage 4 (latest earlier run: `36218953127`): the account is not being given runners, so
+the workflow cannot start. **EXTERNAL CI BLOCKED.** The failure is not attributable to DiffBeacon
+and is not evidence about this stage's code.
+
+No run was rerun, no workflow file was edited, no other branch was pushed to induce a different
+result, and the four local clean-clone cells (PHASE 26) remain the only cross-platform
+qualification evidence for Stage 5. Closing the external-CI gap is a Stage-9 (CI / package-release
+qualification) responsibility, not something this stage worked around.
