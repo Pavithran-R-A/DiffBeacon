@@ -49,8 +49,14 @@ from the expected starting state, so work proceeded.
 - **Formats.** `pretty` (default), `json`, `markdown`, value always a separate argument.
 - **Output.** `--output <file>` writes the report to that file and leaves stdout empty.
 - **Exit codes.** five codes, 0/1/2/3/4, and the severity of an observation never selects one.
-- The CLI never mutates or fetches the target repository: every Git call is a read
-  (`rev-parse`, `diff`, `--is-shallow-repository`) through an argument vector with `shell:false`.
+- The CLI never mutates or fetches the target repository. It makes exactly three read-only Git
+  calls, each a fixed argument vector with `shell:false`: `rev-parse --show-toplevel`,
+  `rev-parse --verify --quiet --end-of-options <revision>^{commit}`, and one `diff` invocation
+  pinned by `gitArgs()` at `packages/cli/src/git.ts:47` (`--no-ext-diff`, `--no-textconv`,
+  `--no-color`, fixed `a/`/`b/` prefixes, `--ignore-submodules=none`, `--submodule=short`,
+  `--diff-algorithm=myers`, `--find-renames=50%`, `-l1000`, `--unified=3`, then the validated
+  range and a `--` terminator). There is no shallow-state probe, and no fetch, deepen or gc
+  invocation of any kind — see SHALLOW for how incomplete history is actually surfaced.
 
 ## ARGUMENT MATRIX
 
@@ -179,10 +185,20 @@ every object and is not shallow at all.
 - available-history fixture — depth 2 clone, `HEAD~1...HEAD` reviewed, exit 0, `2 files changed`.
 - missing-history fixture — depth 1 clone. The test first proves with Git itself that
   `rev-parse --verify HEAD~1^{commit}` throws, then requires exit 3, empty stdout and a message
-  containing `HEAD~1`, `shallow` and `--stdin`. Detection uses
-  `git rev-parse --is-shallow-repository` through the same argument-vector boundary, only to
-  improve the message. Nothing is fetched, and no command mutates the target repository; the
-  complete clone of the same source is also reviewed as the control.
+  containing `HEAD~1`, `shallow` and `--stdin`.
+
+How that message arises, stated precisely because an earlier draft of this section got it wrong:
+the CLI does **not** query shallow state. It never runs `git rev-parse --is-shallow-repository`
+(`git grep -n -- 'is-shallow-repository' -- .` over the tracked source returns nothing but this
+report). `resolveRevision()` at `packages/cli/src/git.ts:85` resolves each validated endpoint with
+`rev-parse --verify --quiet --end-of-options <revision>^{commit}`, and when Git exits nonzero it
+throws `DiffUnavailableError` saying the ref _may_ not exist, or history _may_ be incomplete "as in
+a shallow or partial clone", and offering `--stdin`. So in the depth-1 fixture it is Git that first
+proves `HEAD~1` is absent; DiffBeacon reports only the fact it can establish — this revision cannot
+be resolved locally — and lists shallow/partial history as one possible cause rather than asserting
+the cause. It never fetches, deepens or otherwise mutates the repository; the complete clone of the
+same source is reviewed as the control, and the depth-2 case above is the positive shallow-path
+evidence.
 
 ## STDIN
 
@@ -472,3 +488,52 @@ The docs-only commits after this observation also triggered hosted runs, and the
 not polled: a second observation would add no information the first did not already establish, and
 re-polling Actions is out of scope for this stage. Each of those commits touched only this
 manifest-excluded file, so nothing in the qualified product tree changed after `ae1ec89a`.
+
+## STAGE 5 CLOSURE — SHALLOW-HISTORY RECORD CORRECTION
+
+**AUDITOR FINDING.** The product behavior and the real shallow fixtures are valid, but this report
+falsely claimed the implementation called `git rev-parse --is-shallow-repository`. The auditor found
+it by inspecting the pushed source independently; nothing in this stage's own test suite could have
+contradicted the claim, because the claim described a mechanism rather than an observable outcome.
+
+**SOURCE REVIEW.**
+
+- `git grep -n -- 'is-shallow-repository' -- .` at the closure starting SHA returned zero source
+  matches — the only hits were in this report file.
+- The complete Git surface of the CLI is three read-only calls: `rev-parse --show-toplevel`
+  (`packages/cli/src/git.ts:79`), `rev-parse --verify --quiet --end-of-options <revision>^{commit}`
+  (`packages/cli/src/git.ts:89`), and the pinned `diff` vector from `gitArgs()`
+  (`packages/cli/src/git.ts:47`).
+- `git grep -i -E "'(fetch|deepen|clone|pull|gc|prune)'"` over `packages/cli/src` and
+  `packages/core/src` returned no matches: there is no mutating or network Git call to remove.
+- An unresolved endpoint produces `DiffUnavailableError` at `packages/cli/src/git.ts:93` whose text
+  offers possible causes ("The ref may not exist, or history may be incomplete, as in a shallow or
+  partial clone") plus the `--stdin` way round. The CLI therefore asserts only that a revision
+  cannot be resolved locally; it never claims to know that shallowness was the cause.
+
+**CORRECTION.**
+
+- Old statement: "Detection uses `git rev-parse --is-shallow-repository` through the same
+  argument-vector boundary, only to improve the message." Also, in CLI CONTRACT: "every Git call is
+  a read (`rev-parse`, `diff`, `--is-shallow-repository`)". Both false.
+- Corrected statement: the CLI does not query shallow state at all. It resolves each validated
+  endpoint with `rev-parse --verify --quiet --end-of-options <revision>^{commit}`; in the depth-1
+  fixture Git itself first proves `HEAD~1` is absent, DiffBeacon reports the revision as
+  unresolvable history and names incomplete shallow/partial history as one possible cause, and it
+  never fetches or deepens. CLI CONTRACT now enumerates the three real call sites instead of
+  listing a probe that does not exist.
+
+**EVIDENCE UNCHANGED.** The depth-1 missing-history case, the depth-2 available-history case and the
+complete-clone control all stand as recorded: `tests/stage5.cli-repository.test.ts` proves the
+premise with Git before blaming DiffBeacon (`rev-parse --verify HEAD~1^{commit}` throws), then
+requires exit 3, empty stdout and stderr naming `HEAD~1`, `shallow` and `--stdin`. Every measured
+number, digest and cell result in this report is untouched. No probe was added to make the old
+sentence true.
+
+PRODUCT CODE CHANGED: **NO**
+TEST CODE CHANGED: **NO**
+STAGE-5 PRODUCT SHA: `ae1ec89a04e0a011fbcd5bc8618076692f8a2066`
+STAGE-5 PRODUCT QUALIFICATION: **UNCHANGED**
+FINAL STAGE-5 DECISION: **PASS**
+NEXT ROADMAP STAGE: Stage 6 — GitHub Action. **NOT begun** (and `Stop after pushing the corrected
+report` was the closure instruction, so no Stage-6 work was started here).
