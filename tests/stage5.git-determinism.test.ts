@@ -76,9 +76,13 @@ describe('Git diff determinism boundary', () => {
     };
     expect(rootReadme).not.toContain('OWNER/diffbeacon');
     expect(actionReadme).not.toContain('OWNER/diffbeacon');
-    // A tag-style reference is only valid after a public release exists.
+    // A tag-style reference is only valid after a public release exists. Stage 6 keeps that
+    // rule and adds one exception it can still prove: the documented placeholder, which no
+    // runner can resolve.
     for (const readme of [rootReadme, actionReadme]) {
-      expect(readme).not.toMatch(/uses:\s*\S*diffbeacon@/i);
+      const ownerReferences = readme.match(/uses:\s*\S*diffbeacon@\S*/gi) ?? [];
+      for (const reference of ownerReferences)
+        expect(reference).toBe('uses: Pavithran-R-A/DiffBeacon@<REVIEWED_FULL_COMMIT_SHA>');
       expect(readme).toContain('uses: ./');
     }
     expect(rootReadme).toContain('not published to the npm registry yet');

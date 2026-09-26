@@ -1174,28 +1174,75 @@ function isEntrypointUrl(moduleUrl, argvPath, cwd, platform = process.platform) 
 }
 
 // packages/action/src/logic.ts
-function sha(value) {
-  if (typeof value !== "string" || !/^[0-9a-f]{7,64}$/i.test(value))
-    throw new Error("Pull request event did not contain a valid commit SHA.");
+var SUPPORTED_EVENT_NAME = "pull_request";
+function requireEventName(name) {
+  if (name === SUPPORTED_EVENT_NAME) return;
+  if (name === void 0 || name === "")
+    throw new Error(
+      "GITHUB_EVENT_NAME is required: DiffBeacon reviews the pull_request event and must know which event the runner delivered."
+    );
+  if (name === "pull_request_target")
+    throw new Error(
+      'Unsupported GITHUB_EVENT_NAME "pull_request_target": the pull_request event carries the same pull-request payload, so DiffBeacon reviews only the pull_request event and refuses to run under a base-privileged trigger.'
+    );
+  throw new Error(
+    `Unsupported GITHUB_EVENT_NAME ${echo(name)}: DiffBeacon reviews only the pull_request event.`
+  );
+}
+function objectId(value, endpoint) {
+  if (typeof value !== "string" || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value))
+    throw new Error(
+      `Pull request event ${endpoint}.sha is not a full commit object ID: DiffBeacon needs the 40-character SHA-1 or 64-character SHA-256 hexadecimal ID from the event, not an abbreviation or a revision name.`
+    );
   return value;
 }
 function pullRequestRange(event) {
-  return { base: sha(event.pull_request?.base?.sha), head: sha(event.pull_request?.head?.sha) };
+  return {
+    base: objectId(event.pull_request?.base?.sha, "base"),
+    head: objectId(event.pull_request?.head?.sha, "head")
+  };
 }
 
 // packages/action/src/index.ts
+function required(env, name) {
+  const value = env[name];
+  if (typeof value !== "string" || value === "")
+    throw new Error(
+      `${name} is required: DiffBeacon runs as a workflow step and reads its boundaries from the environment the runner exports.`
+    );
+  return value;
+}
+function readEvent(eventPath) {
+  let raw;
+  try {
+    raw = readFileSync(eventPath, "utf8");
+  } catch {
+    throw new Error(`GITHUB_EVENT_PATH could not be read: ${echo(eventPath)}.`);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error("GITHUB_EVENT_PATH is not valid JSON for a workflow event.");
+  }
+}
+function writeSummary(summaryPath, markdown) {
+  try {
+    appendFileSync(summaryPath, markdown, { encoding: "utf8" });
+  } catch {
+    throw new Error(
+      "The review could not be appended to GITHUB_STEP_SUMMARY: it must name a writable file provided by the runner."
+    );
+  }
+}
 async function runAction(env = process3.env) {
-  if (!env.GITHUB_EVENT_PATH) throw new Error("GITHUB_EVENT_PATH is required.");
-  const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, "utf8"));
-  const range = pullRequestRange(
-    event
-  );
-  const diff = await collectGitDiffAsync(`${range.base}...${range.head}`);
-  const report = analyzeDiff(diff);
-  const markdown = renderMarkdown(report);
-  if (env.GITHUB_STEP_SUMMARY)
-    appendFileSync(env.GITHUB_STEP_SUMMARY, `${markdown}
-`, { encoding: "utf8" });
+  requireEventName(env.GITHUB_EVENT_NAME);
+  const event = readEvent(required(env, "GITHUB_EVENT_PATH"));
+  const { base, head } = pullRequestRange(event);
+  const workspace = required(env, "GITHUB_WORKSPACE");
+  const summaryPath = required(env, "GITHUB_STEP_SUMMARY");
+  const diff = await collectGitDiffAsync(`${base}...${head}`, workspace);
+  const markdown = renderMarkdown(analyzeDiff(diff));
+  writeSummary(summaryPath, markdown);
   return markdown;
 }
 if (isEntrypointUrl(import.meta.url, process3.argv[1], process3.cwd())) {

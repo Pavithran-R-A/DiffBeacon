@@ -81,6 +81,9 @@ function assertSourceCompleteness() {
     'scripts/npm-bin-shim.mjs',
     'scripts/npm-bin-shim.d.mts',
     'scripts/source-manifest.mjs',
+    'scripts/action-metadata.mjs',
+    'scripts/action-metadata.d.mts',
+    'docs/examples/diffbeacon-pull-request-review.yml',
     'client/index.html',
     'client/src/App.tsx',
     'client/src/main.tsx',
@@ -94,6 +97,11 @@ function assertSourceCompleteness() {
     'tests/stage3c.release.test.ts',
     'tests/stage4.release.test.ts',
     'tests/stage5.git-determinism.test.ts',
+    'tests/stage6.action-event.test.ts',
+    'tests/stage6.action-runner.test.ts',
+    'tests/stage6.action-metadata.test.ts',
+    'tests/stage6.action-security-boundary.test.ts',
+    'tests/stage6.action-workflow-docs.test.ts',
   ];
   required.forEach(assertExists);
   assertNoObsoleteSurface();
@@ -121,6 +129,7 @@ function assertSourceCompleteness() {
     'scripts/build-cli.mjs',
     'scripts/build-action.mjs',
     'scripts/package-smoke.mjs',
+    'scripts/action-metadata.mjs',
     'scripts/action-smoke.mjs',
     'scripts/verify.mjs',
   ]) {

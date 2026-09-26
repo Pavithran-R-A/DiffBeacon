@@ -1,0 +1,44 @@
+# DiffBeacon GitHub Action — future consumer example.
+#
+# NOT A WORKFLOW GITHUB RUNS. This file is documentation kept outside `.github/workflows/`
+# on purpose, and it cannot execute today: the DiffBeacon reference below is a placeholder,
+# because no reviewed public Action version exists yet. Stage 11 owns that release.
+#
+# Why the placeholder is the point:
+#
+#   - The Action you run and the repository it reads are two different trust domains.
+#     `actions/checkout` copies the pull request into the runner; DiffBeacon then reads that
+#     copy as data through `git diff`.
+#   - `uses: ./` would load `action.yml` from that copy, letting the reviewed change choose
+#     the code that runs under the base branch's permissions. That is why the example below
+#     references DiffBeacon independently, by immutable full commit SHA.
+#   - `pull_request_target` is not a fix. It keeps the base branch's token and checkout while
+#     the pull request still controls the code being looked at, and DiffBeacon refuses that
+#     event outright.
+#
+# Provenance of the pin below: `3d3c42e5aac5ba805825da76410c181273ba90b1` was checked against
+# `refs/tags/v7` of https://github.com/actions/checkout with `git ls-remote --tags` on
+# 2026-09-26, and is the same pin this repository's own CI uses. Re-verify before replacing it.
+name: DiffBeacon review
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  attention:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: the default shallow checkout is not guaranteed to contain the pull
+      # request's base commit, and DiffBeacon resolves `base...head` locally.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          # DiffBeacon performs no authenticated Git operation after checkout, so the
+          # runner's credentials do not need to persist into the steps that read PR code.
+          # No PAT, no secret, and no pull-request write permission is required or used.
+          persist-credentials: false
+      # Replace this placeholder with the reviewed DiffBeacon release's 40-character commit
+      # SHA once Stage 11 publishes one. A moving tag such as `@v1` is not a reviewed pin.
+      # The step needs no `with:` inputs: DiffBeacon reads the event the runner delivered and
+      # writes its review to the Job Summary, which is the Action's only v0.1 output.
+      - uses: Pavithran-R-A/DiffBeacon@<REVIEWED_FULL_COMMIT_SHA>

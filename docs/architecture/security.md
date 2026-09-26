@@ -9,10 +9,10 @@ DiffBeacon is designed to analyze untrusted change descriptions without executin
 | Revision/range argument | Shell injection, option confusion, object ambiguity                                                                               | Reject whitespace/control/metacharacters and option-leading tokens; resolve with bounded `git rev-parse --verify --quiet --end-of-options` argv; use `shell: false`                                                                                       |
 | Diff text               | Parser confusion, resource exhaustion, terminal/Markdown/HTML injection                                                           | Parse line-by-line; never evaluate; browser input cap at 8 MiB; sanitize terminal controls; escape Markdown table/HTML characters                                                                                                                         |
 | File path               | Path traversal-looking or markup-looking display text                                                                             | Treat as an opaque label; pass `--` to Git; never use diff paths as filesystem targets; render as text                                                                                                                                                    |
-| PR event metadata       | Untrusted SHA/ref injection                                                                                                       | Action accepts only 7–64 hexadecimal commit SHAs from the event payload                                                                                                                                                                                   |
+| PR event metadata       | Untrusted SHA/ref injection                                                                                                       | Action accepts only `pull_request`, and only full commit object IDs (40 hexadecimal, or 64 for SHA-256) from `pull_request.base.sha`/`.head.sha`; it runs Git in `GITHUB_WORKSPACE`, never the process' own location                                      |
 | Target repository       | Arbitrary code execution                                                                                                          | No hooks, scripts, test/build commands, changed-file execution, dependency installation, or shell sourcing                                                                                                                                                |
 | Git behavior            | Config-dependent patch shape, hidden/expanded submodule diffs, external diff/text-conversion execution, unbounded binary payloads | `--no-ext-diff --no-textconv --no-color --src-prefix=a/ --dst-prefix=b/ --ignore-submodules=none --submodule=short --diff-algorithm=myers --find-renames=50% -l1000 --unified=3`; omit `--binary` because the parser only needs structural binary markers |
-| GitHub token            | Excessive write capability                                                                                                        | Example permissions are `contents: read`; no comments or repository mutation                                                                                                                                                                              |
+| GitHub token            | Excessive write capability                                                                                                        | Recommended workflow permission is `contents: read` with `persist-credentials: false`; the Action writes only `$GITHUB_STEP_SUMMARY` and authenticates to nothing                                                                                         |
 | Source code             | Unwanted upload                                                                                                                   | Browser path is local-only; no backend or telemetry dependency                                                                                                                                                                                            |
 
 ## Safe Git flow
@@ -34,6 +34,33 @@ user range
 ```
 
 The CLI and Action never construct `exec('git diff ' + userInput)`. Small repository-root and revision-resolution metadata queries use bounded argument-vector execution; the actual diff uses a bounded asynchronous `spawn` stream. Both boundaries use `shell: false`, and diff collection explicitly owns prefixes (`--src-prefix=a/ --dst-prefix=b/`), submodule handling (`--ignore-submodules=none --submodule=short`), the Myers algorithm, a 50% rename threshold, and a bounded rename limit of 1000. Submodule pointer changes are therefore collected in fixed short form and cannot be hidden or expanded by repository Git configuration. Command-line prefixes take precedence over `diff.noprefix`, `diff.srcPrefix`, `diff.dstPrefix`, and `diff.mnemonicPrefix`, and are used instead of `--default-prefix` because that option is not available on older still-common Git releases that the explicit pair supports. `--binary` is intentionally omitted: ordinary `Binary files ... differ` markers preserve classification without emitting `GIT binary patch` payloads. The Action uses trusted event SHAs and the same vectorized `git diff` invocation. It does not use `pull_request_target` or a privileged checkout of untrusted code.
+
+## Action trust domains
+
+The Action separates two things a careless workflow merges:
+
+- **the code that runs** — the bundle named by `action.yml`'s `runs.main`, resolved from the
+  workflow's own trusted checkout of DiffBeacon;
+- **the data it reads** — the reviewed repository at `GITHUB_WORKSPACE`, plus the event JSON at
+  `GITHUB_EVENT_PATH`.
+
+Only the first is ever started. `GITHUB_WORKSPACE` is required and is the sole directory Git
+runs in, so the Action cannot be redirected by the process' working directory; the diff
+vectors above are pinned, and `--no-ext-diff --no-textconv` mean repository-configured diff
+drivers cannot name a program.
+`tests/stage6.action-security-boundary.test.ts` exercises this against a repository whose
+package lifecycle scripts, `.npmrc`, Git hooks, external diff, textconv driver, executable
+files, and pull-request-authored `action.yml` and Action bundle each write a sentinel when
+run, and pairs every "nothing ran" assertion with a live control proving the same fixture does
+execute a program under an unprotected Git command.
+
+Because a runner takes its entrypoint from the checked-out tree, `uses: ./` under
+`on: pull_request` makes the reviewed change the one that selects the code that runs — the
+bundle's own event guard cannot help, since it is inside the bundle being replaced. That form
+is limited to trusted development on this repository's own branches; consumers are directed to
+an independently referenced, reviewed commit SHA, which does not exist until the Stage 11
+release. `pull_request_target` is refused by the event gate rather than treated as a
+workaround, and the Job Summary is the Action's only output.
 
 ## Rendering boundary
 

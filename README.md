@@ -82,12 +82,27 @@ This output is a starting sequence, not an assertion that the first item is obje
 
 ## GitHub Action
 
-The JavaScript Action shares the same core and writes a GitHub Job Summary. It does not post comments, modify the repository, require a PAT, require an LLM key, or request `pull-requests: write`.
+The JavaScript Action shares the same core and writes its review to the [GitHub Job Summary](https://docs.github.com/actions/monitoring-and-troubleshooting-workflows/using-workflow-notifications-and-summaries), which is its only output in v0.1: machine-readable use goes through the CLI's `--format json`. It runs the ordinary `pull_request` event, reads the base and head commit object IDs from the event payload DiffBeacon did not write, and needs no PAT, no secret, and no write permission. It does not post comments or call any network API.
 
-Today the only runnable reference is the repository-local path form, because no published tag or marketplace entry exists yet:
+### Two trust domains, one review
+
+A pull-request workflow touches code from two different places, and conflating them is how a review tool becomes the attack:
+
+| Trust domain                  | What it is                                         | What DiffBeacon does with it |
+| ----------------------------- | -------------------------------------------------- | ---------------------------- |
+| The Action that runs          | The DiffBeacon bundle named by a `uses:` reference | Executes                     |
+| The repository being reviewed | The checked-out pull-request code                  | Reads as data — never runs   |
+
+DiffBeacon only ever starts its own trusted bundle; the reviewed repository's scripts, package lifecycle hooks, build configuration, test code, Git hooks, external diff or textconv programs, and its own `action.yml` are never launched or installed. `tests/stage6.action-security-boundary.test.ts` proves it behaviorally with sentinels on every one of those surfaces, paired with live controls showing the same fixture does execute a program when an ordinary Git command is allowed to use it.
+
+### Which reference is safe
+
+**`uses: ./` is for trusted development only, and is not the recommended consumer pattern.** Under `on: pull_request`, `actions/checkout` delivers the _pull request's_ tree, so `uses: ./` loads the `action.yml` and bundle the contributor just wrote — the reviewed change picks the code that runs, inside a base-privileged context that may hold a token, and the pull request never has to be interesting for that to matter. DiffBeacon's own guards do not rescue this: the event-name check lives _inside_ the pull-request-controlled bundle, so it runs only after the attacker's entrypoint has started. Use `uses: ./` only where the Action source is already trusted — a workflow on a trusted branch of this repository, reviewing this repository's own commits.
+
+**Consumers need an independent, reviewed reference — which does not exist yet.** No public tag or release has been qualified, so there is no immutable DiffBeacon commit to hand out; Stage 11 owns publishing one. Until then, no `pull_request` workflow in another repository can consume DiffBeacon safely, and this README deliberately shows a placeholder instead of a fake SHA. The intended future consumer form, documented in [`docs/examples/diffbeacon-pull-request-review.yml`](docs/examples/diffbeacon-pull-request-review.yml) as a non-executed example file, is:
 
 ```yaml
-name: DiffBeacon
+name: DiffBeacon review
 on:
   pull_request:
 permissions:
@@ -96,13 +111,24 @@ jobs:
   attention:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: ./
+          persist-credentials: false
+      # Placeholder, not a working reference: replace with the reviewed release's
+      # full 40-character commit SHA once Stage 11 publishes one.
+      - uses: Pavithran-R-A/DiffBeacon@<REVIEWED_FULL_COMMIT_SHA>
 ```
 
-`uses: ./` resolves the root [`action.yml`](action.yml) in the checked-out repository, so it works inside this repository only. The committed Action bundle is `packages/action/dist/index.js`. A public release should instead pin the `uses` reference to a reviewed tag or commit SHA; an owner-repo version-tag reference is not usable until such a tag exists in a public repository. The Action assumes the workflow provides the base and head commits in the local checkout; it does not execute code from the pull request. Continuous integration currently runs the CLI/Action quality gates rather than consuming the Action itself.
+`pull_request_target` is not a workaround. It grants base-branch privileges and a trusted checkout while the pull request still controls the code under review, DiffBeacon needs none of the extra access, and the Action rejects the event outright rather than reviewing it.
+
+### Checkout contract
+
+- `fetch-depth: 0` (or otherwise sufficient history). The default shallow checkout is not guaranteed to contain the pull request's base commit, and the Action resolves `base...head` inside that workspace; a missing base fails the step with a message naming the shallow or partial clone.
+- `persist-credentials: false`. DiffBeacon performs no authenticated Git operation after checkout, so the runner's credentials do not need to survive into the steps that read untrusted code.
+- `permissions: contents: read` and nothing more. The review writes only to `$GITHUB_STEP_SUMMARY`.
+
+Continuous integration here runs the CLI and Action quality gates against trusted source; no workflow consumes the Action on a pull request, and no hosted consumer run has been qualified.
 
 ## Browser demo
 
