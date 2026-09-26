@@ -5,7 +5,8 @@ STATUS:                  PASS
 STARTING SHA:            7647df403021eb319b52aa49ba762eb239087a25  (rescue/stage0-source tip at start)
 STARTING STAGE-3 CLOSURE: 8dd9953edb327475b043bba87ee4e37632ea1e5c  (verified present in history)
 ENDING SHA (qualification commit): d2ff91a5ee32e0ed16c5652e0000d68cddf607fd
-ENDING SHA (this report):          the commit that adds docs/audits/stage4-attention-ordering.md on top of it
+REPORT COMMIT:                     888fe10c80feab7ad0e88003cf016a47a34c1bb8 (this document, before the CI observation)
+FOLLOW-UP COMMIT:                  the next commit on rescue/stage0-source, message 'docs: record DiffBeacon Stage 4 CI observation'; it is the Stage 4 branch tip and edits only this manifest-excluded file
 BRANCH:                  rescue/stage0-source
 ORIGIN MAIN SHA:         e0ff98143bfe39c80c338518d006525a846a8739  (unchanged; not merged, not moved)
 PUSHED:                  yes, normal non-forced push of rescue/stage0-source
@@ -352,11 +353,11 @@ adapter source change was needed** — the bundle differs only because the core 
 
 ## GITHUB ACTIONS
 
-Hosted CI for this stage: recorded after the final push below, observed once and not
-re-run. See `CI OBSERVATION` at the end of this report. Prior stages measured that
-Actions runs in this account receive no runner, so the expected outcome is
-`EXTERNAL CI BLOCKED`; that is an external billing condition, not a source defect, and
-CI configuration was not altered to hide it.
+Hosted CI for this stage was observed once after the final push and not re-run; see
+`CI OBSERVATION` at the end of this report. The observation confirmed what prior stages
+measured on this branch: the run's four jobs received no runner and failed with zero
+steps, so the hosted result is `EXTERNAL CI BLOCKED`. That is an external billing
+condition, not a source defect, and CI configuration was not altered to hide it.
 
 ## EXACT COMMANDS RUN
 
@@ -393,7 +394,24 @@ node ../stage4/probe-after.mjs
 
 # commit
 git -c user.name='Qoder Stage4' -c user.email='stage4-ordering@local.invalid' commit -m 'fix: qualify DiffBeacon attention ordering'
+
+# report, push, single CI observation
+npx prettier --write docs/audits/stage4-attention-ordering.md
+npm run format:check
+git add docs/audits/stage4-attention-ordering.md
+git -c user.name='Qoder Stage4' -c user.email='stage4-ordering@local.invalid' commit -m 'docs: record DiffBeacon Stage 4 ordering qualification'
+git push origin rescue/stage0-source
+gh run list --branch rescue/stage0-source -L 3 --json databaseId,headSha,status,conclusion,workflowName,createdAt
+gh run view 36218540411 --json status,conclusion,headSha,number,startedAt,updatedAt,jobs
+gh api repos/Pavithran-R-A/DiffBeacon/actions/runs/36218540411 --jq '{status,conclusion,billable}'
 ```
+
+The report was committed before the push, so its `CI OBSERVATION` section was drafted
+without a run to cite; the figures now in that section come from the two `gh` reads
+above, made after `git push`. An earlier `gh run view` call in the same observation used
+field names this CLI version does not expose (`runStarted`) and returned a field-list
+error rather than run data; the corrected call is the one recorded here. The CI run was
+never re-triggered, and no `gh run rerun` command was issued.
 
 Each cell ran, in order: `npm ci`, `npm run format:check`, `npm run lint`,
 `npm run typecheck`, `npm run test`, `npm run build`, `npm run package-smoke`,
@@ -480,12 +498,35 @@ requires its own qualification prompt.
 
 ## CI OBSERVATION
 
-Not yet observed at the time this section was written: this report was committed before
-the branch was pushed, so no hosted run exists for the Stage 4 head SHA, and none is
-claimed here. The single observation required by this stage is recorded below after the
-push, as one listing of the resulting run (run ID, head SHA, jobs, runner, steps,
-billable), without re-running it and without changing CI configuration.
+Made once, after the final non-forced push of `rescue/stage0-source`
+(`7647df4..888fe10`), by listing and viewing the run that push produced. No re-run was
+triggered and no CI configuration was changed.
 
-Expected outcome, based on every previous stage on this branch: `EXTERNAL CI BLOCKED`
-because Actions runs in this account have received no runner. That expectation is
-recorded as an expectation only; it is not evidence.
+| Field                   | Observed value                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Run                     | `36218540411` (workflow run number 18, workflow `CI`)                                                            |
+| URL                     | <https://github.com/Pavithran-R-A/DiffBeacon/actions/runs/36218540411>                                           |
+| Head SHA                | `888fe10c80feab7ad0e88003cf016a47a34c1bb8` (this report's commit)                                                |
+| Trigger                 | `push` to `rescue/stage0-source`, `createdAt` 2026-09-26T04:40:45Z                                               |
+| Jobs                    | 4 — `Node 24 / ubuntu-latest`, `Node 24 / windows-latest`, `Node 22 / ubuntu-latest`, `Node 22 / windows-latest` |
+| Runner                  | none assigned to any job                                                                                         |
+| Steps                   | `[]` for all four jobs — no checkout, no `npm ci`, no gate executed                                              |
+| Job conclusions         | all four `failure`, each completing 2–38 s after queueing with no log output                                     |
+| Run status / conclusion | `completed` / `failure`                                                                                          |
+| `billable`              | `null`                                                                                                           |
+
+Outcome: **EXTERNAL CI BLOCKED**. The four jobs failed before any step could run, which
+is the signature of this account receiving no hosted runner rather than of a source or
+gate defect — the same condition every previous stage on this branch recorded (for
+example run `36214183341` at head `7647df4…`). The hosted result therefore does not
+confirm and was not used to confirm Stage 4: the qualification evidence is the ten
+gates plus the four clean-clone cells above, all of which ran locally and passed. CI
+configuration was not modified to hide this, and the run was not re-triggered to make
+the failure look different.
+
+Recording this observation required a second commit to this file, so the follow-up
+docs-only push produced one further run on the same branch with the same blocked
+signature; it was read once from the same `gh run list` output and neither re-run nor
+cancelled. Its identifier is not written into this document because doing so would
+require another push and another run — the auditor receives it in the Stage 4 handoff
+response instead.
