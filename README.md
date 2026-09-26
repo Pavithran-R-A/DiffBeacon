@@ -37,31 +37,48 @@ Attention observations do not fail the command. The CLI exits nonzero only for o
 
 ## Example Attention Map
 
+Actual output for a four-file diff piped through `node packages/cli/dist/index.js review --stdin`:
+
 ```text
 DiffBeacon
 ──────────
 
-4 files changed    +18  -4
+4 files changed    +18  -5
 
 REVIEW ATTENTION
 ────────────────
 FOCUS  Authentication / Access
        1 files · +3  -1
+CHECK  Runtime Implementation
+       3 files · +17  -4
 CHECK  Dependencies
-       1 files · +1  -0
+       1 files · +1  -1
 
 EVIDENCE
 ────────
+Runtime files changed, but no test-file content changes were observed in this diff.
+Observed in: src/auth/session.ts, src/runtime/host.ts, src/runtime/pool.ts
 Authentication or authorization files changed. No test-file content changes were observed in this diff.
+Observed in: src/auth/session.ts
+A dependency manifest content change was observed. No lockfile content change was observed in this diff.
+Observed in: package.json
 
 REVIEW ORDER
 ────────────
 1. Authentication / Access
+   1 authentication/access file changed in this diff. Access-control conventions
+   follow the build frame and precede the code that relies on them, so the
+   authorization boundary is established first.
 2. Runtime Implementation
+   3 runtime implementation files changed in this diff. Implementation files
+   carry the executable behavior of the change and are read after the
+   context-setting surfaces above.
 3. Dependencies
+   1 dependency file changed in this diff. Manifests and lockfiles name the
+   third-party inputs that the implementation above resolves against.
 ```
 
-This output is a starting sequence, not an assertion that the first item is objectively more dangerous.
+This output is a starting sequence, not an assertion that the first item is objectively more dangerous. `FOCUS`, `CHECK` and `NOTE` are navigation bands rather than severity, risk, urgency, confidence, or merge status, and every order entry states its own reason: how many files of that surface the diff showed, and which reading convention places the surface where it sits. The sequence, bands and reasons all come from one policy table — see [Review ordering policy](docs/architecture/overview.md#review-ordering-policy).
 
 ## GitHub Action
 

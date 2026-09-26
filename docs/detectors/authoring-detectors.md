@@ -51,8 +51,10 @@ Word descriptions as observations: "Authentication or authorization files change
    naming at least one thing the detector deliberately misses, and why broadening it
    would cost more than it buys.
 9. **Review-priority placement** — if the surface belongs in the default order, note that
-   `reviewPriority` and `levelFor()` are owned by the attention-ordering stage; adding an
-   ID needs a deterministic position, not policy tuning.
+   position, band, reason label and rationale are one entry of the policy table in
+   `packages/core/src/analyze.ts`; adding an ID needs a deterministic position, not policy
+   tuning. The detector registry has no ordering meaning, so registering a detector never
+   moves a surface in the review order.
 10. Run `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`.
 
 ## Example shape

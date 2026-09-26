@@ -31,19 +31,99 @@ const countDiagnostics: ParseDiagnosticCode[] = [
   'hunk-count-mismatch',
 ];
 
-const reviewPriority: SurfaceId[] = [
-  'ci-build',
-  'auth-access',
-  'database-schema',
-  'infrastructure',
-  'api-contracts',
-  'runtime',
-  'dependencies',
-  'configuration',
-  'tests',
-  'documentation',
-  'generated',
-];
+// The one authority for review ordering. `order` is a reading sequence a reviewer can
+// check against the rationale, `level` is a navigation band, and the two can never
+// disagree because they are the same entry. Nothing here is derived from file counts,
+// changed-line magnitude, detector registration order, or any measurement of
+// importance: the bands label where to start reading, not how dangerous a change is.
+const reviewPolicy: Record<
+  SurfaceId,
+  { order: number; level: AttentionLevel; label: string; rationale: string }
+> = {
+  'ci-build': {
+    order: 1,
+    level: 'FOCUS',
+    label: 'CI/build',
+    rationale:
+      'Pipeline and build definitions are read first because they show how the rest of the change is compiled, tested and published.',
+  },
+  'auth-access': {
+    order: 2,
+    level: 'FOCUS',
+    label: 'authentication/access',
+    rationale:
+      'Access-control conventions follow the build frame and precede the code that relies on them, so the authorization boundary is established first.',
+  },
+  'database-schema': {
+    order: 3,
+    level: 'FOCUS',
+    label: 'database/schema',
+    rationale:
+      'Schema and migration files define the shape of persisted data that later surfaces read and write.',
+  },
+  infrastructure: {
+    order: 4,
+    level: 'FOCUS',
+    label: 'infrastructure/deployment',
+    rationale:
+      'Container and deployment definitions describe the environment the change runs in, completing the context before implementation.',
+  },
+  'api-contracts': {
+    order: 5,
+    level: 'CHECK',
+    label: 'API/contract',
+    rationale:
+      'Explicit contract files state what consumers see, so they are read before the implementation that satisfies them.',
+  },
+  runtime: {
+    order: 6,
+    level: 'CHECK',
+    label: 'runtime implementation',
+    rationale:
+      'Implementation files carry the executable behavior of the change and are read after the context-setting surfaces above.',
+  },
+  dependencies: {
+    order: 7,
+    level: 'CHECK',
+    label: 'dependency',
+    rationale:
+      'Manifests and lockfiles name the third-party inputs that the implementation above resolves against.',
+  },
+  configuration: {
+    order: 8,
+    level: 'CHECK',
+    label: 'configuration',
+    rationale:
+      'These files shape how the application and tooling apply the behavior listed above them.',
+  },
+  tests: {
+    order: 9,
+    level: 'NOTE',
+    label: 'test',
+    rationale:
+      'Test files show what this diff verifies directly, which reads most usefully after the implementation context.',
+  },
+  documentation: {
+    order: 10,
+    level: 'NOTE',
+    label: 'documentation',
+    rationale:
+      'Prose files such as guides and changelogs explain the change after the code they describe.',
+  },
+  generated: {
+    order: 11,
+    level: 'NOTE',
+    label: 'generated',
+    rationale:
+      'Generated output is usually a consequence of the source above it, so it is read last.',
+  },
+};
+
+// Sorting on the written-out `order` rather than on key insertion order keeps this
+// sequence independent of how the table happens to be laid out.
+const reviewPriority: SurfaceId[] = (Object.keys(reviewPolicy) as SurfaceId[]).sort(
+  (left, right) => reviewPolicy[left].order - reviewPolicy[right].order,
+);
 
 const attentionDescriptions: Record<SurfaceId, { title: string; description: string }> =
   Object.fromEntries(
@@ -54,11 +134,12 @@ const attentionDescriptions: Record<SurfaceId, { title: string; description: str
   ) as Record<SurfaceId, { title: string; description: string }>;
 
 function levelFor(surface: SurfaceId): AttentionLevel {
-  if (['ci-build', 'auth-access', 'database-schema', 'infrastructure'].includes(surface))
-    return 'FOCUS';
-  if (['api-contracts', 'runtime', 'dependencies', 'configuration'].includes(surface))
-    return 'CHECK';
-  return 'NOTE';
+  return reviewPolicy[surface].level;
+}
+
+function reasonFor(surface: SurfaceId, fileCount: number): string {
+  const policy = reviewPolicy[surface];
+  return `${fileCount} ${policy.label} ${fileCount === 1 ? 'file' : 'files'} changed in this diff. ${policy.rationale}`;
 }
 
 export function compareCanonicalText(left: string, right: string): number {
@@ -67,8 +148,58 @@ export function compareCanonicalText(left: string, right: string): number {
   return 0;
 }
 
+function compareNullableText(left: string | null, right: string | null): number {
+  if (left === null) return right === null ? 0 : -1;
+  if (right === null) return 1;
+  return compareCanonicalText(left, right);
+}
+
+function compareNullableCount(left: number | null, right: number | null): number {
+  if (left === null) return right === null ? 0 : -1;
+  if (right === null) return 1;
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function compareFlag(left: boolean, right: boolean): number {
+  if (left === right) return 0;
+  return left ? 1 : -1;
+}
+
+/** Every fact a `ChangedFile` reports, in comparison order. */
+const fileComparators: ((left: ChangedFile, right: ChangedFile) => number)[] = [
+  (left, right) => compareCanonicalText(left.displayPath, right.displayPath),
+  (left, right) => compareCanonicalText(left.status, right.status),
+  (left, right) => compareNullableCount(left.additions, right.additions),
+  (left, right) => compareNullableCount(left.deletions, right.deletions),
+  (left, right) => compareFlag(left.binary, right.binary),
+  (left, right) => compareFlag(left.modeOnly, right.modeOnly),
+  (left, right) => compareNullableText(left.oldPath, right.oldPath),
+  (left, right) => compareNullableText(left.newPath, right.newPath),
+  (left, right) => compareNullableText(left.oldMode, right.oldMode),
+  (left, right) => compareNullableText(left.newMode, right.newMode),
+  (left, right) => compareNullableCount(left.similarity, right.similarity),
+  // Surface ids use only [a-z-], so a comma-joined key cannot conflate two lists.
+  (left, right) => compareCanonicalText(left.surfaces.join(','), right.surfaces.join(',')),
+  (left, right) => compareFlag(left.generated, right.generated),
+];
+
+/**
+ * A total order over every fact a file reports: two entries can only compare equal
+ * when their serialized objects are identical, so no reported list can depend on
+ * the order the diff happened to state them in.
+ */
+function compareFileFacts(left: ChangedFile, right: ChangedFile): number {
+  for (const compare of fileComparators) {
+    const result = compare(left, right);
+    if (result !== 0) return result;
+  }
+  return 0;
+}
+
 function sortFiles(files: ChangedFile[]): ChangedFile[] {
-  return [...files].sort((a, b) => compareCanonicalText(a.displayPath, b.displayPath));
+  return [...files].sort(compareFileFacts);
 }
 
 function surfaceObservation(surface: SurfaceId, files: ChangedFile[]): SurfaceObservation {
@@ -214,7 +345,7 @@ function makeReviewOrder(files: ChangedFile[]): ReviewOrderEntry[] {
       position: entries.length + 1,
       surface,
       title: attentionDescriptions[surface]?.title ?? surface,
-      reason: `DiffBeacon recommends looking at ${attentionDescriptions[surface]?.title ?? surface} earlier in this review.`,
+      reason: reasonFor(surface, matching.length),
       files: matching.map((file) => file.displayPath),
     });
   }

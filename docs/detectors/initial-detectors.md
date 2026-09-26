@@ -144,6 +144,25 @@ boundary where it stops proving anything.
   implementation file. `tests/app.test.ts`, `docs/guide.md`, and `dist/app.js` are
   excluded by design; a rename out of one of those locations reports both surfaces.
 
+## Review order
+
+Detectors only claim surfaces; the sequence a reviewer is offered comes from a separate
+policy table in `packages/core/src/analyze.ts`. That matters for how a detector is judged:
+
+- Registration order has no effect on the review order, so a new detector can be appended
+  without disturbing any existing entry.
+- A file that matches several surfaces is listed once under each of them, and matching more
+  surfaces raises nothing. Surface count is never a weight.
+- A rename unions both sides, so the surface a file leaves behind keeps its entry and its
+  position; the order does not depend on which side the diff names first.
+- Mode-only and binary changes appear in the order their paths claim, with reasons phrased
+  about files rather than content, because they report no line counts.
+- Bands and positions are a reading sequence for this diff. They are not severity, risk,
+  urgency, confidence, or coverage, and no rule in this registry infers any of those.
+
+Every surface's position, band and rationale are documented together in
+[`docs/architecture/overview.md`](../architecture/overview.md#review-ordering-policy).
+
 ## Evidence relationships
 
 Relationship evidence is reported separately from surfaces, in this fixed order:

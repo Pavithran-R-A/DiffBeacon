@@ -620,19 +620,77 @@ var countDiagnostics = [
   "truncated-hunk",
   "hunk-count-mismatch"
 ];
-var reviewPriority = [
-  "ci-build",
-  "auth-access",
-  "database-schema",
-  "infrastructure",
-  "api-contracts",
-  "runtime",
-  "dependencies",
-  "configuration",
-  "tests",
-  "documentation",
-  "generated"
-];
+var reviewPolicy = {
+  "ci-build": {
+    order: 1,
+    level: "FOCUS",
+    label: "CI/build",
+    rationale: "Pipeline and build definitions are read first because they show how the rest of the change is compiled, tested and published."
+  },
+  "auth-access": {
+    order: 2,
+    level: "FOCUS",
+    label: "authentication/access",
+    rationale: "Access-control conventions follow the build frame and precede the code that relies on them, so the authorization boundary is established first."
+  },
+  "database-schema": {
+    order: 3,
+    level: "FOCUS",
+    label: "database/schema",
+    rationale: "Schema and migration files define the shape of persisted data that later surfaces read and write."
+  },
+  infrastructure: {
+    order: 4,
+    level: "FOCUS",
+    label: "infrastructure/deployment",
+    rationale: "Container and deployment definitions describe the environment the change runs in, completing the context before implementation."
+  },
+  "api-contracts": {
+    order: 5,
+    level: "CHECK",
+    label: "API/contract",
+    rationale: "Explicit contract files state what consumers see, so they are read before the implementation that satisfies them."
+  },
+  runtime: {
+    order: 6,
+    level: "CHECK",
+    label: "runtime implementation",
+    rationale: "Implementation files carry the executable behavior of the change and are read after the context-setting surfaces above."
+  },
+  dependencies: {
+    order: 7,
+    level: "CHECK",
+    label: "dependency",
+    rationale: "Manifests and lockfiles name the third-party inputs that the implementation above resolves against."
+  },
+  configuration: {
+    order: 8,
+    level: "CHECK",
+    label: "configuration",
+    rationale: "These files shape how the application and tooling apply the behavior listed above them."
+  },
+  tests: {
+    order: 9,
+    level: "NOTE",
+    label: "test",
+    rationale: "Test files show what this diff verifies directly, which reads most usefully after the implementation context."
+  },
+  documentation: {
+    order: 10,
+    level: "NOTE",
+    label: "documentation",
+    rationale: "Prose files such as guides and changelogs explain the change after the code they describe."
+  },
+  generated: {
+    order: 11,
+    level: "NOTE",
+    label: "generated",
+    rationale: "Generated output is usually a consequence of the source above it, so it is read last."
+  }
+};
+var reviewPriority = Object.keys(reviewPolicy).sort(
+  (left, right) => reviewPolicy[left].order - reviewPolicy[right].order
+);
 var attentionDescriptions = Object.fromEntries(
   detectors.map((detector) => [
     detector.id,
@@ -640,19 +698,58 @@ var attentionDescriptions = Object.fromEntries(
   ])
 );
 function levelFor(surface) {
-  if (["ci-build", "auth-access", "database-schema", "infrastructure"].includes(surface))
-    return "FOCUS";
-  if (["api-contracts", "runtime", "dependencies", "configuration"].includes(surface))
-    return "CHECK";
-  return "NOTE";
+  return reviewPolicy[surface].level;
+}
+function reasonFor(surface, fileCount) {
+  const policy = reviewPolicy[surface];
+  return `${fileCount} ${policy.label} ${fileCount === 1 ? "file" : "files"} changed in this diff. ${policy.rationale}`;
 }
 function compareCanonicalText(left, right) {
   if (left < right) return -1;
   if (left > right) return 1;
   return 0;
 }
+function compareNullableText(left, right) {
+  if (left === null) return right === null ? 0 : -1;
+  if (right === null) return 1;
+  return compareCanonicalText(left, right);
+}
+function compareNullableCount(left, right) {
+  if (left === null) return right === null ? 0 : -1;
+  if (right === null) return 1;
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+function compareFlag(left, right) {
+  if (left === right) return 0;
+  return left ? 1 : -1;
+}
+var fileComparators = [
+  (left, right) => compareCanonicalText(left.displayPath, right.displayPath),
+  (left, right) => compareCanonicalText(left.status, right.status),
+  (left, right) => compareNullableCount(left.additions, right.additions),
+  (left, right) => compareNullableCount(left.deletions, right.deletions),
+  (left, right) => compareFlag(left.binary, right.binary),
+  (left, right) => compareFlag(left.modeOnly, right.modeOnly),
+  (left, right) => compareNullableText(left.oldPath, right.oldPath),
+  (left, right) => compareNullableText(left.newPath, right.newPath),
+  (left, right) => compareNullableText(left.oldMode, right.oldMode),
+  (left, right) => compareNullableText(left.newMode, right.newMode),
+  (left, right) => compareNullableCount(left.similarity, right.similarity),
+  // Surface ids use only [a-z-], so a comma-joined key cannot conflate two lists.
+  (left, right) => compareCanonicalText(left.surfaces.join(","), right.surfaces.join(",")),
+  (left, right) => compareFlag(left.generated, right.generated)
+];
+function compareFileFacts(left, right) {
+  for (const compare of fileComparators) {
+    const result = compare(left, right);
+    if (result !== 0) return result;
+  }
+  return 0;
+}
 function sortFiles(files) {
-  return [...files].sort((a, b) => compareCanonicalText(a.displayPath, b.displayPath));
+  return [...files].sort(compareFileFacts);
 }
 function surfaceObservation(surface, files) {
   const matching = sortFiles(files.filter((file) => file.surfaces.includes(surface)));
@@ -773,7 +870,7 @@ function makeReviewOrder(files) {
       position: entries.length + 1,
       surface,
       title: attentionDescriptions[surface]?.title ?? surface,
-      reason: `DiffBeacon recommends looking at ${attentionDescriptions[surface]?.title ?? surface} earlier in this review.`,
+      reason: reasonFor(surface, matching.length),
       files: matching.map((file) => file.displayPath)
     });
   }

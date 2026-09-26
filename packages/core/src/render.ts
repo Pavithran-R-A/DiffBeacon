@@ -48,6 +48,24 @@ function level(level: string, color: boolean): string {
   return `${colors[level] ?? ''}${level}\u001b[0m`;
 }
 
+const orderIndent = '   ';
+const orderWidth = 80;
+
+function wrap(text: string, width: number): string[] {
+  const lines: string[] = [];
+  let current = '';
+  for (const word of text.split(' ')) {
+    if (current === '') current = word;
+    else if (current.length + 1 + word.length <= width) current = `${current} ${word}`;
+    else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current !== '') lines.push(current);
+  return lines;
+}
+
 export function renderJson(report: ReviewAttentionMap): string {
   return JSON.stringify(report, null, 2);
 }
@@ -154,7 +172,12 @@ export function renderPretty(
     '────────────',
     ...(report.reviewOrder.length === 0
       ? ['No review order produced.']
-      : report.reviewOrder.map((item) => `${item.position}. ${terminalText(item.title)}`)),
+      : report.reviewOrder.flatMap((item) => [
+          `${item.position}. ${terminalText(item.title)}`,
+          ...wrap(terminalText(item.reason), orderWidth - orderIndent.length).map(
+            (line) => `${orderIndent}${line}`,
+          ),
+        ])),
     '',
     'CHANGED FILES',
     '─────────────',
