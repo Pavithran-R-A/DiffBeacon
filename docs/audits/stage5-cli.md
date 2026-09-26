@@ -8,7 +8,10 @@ PRODUCT COMMITS:         5a4789781554c9cec0ba83f50bda40de490d36d3  fix: qualify 
                          ae1ec89a04e0a011fbcd5bc8618076692f8a2066  test: cover empty stdin and a Unicode repository path
 ENDING SHA (qualification commit): ae1ec89a04e0a011fbcd5bc8618076692f8a2066
 REPORT COMMIT:                     this document, committed as 'docs: record DiffBeacon Stage 5 CLI qualification'
-FOLLOW-UP COMMIT:                  the next commit on rescue/stage0-source, message 'docs: record DiffBeacon Stage 5 CI observation'; it edits only this manifest-excluded file
+FOLLOW-UP COMMITS:                 'docs: record DiffBeacon Stage 5 CI observation' and one further
+                                   docs-only correction to this file's WORKING TREE STATE section,
+                                   which the CI observation itself made stale. All of them edit only
+                                   this manifest-excluded file.
 BRANCH:                  rescue/stage0-source
 ORIGIN MAIN SHA:         e0ff98143bfe39c80c338518d006525a846a8739  (unchanged; not merged, not moved)
 PUSHED:                  yes — normal non-forced `git push origin rescue/stage0-source`. This line is
@@ -388,13 +391,17 @@ were created outside the repository and removed by exact path.
 
 ## WORKING TREE STATE
 
-`git status --short --untracked-files=all` is empty at the candidate SHA and again after this
-report commit. `git diff --check` is clean. Untracked `pnpm-lock.yaml` and `pnpm-workspace.yaml`
-reappeared twice during this stage from outside the session, with the same digests as every
-previous occurrence (`96924946ca90…` and `d6d0c24446d9…`); both copies were hashed and moved to
-`stage5/host-residue/2026-09-26-post-cli-commit/` and
-`stage5/host-residue/2026-09-26-post-coverage-commit/`, never staged. Nothing else was added to
-the repository: no tarball, no consumer, no cell log, no portable runtime and no evidence file
+`git status --short --untracked-files=all` is empty at the candidate SHA, after the report commit,
+and after the CI-observation commit; `git diff --check` is clean at each point. Untracked
+`pnpm-lock.yaml` and `pnpm-workspace.yaml` reappeared six separate times across this stage from
+outside the session — after the CLI commit, the entrypoint fix, the coverage commit, the report
+commit, the CI-observation commit and the final push — always with the identical digests
+`96924946ca90b89e…` and `d6d0c24446d91ef7…`, matching every occurrence recorded in earlier stages.
+Each copy was hashed and moved to `stage5/host-residue/2026-09-26-post-{cli-commit,entry-fix,coverage-commit,report-commit,ci-observation,ci-push}/`
+outside the repository; none was ever staged. Because the files are not part of the tracked source
+set they cannot affect `SOURCE_MANIFEST.txt`: `npm run manifest` after the docs-only commits still
+reports 115 files with no diff, which is the proof that they added no drift. Nothing else was added
+to the repository: no tarball, no consumer, no cell log, no portable runtime and no evidence file
 lives inside it — all of that is under `stage5/` outside the repository.
 
 ## REMAINING CLI LIMITATIONS
