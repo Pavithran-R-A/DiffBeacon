@@ -4,14 +4,28 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 // Stage 5, PHASE 16: the CLI must start itself only when it IS the program being run.
 // These cases execute the shipped bundle in a child process, because a start-up guard can
 // only be proved by starting the thing up.
 
+const repository = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const bundle = fileURLToPath(new URL('../packages/cli/dist/index.js', import.meta.url));
 const temporary: string[] = [];
+
+// The bundle is a build artifact and is not tracked, so a clean checkout has no
+// packages/cli/dist. This suite owns that dependency and rebuilds it through the
+// repository's own build script instead of depending on a gate that happens to run first.
+beforeAll(() => {
+  const built = spawnSync(process.execPath, ['scripts/build-cli.mjs'], {
+    cwd: repository,
+    encoding: 'utf8',
+    shell: false,
+    windowsHide: true,
+  });
+  expect(built.status, built.stderr).toBe(0);
+});
 
 afterEach(() => {
   for (const root of temporary.splice(0))
