@@ -65,9 +65,12 @@ jobs:
       - uses: Pavithran-R-A/DiffBeacon@<REVIEWED_FULL_COMMIT_SHA>
 ```
 
-`pull_request_target` is not the alternative. It runs base-branch code with base-branch
-privileges against a pull request the contributor controls, DiffBeacon needs none of that
-access, and the Action refuses the event before reading the payload or touching Git.
+`pull_request_target` is not the alternative. It runs the base branch's workflow in the base
+repository's context, and its default checkout is the base branch rather than the pull request —
+that more-trusted context is why adding a pull-request checkout there, or otherwise running the
+contributor's code inside it, is the well-known failure mode. DiffBeacon needs none of that access
+and has no use for the trigger, so the Action refuses the event before reading the payload or
+touching Git.
 
 ## Checkout requirements
 

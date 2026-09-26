@@ -97,7 +97,7 @@ DiffBeacon only ever starts its own trusted bundle; the reviewed repository's sc
 
 ### Which reference is safe
 
-**`uses: ./` is for trusted development only, and is not the recommended consumer pattern.** Under `on: pull_request`, `actions/checkout` delivers the _pull request's_ tree, so `uses: ./` loads the `action.yml` and bundle the contributor just wrote — the reviewed change picks the code that runs, inside a base-privileged context that may hold a token, and the pull request never has to be interesting for that to matter. DiffBeacon's own guards do not rescue this: the event-name check lives _inside_ the pull-request-controlled bundle, so it runs only after the attacker's entrypoint has started. Use `uses: ./` only where the Action source is already trusted — a workflow on a trusted branch of this repository, reviewing this repository's own commits.
+**`uses: ./` is for trusted development only, and is not the recommended consumer pattern.** Under `on: pull_request`, `actions/checkout` delivers the _pull request's_ tree, so `uses: ./` loads the `action.yml` and bundle the contributor just wrote — the reviewed change picks the code that runs, and the pull request never has to be interesting for that to matter. That by itself crosses DiffBeacon's boundary: the repository under review is data, and it must never choose or execute the reviewer. GitHub does protect fork pull requests, normally restricting `GITHUB_TOKEN` to read-only and withholding secrets, and repository settings can change the details, so this is not a claim about any particular pull request's exact token privileges — it is a claim about whose code gets executed. DiffBeacon's own guards do not rescue this: the event-name check lives _inside_ the pull-request-controlled bundle, so it runs only after the attacker's entrypoint has started. Use `uses: ./` only where the Action source is already trusted — a workflow on a trusted branch of this repository, reviewing this repository's own commits.
 
 **Consumers need an independent, reviewed reference — which does not exist yet.** No public tag or release has been qualified, so there is no immutable DiffBeacon commit to hand out; Stage 11 owns publishing one. Until then, no `pull_request` workflow in another repository can consume DiffBeacon safely, and this README deliberately shows a placeholder instead of a fake SHA. The intended future consumer form, documented in [`docs/examples/diffbeacon-pull-request-review.yml`](docs/examples/diffbeacon-pull-request-review.yml) as a non-executed example file, is:
 
@@ -120,7 +120,7 @@ jobs:
       - uses: Pavithran-R-A/DiffBeacon@<REVIEWED_FULL_COMMIT_SHA>
 ```
 
-`pull_request_target` is not a workaround. It grants base-branch privileges and a trusted checkout while the pull request still controls the code under review, DiffBeacon needs none of the extra access, and the Action rejects the event outright rather than reviewing it.
+`pull_request_target` is not a workaround. It runs the workflow defined on the base branch, in the base repository's context, and its default checkout is the _base branch's_ code — which is exactly why the dangerous pattern there is a step that goes on to check out or run the pull request's code inside that more-trusted context. DiffBeacon needs none of the extra access that context brings and has no use for the trigger, so the Action rejects the event outright rather than reviewing it.
 
 ### Checkout contract
 

@@ -76,8 +76,10 @@ What the repository said before this stage, and why it was unsafe:
 
 - The README showed an `on: pull_request` workflow using `uses: ./`.
 - `runs.main` is resolved from the checked-out tree, and under `on: pull_request` the checkout is
-  the **pull request's** tree. So `uses: ./` makes the contributor's change choose the code that
-  runs, and it runs with the base branch's permissions and token.
+  the **pull request's** tree. So `uses: ./` makes the contributor's change choose and start the
+  code that runs. (A earlier draft of this report said that code "runs with the base branch's
+  permissions and token"; that overstated the case and is corrected under STAGE 6 CLOSURE below —
+  the defect is untrusted code execution, not a claim about every pull request's token scope.)
 - DiffBeacon's own guards do not rescue this: the event-name check lives _inside_ the
   pull-request-controlled bundle, so it only executes after the attacker's entrypoint has already
   started. Saying "the `GITHUB_TOKEN` is read-only" would not fix it either — code execution is
@@ -118,8 +120,20 @@ What the repository said before this stage, and why it was unsafe:
 
 ## WORKSPACE
 
-- `GITHUB_WORKSPACE` is required and is the only directory Git is run in. Absent, empty, or
-  whitespace-only fails (`GITHUB_WORKSPACE is required: …`).
+- `GITHUB_WORKSPACE` is required and is the only directory Git is run in. The guard in
+  `packages/action/src/index.ts:14-21` rejects a value that is **absent or the empty string**
+  (`GITHUB_WORKSPACE is required: …`) and nothing else — it is a `typeof`/`=== ''` check, with no
+  trimming. A whitespace-only value is therefore a non-empty string that passes this guard and is
+  refused one step later, by the Git repository boundary, and a non-empty path that is not a
+  repository fails there too. Measured on the committed bundle (`stage6-closure/probe-workspace-guard.txt`,
+  outside this repository): absent and `""` → `GITHUB_WORKSPACE is required`; `" "`, `"   "` and
+  `"\t"` → exit 1 from `git rev-parse --show-toplevel`; a real non-repository directory →
+  `No diff available: the working directory is not a Git repository…`. Every case exits 1 with no
+  summary written, so none of them reviews the wrong repository; what the earlier draft of this
+  section called "whitespace-only fails (`GITHUB_WORKSPACE is required`)" named the wrong guard and
+  is corrected here rather than by changing `required()`. GitHub-hosted runners supply a real
+  workspace path, so whitespace-only input is a synthetic case, and the qualified real-runner
+  contract stays "the workspace named by `GITHUB_WORKSPACE`, or nothing".
 - cwd-separation proof, measured both ways: row 24 (cwd is a Git repo, workspace is not a repo)
   and row 25 (cwd is repo A, workspace is unrelated repo B) both failed **open** before this stage
   — exit 0 with a full review, because the Action inherited the process directory. Both now fail
@@ -288,10 +302,14 @@ Requirements documented in both READMEs and the example:
 
 v0.1 policy: **refused**. `GITHUB_EVENT_NAME == pull_request_target` fails with its own message
 naming the reason (row 03, row 36, `packages/action/src/logic.ts:29`). It is not a fix for the
-`uses: ./` problem — it keeps the base branch's token and checkout while the pull request still
-controls the code under review — and DiffBeacon needs none of its extra privileges, because
-`pull_request` already carries the same payload. The event gate is reachable in tests and inside
-the bundle; it does not depend on workflow-level configuration.
+`uses: ./` problem: the trigger runs the base branch's workflow in the base repository's context,
+and its default checkout is the base branch rather than the pull request. That context can carry
+more trust than an ordinary fork event, which is why the documented danger there is a workflow that
+goes on to check out or execute the pull request's own code inside it. DiffBeacon needs none of the
+extra access — `pull_request` already carries the same payload — so the trigger is refused rather
+than adopted. The bundle's message calls it a "base-privileged trigger", which is accurate about
+the context and deliberately does not claim the PR's code is what runs there. The event gate is
+reachable in tests and inside the bundle; it does not depend on workflow-level configuration.
 
 ## ACTION REFERENCE
 
@@ -625,3 +643,72 @@ $ git diff --stat 7152152..HEAD -- .github/workflows/
 
 Consequently the Action remains **locally qualified only**; no hosted GitHub Actions execution of
 `action.yml` exists for any commit in this stage.
+
+## STAGE 6 CLOSURE — GITHUB TRUST-CONTEXT RECORD CORRECTION
+
+AUDITOR FINDING: the Stage-6 product behaviour passed, but three pieces of security prose were
+stronger or looser than the code and GitHub's event model actually support. An ordinary
+`pull_request` was described as running PR-controlled code "with the base branch's permissions and
+token"; `pull_request_target` was described as though the pull request's checkout were what runs
+there; and `required()` was credited with rejecting a whitespace-only `GITHUB_WORKSPACE`, which it
+does not do. All three are documentation defects — none is a behaviour defect — and all are
+corrected in this commit. Evidence for the third is the bundle probe recorded in
+`stage6-closure/probe-workspace-guard.txt`, outside this repository.
+
+PRODUCT BEHAVIOR CHANGED: NO
+
+ACTION BUNDLE CHANGED: NO (not rebuilt; `packages/action/dist/index.js` is byte-identical to the
+`1287514` build that all four qualification cells ran)
+
+EVENT POLICY CHANGED: NO (`pull_request` only; every other event, including `pull_request_target`,
+still fails closed as the first action, before the event file is opened and before Git runs)
+
+TRUST MODEL CHANGED: NO (the two domains stay separate and the reviewed repository stays data)
+
+CORRECTED `pull_request` MODEL:
+
+- `actions/checkout` under `on: pull_request` delivers the pull request's tree, so `uses: ./` can
+  load `action.yml` and a bundle that the reviewed change wrote — untrusted code becomes the
+  reviewer implementation.
+- That alone violates DiffBeacon's rule that the repository under review is data and must never
+  choose or execute the reviewer.
+- For fork pull requests GitHub normally restricts `GITHUB_TOKEN` to read-only and withholds normal
+  secrets; repository and organization settings can alter a workflow's token behaviour, so no
+  universal claim is made about any one pull request's exact privileges, and the earlier "may hold a
+  token" phrasing is dropped.
+- DiffBeacon forbids the pattern regardless of token scope. The conclusion is unchanged and not
+  weakened: `uses: ./` is trusted-development-only and is not the consumer pattern.
+
+CORRECTED `pull_request_target` MODEL:
+
+- The workflow comes from the base branch and runs in the base repository's context.
+- Its default checkout is base-branch code, not the pull request head; nothing in the trigger
+  itself executes the PR's files.
+- The hazard is a workflow that _goes on to_ check out or run the pull request's code inside that
+  more-trusted context, which is why the trigger is widely misused.
+- DiffBeacon has no use for the trigger and v0.1 refuses it. The shipped message "refuses to run
+  under a base-privileged trigger" describes that context, not a PR checkout, and stays accurate.
+
+CORRECTED WORKSPACE GUARD:
+
+- `packages/action/src/index.ts:14-21` rejects a non-string or empty-string value only; there is no
+  trim, and this closure deliberately did not add one to make the old report sentence true.
+- Absent and `""` fail with `GITHUB_WORKSPACE is required: …`.
+- A whitespace-only or otherwise invalid non-empty value passes that guard and is rejected one step
+  later by the Git repository boundary, with exit 1 and no summary written, so it can never review a
+  directory other than the one named.
+- Real GitHub runners export a concrete workspace path, so whitespace-only input is not part of the
+  qualified runner contract.
+
+Files corrected: `README.md` (both trigger paragraphs), `packages/action/README.md`
+(`pull_request_target` paragraph), `docs/architecture/security.md` (both claims, now explicit that
+the objection is code execution rather than credentials), `docs/examples/diffbeacon-pull-request-review.yml`
+(the two header comments), and this report's TRUST MODEL-adjacent sections.
+
+STAGE-6 QUALIFIED PRODUCT SHA: `1287514c18bd4615d4c2ee6583e3cfd26e4b4aaa` — unchanged by this
+correction, and every measurement in this report still refers to it.
+
+FINAL STAGE-6 DECISION: `PASS` for the local Action contract. Hosted E2E remains unqualified and
+`EXTERNAL CI BLOCKED`, as recorded above.
+
+NEXT ROADMAP STAGE: Stage 7 — Browser Demo. Stage 7 was not begun.

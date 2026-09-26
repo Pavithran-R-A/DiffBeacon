@@ -9,12 +9,15 @@
 #   - The Action you run and the repository it reads are two different trust domains.
 #     `actions/checkout` copies the pull request into the runner; DiffBeacon then reads that
 #     copy as data through `git diff`.
-#   - `uses: ./` would load `action.yml` from that copy, letting the reviewed change choose
-#     the code that runs under the base branch's permissions. That is why the example below
-#     references DiffBeacon independently, by immutable full commit SHA.
-#   - `pull_request_target` is not a fix. It keeps the base branch's token and checkout while
-#     the pull request still controls the code being looked at, and DiffBeacon refuses that
-#     event outright.
+#   - `uses: ./` would load `action.yml` from that copy, letting the reviewed change choose and
+#     run the reviewer implementation. GitHub normally protects fork pull requests with a
+#     read-only `GITHUB_TOKEN` and withheld secrets, but DiffBeacon's rule is stricter and does
+#     not depend on token scope: the repository under review is data, never code that runs. That
+#     is why the example below references DiffBeacon independently, by immutable full commit SHA.
+#   - `pull_request_target` is not a fix. It runs the base branch's workflow in the base
+#     repository's context, where the default checkout is the base branch, and that extra trust is
+#     precisely why workflows go wrong there by checking out the pull request's code themselves.
+#     DiffBeacon has no use for the trigger and refuses the event outright.
 #
 # Provenance of the pin below: `3d3c42e5aac5ba805825da76410c181273ba90b1` was checked against
 # `refs/tags/v7` of https://github.com/actions/checkout with `git ls-remote --tags` on

@@ -56,11 +56,19 @@ execute a program under an unprotected Git command.
 
 Because a runner takes its entrypoint from the checked-out tree, `uses: ./` under
 `on: pull_request` makes the reviewed change the one that selects the code that runs — the
-bundle's own event guard cannot help, since it is inside the bundle being replaced. That form
-is limited to trusted development on this repository's own branches; consumers are directed to
-an independently referenced, reviewed commit SHA, which does not exist until the Stage 11
-release. `pull_request_target` is refused by the event gate rather than treated as a
-workaround, and the Job Summary is the Action's only output.
+bundle's own event guard cannot help, since it is inside the bundle being replaced. The reason
+that form is refused is untrusted code execution, not a claim about credentials: GitHub normally
+restricts a fork pull request's `GITHUB_TOKEN` to read-only and withholds secrets, and repository
+settings can change the details, so no universal statement is made about any one pull request's
+token privileges. DiffBeacon's boundary is the stricter one — the repository under review must
+never choose or run the reviewer. That form is limited to trusted development on this repository's
+own branches; consumers are directed to an independently referenced, reviewed commit SHA, which
+does not exist until the Stage 11 release. `pull_request_target` runs the base branch's workflow in
+the base repository's context, where the default checkout is the base branch rather than the pull
+request, and it can carry more trust than an ordinary fork event; the hazard is a workflow that
+then checks out or executes the pull request's code inside that context, which DiffBeacon neither
+needs nor offers, so the event gate refuses the trigger rather than treating it as a workaround,
+and the Job Summary is the Action's only output.
 
 ## Rendering boundary
 
