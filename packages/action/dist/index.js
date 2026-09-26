@@ -694,7 +694,7 @@ function evidenceFor(files, diagnostics) {
   if (runtimeFiles.length > 0 && testFiles.length === 0) {
     observations.push({
       kind: "runtime-without-tests",
-      title: "Runtime changes without observed test-file changes",
+      title: "Runtime changes without observed test-file content changes",
       message: "Runtime files changed, but no test-file content changes were observed in this diff.",
       relatedFiles: names(runtimeFiles)
     });
@@ -702,7 +702,7 @@ function evidenceFor(files, diagnostics) {
   if (authFiles.length > 0 && testFiles.length === 0) {
     observations.push({
       kind: "auth-without-tests",
-      title: "Authentication/access changes without observed test-file changes",
+      title: "Authentication/access changes without observed test-file content changes",
       message: "Authentication or authorization files changed. No test-file content changes were observed in this diff.",
       relatedFiles: names(authFiles)
     });
@@ -710,7 +710,7 @@ function evidenceFor(files, diagnostics) {
   if (databaseFiles.length > 0 && testFiles.length === 0) {
     observations.push({
       kind: "database-without-tests",
-      title: "Database/schema changes without observed test-file changes",
+      title: "Database/schema changes without observed test-file content changes",
       message: "Database or schema files changed. No test-file content changes were observed in this diff.",
       relatedFiles: names(databaseFiles)
     });
@@ -718,7 +718,7 @@ function evidenceFor(files, diagnostics) {
   if (manifests.length > 0 && lockfiles.length === 0) {
     observations.push({
       kind: "manifest-without-lockfile",
-      title: "Dependency manifest without observed lockfile change",
+      title: "Dependency manifest content change without observed lockfile content change",
       message: "A dependency manifest content change was observed. No lockfile content change was observed in this diff.",
       relatedFiles: names(manifests)
     });
@@ -726,7 +726,7 @@ function evidenceFor(files, diagnostics) {
   if (lockfiles.length > 0 && manifests.length === 0) {
     observations.push({
       kind: "lockfile-without-manifest",
-      title: "Lockfile without observed dependency manifest change",
+      title: "Lockfile content change without observed dependency manifest content change",
       message: "A lockfile content change was observed. No dependency manifest content change was observed in this diff.",
       relatedFiles: names(lockfiles)
     });
@@ -734,7 +734,7 @@ function evidenceFor(files, diagnostics) {
   if (contracts.length > 0 && docs.length === 0) {
     observations.push({
       kind: "contract-without-docs",
-      title: "Contract definition without observed documentation change",
+      title: "Contract definition content change without observed documentation content change",
       message: "An API or contract definition changed. No documentation or changelog content change was observed in this diff.",
       relatedFiles: names(contracts)
     });

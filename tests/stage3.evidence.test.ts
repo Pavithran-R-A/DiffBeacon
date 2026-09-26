@@ -174,6 +174,104 @@ describe('line-count evidence states only observed counts', () => {
   });
 });
 
+describe('relationship titles are as precise as relationship messages', () => {
+  // A mode-only companion IS an observed change to that file. Because the premises
+  // of these rules read content-bearing files only, a title saying "without observed
+  // <companion> changes" contradicts a fact the same report displays.
+  const cases = [
+    {
+      kind: 'runtime-without-tests' as const,
+      companion: 'tests/app.test.ts',
+      input: `${contentChange('src/app.ts')}${modeOnly('tests/app.test.ts')}`,
+      claim: /test-file content change/i,
+    },
+    {
+      kind: 'auth-without-tests' as const,
+      companion: 'tests/session.test.ts',
+      input: `${contentChange('src/auth/session.ts')}${modeOnly('tests/session.test.ts')}`,
+      claim: /test-file content change/i,
+    },
+    {
+      kind: 'database-without-tests' as const,
+      companion: 'tests/migrations.test.ts',
+      input: `${contentChange('db/migrate/001_add_users.rb')}${modeOnly(
+        'tests/migrations.test.ts',
+      )}`,
+      claim: /test-file content change/i,
+    },
+    {
+      kind: 'manifest-without-lockfile' as const,
+      companion: 'pnpm-lock.yaml',
+      input: `${contentChange('package.json')}${modeOnly('pnpm-lock.yaml')}`,
+      claim: /lockfile content change/i,
+    },
+    {
+      kind: 'lockfile-without-manifest' as const,
+      companion: 'package.json',
+      input: `${contentChange('pnpm-lock.yaml')}${modeOnly('package.json')}`,
+      claim: /manifest content change/i,
+    },
+    {
+      kind: 'contract-without-docs' as const,
+      companion: 'docs/api.md',
+      input: `${contentChange('openapi.yml')}${modeOnly('docs/api.md')}`,
+      claim: /documentation content change/i,
+    },
+  ];
+
+  it.each(cases)(
+    'titles a missing $kind companion as a missing content change, not a missing file change',
+    ({ kind, companion, input, claim }) => {
+      const report = analyzeDiff(input);
+      expect(kinds(report)).toContain(kind);
+      expect(report.summary.modeOnlyFiles).toBe(1);
+      expect(report.files.map((file) => file.displayPath)).toContain(companion);
+      const observation = only(report, kind);
+      expect(observation.title).toMatch(claim);
+      expect(observation.message).toMatch(/content change/i);
+    },
+  );
+
+  it('keeps every "without observed ... change" clause about content', () => {
+    const corpus = [
+      ...cases.map((item) => item.input),
+      contentChange('src/app.ts'),
+      `${contentChange('src/app.ts')}${contentChange('package.json')}`,
+      `${contentChange('openapi.yml')}${binaryChange('dist/a.bin')}${binaryChange('dist/b.bin')}`,
+      rename('package.json', 'package.old.json'),
+      truncated('src/app.ts'),
+    ];
+    for (const input of corpus) {
+      for (const item of analyzeDiff(input).evidence) {
+        const claim = `${item.title} ${item.message}`;
+        const missing = claim.match(/without observed (.+?) change/i);
+        if (missing) expect(missing[1]).toMatch(/content/);
+      }
+    }
+  });
+
+  it('stays accurate and readable when no companion file appears at all', () => {
+    const runtime = only(analyzeDiff(contentChange('src/app.ts')), 'runtime-without-tests');
+    expect(runtime.title).toMatch(/test-file content change/i);
+    expect(runtime.message).toMatch(/were observed in this diff/i);
+
+    const manifest = only(analyzeDiff(contentChange('package.json')), 'manifest-without-lockfile');
+    expect(manifest.title).toMatch(/lockfile content change/i);
+    // No wording may imply a lockfile was seen and left unstaged.
+    expect(`${manifest.title} ${manifest.message}`).not.toMatch(
+      /missing|stale|absent|forgotten|exists/i,
+    );
+  });
+
+  it('describes a contract change with no documentation in the diff at all', () => {
+    const contract = only(analyzeDiff(contentChange('openapi.yml')), 'contract-without-docs');
+    expect(contract.title).toMatch(/documentation content change/i);
+    expect(`${contract.title} ${contract.message}`).not.toMatch(
+      /undocumented|missing documentation|no documentation file/i,
+    );
+  });
+});
+
 describe('evidence language stays observational', () => {
   const forbidden =
     /\b(vulnerab\w*|unsafe|insecure|confidence|probabilit\w*|mergeab\w*|coverage|risk\w*|severity)\b|\bsafe\b|has no tests|percent/i;
