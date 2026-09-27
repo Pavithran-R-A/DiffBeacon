@@ -3,7 +3,7 @@
  * signal accents, asymmetrical rail/map/ledger layout, and observation language.
  */
 
-import { useEffect, useMemo, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -110,6 +110,15 @@ function surfaceTone(level: SurfaceObservation['level']) {
   return level.toLowerCase();
 }
 
+function countNoun(count: number, singular: string, plural: string) {
+  return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
+}
+
+/** The engine measures its input bound in UTF-8 bytes, so the browser must too. */
+function utf8Bytes(value: string) {
+  return new TextEncoder().encode(value).length;
+}
+
 function AppMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className={compact ? 'app-mark app-mark--compact' : 'app-mark'} aria-hidden="true">
@@ -182,7 +191,7 @@ function AttentionRow({ item, index }: { item: SurfaceObservation; index: number
       <div className="attention-row__body">
         <div className="attention-row__heading">
           <h3>{item.title}</h3>
-          <span className="attention-row__count">{formatNumber(item.fileCount)} files</span>
+          <span className="attention-row__count">{countNoun(item.fileCount, 'file', 'files')}</span>
         </div>
         <p>{item.description}</p>
         <div className="file-pile">
@@ -210,7 +219,7 @@ function AttentionRow({ item, index }: { item: SurfaceObservation; index: number
 
 function EmptyMap({ onExample }: { onExample: () => void }) {
   return (
-    <section className="empty-map" aria-live="polite">
+    <section className="empty-map">
       <div className="empty-map__mark">
         <AppMark />
       </div>
@@ -287,12 +296,12 @@ function EvidenceLedger({ report }: { report: ReviewAttentionMap }) {
 
 function ReviewMap({ report }: { report: ReviewAttentionMap }) {
   return (
-    <section className="map-section" aria-live="polite">
+    <section className="map-section">
       <div className="map-header">
         <div>
           <span className="eyebrow">REVIEW ATTENTION MAP / RESULT</span>
           <h2>Look here first.</h2>
-          <p>Structurally sensitive surfaces are ordered before ordinary implementation churn.</p>
+          <p>The sequence below is the order the report asks you to read it in.</p>
         </div>
         <div className="map-header__stamp">
           <span>SCHEMA</span>
@@ -313,21 +322,17 @@ function ReviewMap({ report }: { report: ReviewAttentionMap }) {
       <div className="order-strip">
         <div className="order-strip__label">
           <span className="eyebrow">REVIEW ORDER</span>
-          <span>recommended starting sequence</span>
+          <span>every entry, in the reported sequence</span>
         </div>
-        <div className="order-strip__items">
-          {report.reviewOrder.slice(0, 5).map((item) => (
-            <span key={item.surface}>
-              <b>{String(item.position).padStart(2, '0')}</b>
-              {item.title}
-            </span>
+        <ol className="order-list">
+          {report.reviewOrder.map((item) => (
+            <li key={item.surface}>
+              <span className="order-list__position">{item.position}</span>
+              <span className="order-list__title">{item.title}</span>
+              <span className="order-list__reason">{item.reason}</span>
+            </li>
           ))}
-          {report.reviewOrder.length > 5 && (
-            <span>
-              <b>+{report.reviewOrder.length - 5}</b>more
-            </span>
-          )}
-        </div>
+        </ol>
       </div>
     </section>
   );
@@ -340,19 +345,43 @@ export default function Home() {
   const [notice, setNotice] = useState('Ready for a unified diff.');
   const [mobileRail, setMobileRail] = useState(false);
   const [activeNav, setActiveNav] = useState('map');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     document.documentElement.dataset.mode = mode;
   }, [mode]);
 
-  const byteCount = useMemo(() => new TextEncoder().encode(diff).length, [diff]);
-  const isOverLimit = byteCount > MAX_DIFF_BYTES;
+  useEffect(() => {
+    if (!mobileRail) return;
+    function closeOnEscape(event: globalThis.KeyboardEvent) {
+      if (event.key !== 'Escape') return;
+      setMobileRail(false);
+      menuButtonRef.current?.focus();
+    }
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobileRail]);
+
+  const byteCount = useMemo(() => utf8Bytes(diff), [diff]);
+
+  /**
+   * The only way draft text enters state. A proposal over the engine's byte limit is refused
+   * before it is stored, so the last valid draft survives and no oversized text can reach
+   * analyzeDiff(). The report is invalidated only for an edit that was actually accepted.
+   */
+  function trySetDiff(nextValue: string) {
+    if (utf8Bytes(nextValue) > MAX_DIFF_BYTES) {
+      setNotice('That input is larger than the 8 MiB limit, so it was not added to the draft.');
+      return false;
+    }
+    setDiff(nextValue);
+    if (report !== null) setReport(null);
+    setNotice('Draft diff changed. Analyze when ready.');
+    return true;
+  }
 
   function analyze() {
-    if (isOverLimit) {
-      setNotice('This diff is larger than 8 MiB. Trim it before analyzing locally.');
-      return;
-    }
     if (!diff.trim()) {
       setReport(null);
       setNotice('Paste a unified diff or load the synthetic example.');
@@ -365,13 +394,11 @@ export default function Home() {
   function loadExample() {
     setDiff(SAMPLE_DIFF);
     setReport(analyzeDiff(SAMPLE_DIFF));
-    setNotice('Synthetic example loaded. Nothing was sent anywhere.');
+    setNotice('Synthetic example loaded and mapped in this browser.');
   }
 
   function onDiffChange(event: ChangeEvent<HTMLTextAreaElement>) {
-    setDiff(event.target.value);
-    if (report !== null) setReport(null);
-    setNotice('Draft diff changed. Analyze when ready.');
+    trySetDiff(event.target.value);
   }
 
   function onDiffKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -381,15 +408,28 @@ export default function Home() {
     }
   }
 
-  function copyReport() {
+  async function copyReport() {
     if (!report) return;
-    void navigator.clipboard?.writeText(JSON.stringify(report, null, 2));
-    setNotice('JSON report copied to your clipboard.');
+    const payload = JSON.stringify(report, null, 2);
+    if (!navigator.clipboard?.writeText) {
+      setNotice(
+        'This browser exposes no clipboard write API, so the JSON report could not be placed on the clipboard.',
+      );
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(payload);
+      setNotice('JSON report copied to your clipboard.');
+    } catch {
+      setNotice(
+        'This browser refused the clipboard write, so the JSON report is not available for pasting.',
+      );
+    }
   }
 
   return (
     <div className="app-frame">
-      <aside className={mobileRail ? 'rail rail--open' : 'rail'}>
+      <aside id="rail-nav" className={mobileRail ? 'rail rail--open' : 'rail'}>
         <div className="rail__brand" aria-label="DiffBeacon">
           <AppMark compact />
           <span className="wordmark">
@@ -417,7 +457,7 @@ export default function Home() {
             onClick={() => {
               setActiveNav('input');
               setMobileRail(false);
-              document.getElementById('diff-input')?.focus();
+              textareaRef.current?.focus();
             }}
           />
         </nav>
@@ -464,9 +504,12 @@ export default function Home() {
       <main className="workspace">
         <header className="topbar">
           <button
+            ref={menuButtonRef}
             className="mobile-menu"
             type="button"
-            aria-label="Open navigation"
+            aria-label={mobileRail ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={mobileRail}
+            aria-controls="rail-nav"
             onClick={() => setMobileRail(!mobileRail)}
           >
             <Menu size={19} />
@@ -479,7 +522,7 @@ export default function Home() {
           <div className="topbar__actions">
             <span className="local-chip">
               <span className="status-dot" />
-              LOCAL ONLY
+              RUNS IN BROWSER
             </span>
             <button
               className="icon-button"
@@ -526,7 +569,7 @@ export default function Home() {
               </span>
               <span>
                 <TerminalSquare size={14} />
-                ZERO NETWORK
+                LOCAL ANALYSIS
               </span>
               <span>
                 <ShieldCheck size={14} />
@@ -563,6 +606,7 @@ export default function Home() {
             </div>
             <div className="textarea-wrap">
               <textarea
+                ref={textareaRef}
                 id="diff-textarea"
                 aria-label="Unified diff input"
                 value={diff}
@@ -577,19 +621,14 @@ export default function Home() {
               </div>
             </div>
             <div className="input-instrument__bottom">
-              <div className={isOverLimit ? 'privacy-note privacy-note--warn' : 'privacy-note'}>
+              <div className="privacy-note">
                 <ShieldCheck size={15} />
                 <span>
-                  <strong>Your diff stays in this browser.</strong> No source upload, backend,
-                  telemetry, or remote AI.
+                  <strong>Your pasted diff is analyzed in this browser.</strong> Analysis does not
+                  upload it. There is no backend, API, or telemetry in the analysis path.
                 </span>
               </div>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={analyze}
-                disabled={isOverLimit}
-              >
+              <button className="primary-button" type="button" onClick={analyze}>
                 <span>Analyze diff</span>
                 <ArrowUpRight size={16} />
               </button>
@@ -620,7 +659,7 @@ export default function Home() {
                   <div className="summary-bar__title">
                     <span className="eyebrow">
                       ATTENTION MAP /{' '}
-                      {report.summary.diagnostics > 0 ? 'WITH DIAGNOSTICS' : 'READY'}
+                      {report.summary.diagnostics > 0 ? 'PARSED WITH DIAGNOSTICS' : 'READY'}
                     </span>
                     <h2>
                       {report.summary.changedFiles === 0
@@ -645,6 +684,18 @@ export default function Home() {
                       value={formatNumber(report.summary.generatedFiles)}
                     />
                   </div>
+                  {report.summary.diagnostics > 0 && (
+                    <p className="summary-bar__note">
+                      {countNoun(
+                        report.summary.diagnostics,
+                        'parser diagnostic',
+                        'parser diagnostics',
+                      )}{' '}
+                      {report.summary.diagnostics === 1 ? 'was' : 'were'} recorded while reading
+                      this diff. A recorded diagnostic limits what the parser could confirm; it does
+                      not withdraw the files that were observed.
+                    </p>
+                  )}
                 </div>
                 <ReviewMap report={report} />
               </div>
@@ -670,7 +721,7 @@ export default function Home() {
               type="button"
               aria-label="Copy current JSON report"
               disabled={!report}
-              onClick={copyReport}
+              onClick={() => void copyReport()}
             >
               <Clipboard size={16} />
             </button>
@@ -679,7 +730,7 @@ export default function Home() {
         <footer className="workspace-footer">
           <span>DIFFBEACON / 0.1.0</span>
           <span>DETERMINISTIC ATTENTION ROUTING</span>
-          <span>LOCAL BY DEFAULT</span>
+          <span>ANALYSIS IN THIS BROWSER</span>
         </footer>
       </main>
     </div>
