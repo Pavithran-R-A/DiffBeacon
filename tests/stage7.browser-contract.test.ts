@@ -386,10 +386,30 @@ index 1111111..2222222 100644
   });
 
   it('counts a multi-byte paste in UTF-8 bytes, not code units', async () => {
-    for (const sample of ['€ 2-byte', '中 3-byte', '🚀 4-byte']) {
+    /**
+     * Every expected length is written out as a literal, and checked against the browser's own
+     * TextEncoder before the paste happens, so a mislabelled fixture cannot pass. The 2-byte slot is
+     * 'é' (U+00E9, C3 A9): the euro sign people reach for here, '€' (U+20AC, E2 82 AC), is 3 bytes and
+     * would silently leave 2-byte coverage missing.
+     */
+    const samples = [
+      { glyph: 'é', bytes: 2 },
+      { glyph: '€', bytes: 3 },
+      { glyph: '中', bytes: 3 },
+      { glyph: '🚀', bytes: 4 },
+    ] as const;
+    for (const { glyph, bytes } of samples) {
+      const encoded = await page.evaluate((text) => new TextEncoder().encode(text).length, glyph);
+      expect(encoded, `the browser must encode ${glyph} as ${bytes} UTF-8 bytes`).toBe(bytes);
+      expect(utf8Length(glyph), `the harness must agree that ${glyph} is ${bytes} bytes`).toBe(
+        bytes,
+      );
       await draft(page, '');
-      await pasteInto(page, sample, sample);
-      expect(await byteLabel(page).innerText()).toContain(String(utf8Length(sample)));
+      await pasteInto(page, glyph, glyph);
+      const shown = /\d+/.exec(await byteLabel(page).innerText());
+      expect(Number(shown?.[0]), `${glyph} must be counted as ${bytes} bytes on screen`).toBe(
+        bytes,
+      );
     }
   });
 

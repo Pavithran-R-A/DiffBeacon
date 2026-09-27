@@ -7,7 +7,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { analyzeDiff } from '../packages/core/src/index.js';
+import { analyzeDiff, MAX_DIFF_BYTES } from '../packages/core/src/index.js';
 import {
   browserEngine,
   browserSkipReason,
@@ -16,13 +16,16 @@ import {
   fixtures,
   launchBrowser,
   openApplication,
+  pasteInto,
   repository,
   serveDirectory,
+  statusLine,
   textarea,
   timePressToReport,
+  utf8Length,
   type StaticSite,
 } from './stage7.browser-harness.js';
-import type { Browser } from 'playwright-core';
+import type { Browser, Page } from 'playwright-core';
 
 /**
  * Claiming the browser slot can mean queueing behind three other real-Chromium files, so the hook
@@ -45,6 +48,95 @@ function filesIn(directory: string): string[] {
     else found.push(file);
   }
   return found;
+}
+
+/* ---------------------------------------------------------------------------
+ * HARNESS TIMEOUTS — NOT PRODUCT BUDGETS
+ *
+ * Stage 7 defines no performance requirement, and its own brief says milliseconds
+ * may not be claimed as a hard SLA unless product requirements define one. So every
+ * duration below is a watchdog whose only job is to fail a run whose page has hung
+ * instead of hanging the run, and nothing in this file compares a measurement with
+ * a threshold. Each scenario is judged on whether the report appeared, whether it
+ * carries the counts the engine produces for the same bytes, and whether the page
+ * still answers its controls afterwards. Timings that get recorded are labelled
+ * observations, and the report keeps them as non-normative notes about one machine.
+ *
+ * Measured on this host with the paste route the scenarios use (see
+ * ../stage7/closure-paste-measurements.txt; press-to-paint is the page's own clock):
+ *   sample 562 B          109 ms paste,  63.7 ms press-to-paint, unthrottled
+ *   200 KB                205 ms paste,  54.1 ms press-to-paint, unthrottled
+ *   8 MiB near-limit   4 605 ms paste, 135.8 ms press-to-paint, unthrottled
+ *   200 KB, renderer 20x 5 439 ms paste, 4 585 ms press-to-paint
+ * `heavy` is therefore about 26x the slowest heavy thing this machine has measured,
+ * and `report` about 1 000x the unthrottled sample — deliberately slack, because a
+ * watchdog has to be reachable only by a hang, not by a busy host.
+ * ------------------------------------------------------------------------- */
+const harness = {
+  /** page-load, paste-settle and paint ceilings for small and 200 KB drafts. */
+  report: 60_000,
+  /** the same ceilings for the near-limit draft and for a renderer throttled 20x. */
+  heavy: 120_000,
+  /** vitest's own outer watchdog for a heavy scenario, above its harness ceiling. */
+  heavyTest: 180_000,
+} as const;
+
+/**
+ * A diff with a bounded file count and a lot of content per file. A real large diff is many
+ * changed lines rather than thousands of renamed files, and the report renders one row per file,
+ * so this stresses the analysis instead of the node count — which is what "a large diff was
+ * handled" has to mean before it can be read as evidence.
+ */
+function largeDiff(bytes: number, files = 12): string {
+  const line = '+export const padded = "a long line of added source text for measurement";\n';
+  const repeats = Math.max(1, Math.floor(bytes / files / utf8Length(line)));
+  let text = '';
+  for (let index = 0; index < files; index += 1) {
+    text +=
+      `diff --git a/src/module-${index}/index.ts b/src/module-${index}/index.ts
+index 111111${index}..222222${index} 100644
+--- a/src/module-${index}/index.ts
++++ b/src/module-${index}/index.ts
+@@ -1,2 +1,3 @@
+-export const value = ${index};
++export const value = ${index + 1};
+` + line.repeat(repeats);
+  }
+  return text.slice(0, bytes);
+}
+
+/**
+ * Loads a draft through the browser's own clipboard and keystroke, the route a real visitor uses,
+ * and then proves it landed. `ceilingMs` is the HARNESS TIMEOUT for the paste settling.
+ * `fill()` is not used here: measured on this host it took 179 s for 200 KB, which is a cost of the
+ * driver typing into a textarea, not of the application, and a scenario gated on it would be
+ * measuring Playwright.
+ */
+async function loadDraft(page: Page, diff: string, ceilingMs: number): Promise<void> {
+  await pasteInto(page, diff, diff, ceilingMs);
+  const stored = await page.locator(textarea).inputValue();
+  expect(
+    utf8Length(stored),
+    `the built page must hold the ${utf8Length(diff)}-byte draft it was given`,
+  ).toBe(utf8Length(diff));
+}
+
+/** The three counts the built page shows in its summary bar, as numbers. */
+async function shownCounts(
+  page: Page,
+): Promise<{ files: number; additions: number; deletions: number }> {
+  const cells = await page.locator('.summary-stat').allInnerTexts();
+  const read = (label: string): number => {
+    const cell = cells.find((text) => text.startsWith(label));
+    expect(cell, `the built page must show a ${label} count`).toBeDefined();
+    return Number((cell ?? '').replace(/\D+/g, ''));
+  };
+  return { files: read('FILES'), additions: read('ADDITIONS'), deletions: read('DELETIONS') };
+}
+
+/** A cheap, comparable identity for what is painted, used by the settle check. */
+function paintedReport(page: Page): Promise<string | null> {
+  return page.evaluate(() => document.querySelector('.result-layout')?.outerHTML ?? null);
 }
 
 beforeAll(async () => {
@@ -107,21 +199,171 @@ describeBrowser('the production build runs at the root path', () => {
     await page.getByRole('button', { name: 'Copy current JSON report' }).click();
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     expect(JSON.parse(copied)).toEqual(analyzeDiff(fixtures.authWithTests));
-    expect(paintedIn, `the report painted ${paintedIn}ms after the press`).toBeLessThan(1_000);
+    // Recorded, never gated: Stage 7 has no product performance budget to compare it with.
+    console.info(
+      `OBSERVATION (non-normative, not an SLA): ${browserEngine?.name ?? 'browser'} painted the ` +
+        `${fixtures.authWithTests.length}-character report ${paintedIn.toFixed(1)} ms after the press`,
+    );
+    expect(opened.observation.pageErrors).toEqual([]);
+    expect(opened.observation.consoleErrors).toEqual([]);
     await opened.context.close();
   });
+});
 
-  it('refuses to call a slow report prompt', async () => {
-    const opened = await openApplication(browser, site);
-    await opened.page.locator(textarea).fill(fixtures.authWithTests);
-    const client = await opened.context.newCDPSession(opened.page);
-    await client.send('Emulation.setCPUThrottlingRate', { rate: 20 });
-    const paintedIn = await timePressToReport(opened.page, 'Analyze diff');
-    expect(paintedIn, `${paintedIn}ms on a 20x throttled renderer must not pass`).toBeGreaterThan(
-      1_000,
+/**
+ * Stage-7 closure, PHASE 1: the browser health check the stage actually requires, in place of the
+ * invented 1 000 ms SLA. Every scenario here answers one of seven questions — does a sample
+ * analysis complete (the scenario just above), does a reasonably large one, does a near-limit one,
+ * does the page stay interactive, does it stop working once it has painted, does it survive without
+ * crashing or hanging, and does it still work with its renderer throttled 20x? The over-limit case
+ * is refused in stage7.browser-contract.test.ts, which owns the input boundary.
+ *
+ * None of them compares a duration with a threshold. Where a number is measured it is logged as an
+ * observation, and the only timeouts are the labelled HARNESS TIMEOUTs above.
+ */
+describeBrowser('the built page completes large work and stays usable', () => {
+  let site: StaticSite;
+
+  beforeAll(async () => {
+    site = await serveDirectory(buildWeb('/'));
+  });
+
+  afterAll(async () => {
+    await site?.close();
+  });
+
+  it('completes a reasonably large analysis with the counts the engine gives', async () => {
+    const diff = largeDiff(200 * 1024);
+    const core = analyzeDiff(diff);
+    expect(core.summary.changedFiles).toBe(12);
+    const opened = await openApplication(browser, site, { clipboardPermissions: true });
+    const page = opened.page;
+    await page.setDefaultTimeout(harness.report);
+    await loadDraft(page, diff, harness.report);
+    const paintedIn = await timePressToReport(page, 'Analyze diff', harness.report);
+    expect(await page.locator('.result-layout').count(), 'the report never painted').toBe(1);
+    expect(await shownCounts(page)).toEqual({
+      files: core.summary.changedFiles,
+      additions: core.summary.additions,
+      deletions: core.summary.deletions,
+    });
+    expect(opened.observation.pageErrors).toEqual([]);
+    expect(opened.observation.consoleErrors).toEqual([]);
+    console.info(
+      `OBSERVATION (non-normative, not an SLA): the ${utf8Length(diff)}-byte report painted ` +
+        `${paintedIn.toFixed(1)} ms after the press on this machine`,
     );
     await opened.context.close();
   });
+
+  describe('after a near-limit diff has been analyzed', () => {
+    const nearLimit = largeDiff(MAX_DIFF_BYTES - 1024);
+    const core = analyzeDiff(nearLimit);
+    let opened: Awaited<ReturnType<typeof openApplication>> | undefined;
+    let page: Page;
+    /** Captured while the report is settled; the scenarios below must not disturb it. */
+    let settled: string;
+    let settledRequests: number;
+
+    beforeAll(async () => {
+      opened = await openApplication(browser, site, { clipboardPermissions: true });
+      page = opened.page;
+      await page.setDefaultTimeout(harness.heavy);
+      expect(core.summary.changedFiles).toBe(12);
+      await loadDraft(page, nearLimit, harness.heavy);
+      await timePressToReport(page, 'Analyze diff', harness.heavy);
+      settled = (await paintedReport(page)) ?? '';
+      settledRequests = opened.observation.requests.length;
+    }, harness.heavyTest);
+
+    afterAll(async () => {
+      await opened?.context.close();
+    });
+
+    it('completes: the report is on screen for 8 MiB minus 1 KiB of diff', async () => {
+      expect(utf8Length(nearLimit)).toBe(MAX_DIFF_BYTES - 1024);
+      expect(await page.locator('.result-layout').count()).toBe(1);
+      expect(settled.length, 'a painted report has markup').toBeGreaterThan(100);
+    });
+
+    it('agrees with the engine about those exact bytes', async () => {
+      expect(await shownCounts(page)).toEqual({
+        files: core.summary.changedFiles,
+        additions: core.summary.additions,
+        deletions: core.summary.deletions,
+      });
+    });
+
+    it('stops working once the report is painted instead of re-rendering or re-analyzing', async () => {
+      // Nothing drives the page in this window: no keystroke, no click, no network. A page that
+      // kept analyzing, or that re-painted its own report on a timer, changes one of these.
+      await page.waitForTimeout(2_000);
+      expect(await paintedReport(page)).toBe(settled);
+      expect(opened?.observation.requests.length, 'a settled page asks for nothing more').toBe(
+        settledRequests,
+      );
+      expect(await page.locator('.result-layout').count()).toBe(1);
+    });
+
+    it('renders a different report for different bytes, which is what makes the check above real', async () => {
+      // An instrument that cannot move proves nothing, so the settle check is validated against a
+      // page that is definitely still able to repaint: clear, load another diff, analyze again.
+      await page.getByRole('button', { name: /^Clear$/ }).click();
+      await loadDraft(page, fixtures.runtimeOnly, harness.report);
+      await timePressToReport(page, 'Analyze diff', harness.report);
+      const sample = analyzeDiff(fixtures.runtimeOnly);
+      expect(await paintedReport(page)).not.toBe(settled);
+      expect(await shownCounts(page)).toEqual({
+        files: sample.summary.changedFiles,
+        additions: sample.summary.additions,
+        deletions: sample.summary.deletions,
+      });
+    });
+
+    it('stays interactive: its own Clear control still closes the report at the end of all of it', async () => {
+      await page.getByRole('button', { name: /^Clear$/ }).click();
+      expect(await page.locator(textarea).inputValue()).toBe('');
+      expect(await page.locator('.result-layout').count()).toBe(0);
+      expect(await page.locator('.empty-map').isVisible()).toBe(true);
+      expect(await page.locator(statusLine).innerText()).toMatch(/cleared/i);
+      expect(opened?.observation.pageErrors).toEqual([]);
+      expect(opened?.observation.consoleErrors).toEqual([]);
+    });
+  });
+
+  it(
+    'completes, matches the engine and stays usable with the renderer throttled 20x',
+    async () => {
+      const diff = largeDiff(200 * 1024);
+      const core = analyzeDiff(diff);
+      const opened = await openApplication(browser, site, { clipboardPermissions: true });
+      const page = opened.page;
+      await page.setDefaultTimeout(harness.heavy);
+      const client = await opened.context.newCDPSession(page);
+      await client.send('Emulation.setCPUThrottlingRate', { rate: 20 });
+      await loadDraft(page, diff, harness.heavy);
+      const paintedIn = await timePressToReport(page, 'Analyze diff', harness.heavy);
+      expect(await page.locator('.result-layout').count(), 'the report never painted').toBe(1);
+      expect(await shownCounts(page)).toEqual({
+        files: core.summary.changedFiles,
+        additions: core.summary.additions,
+        deletions: core.summary.deletions,
+      });
+      // Throttling is a way to prove the page still finishes and still answers, and nothing more:
+      // this number is not compared with a threshold, because Stage 7 has no budget to compare it to.
+      console.info(
+        `OBSERVATION (non-normative, not an SLA): at 20x renderer throttling the report painted ` +
+          `${paintedIn.toFixed(1)} ms after the press on this machine`,
+      );
+      await page.getByRole('button', { name: /^Clear$/ }).click();
+      expect(await page.locator(textarea).inputValue()).toBe('');
+      expect(await page.locator('.result-layout').count()).toBe(0);
+      expect(opened.observation.pageErrors).toEqual([]);
+      expect(opened.observation.consoleErrors).toEqual([]);
+      await opened.context.close();
+    },
+    harness.heavyTest,
+  );
 });
 
 describeBrowser('the same build runs under a documented sub-path', () => {

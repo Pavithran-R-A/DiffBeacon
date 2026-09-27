@@ -420,16 +420,25 @@ interface PaintStamps {
 }
 
 /**
- * Presses the named control and returns, in milliseconds, how long the page itself took from
- * the moment the click landed to the moment the report was painted.
+ * Presses the named control and reports, in milliseconds, how long the page itself took from the
+ * moment the click landed to the moment the report was painted.
  *
- * A `Date.now()` window in the test process is not the same quantity: it also contains the
- * loopback round-trips for the click and for the selector wait. Measured on this host the
- * application's own work was 27-50 ms and did not move when the machine was saturated with
- * 14 CPU-bound processes, while the round-trip window went from 127-160 ms idle to 258-426 ms
- * under that load. A budget spent on the second number gates the scheduler, not the product.
+ * The number is an OBSERVATION, and Stage 7 gates nothing on it: no DiffBeacon product requirement
+ * defines a browser performance budget, so a scenario that compared this against a threshold would
+ * be inventing one. It is still the right way to record what a machine did, because the alternative
+ * — a `Date.now()` window in the test process — measures something else entirely. Measured on this
+ * host the application's own work was 27-50 ms and did not move when the machine was saturated with
+ * 14 CPU-bound processes, while the round-trip window went from 127-160 ms idle to 258-426 ms under
+ * that load, because it also contains the loopback trips of the click and of the selector wait.
+ *
+ * `hangCeilingMs` is a HARNESS TIMEOUT: it exists so a page that never paints fails the run instead
+ * of hanging it, and says nothing about acceptable product speed.
  */
-export async function timePressToReport(page: Page, buttonName: string): Promise<number> {
+export async function timePressToReport(
+  page: Page,
+  buttonName: string,
+  hangCeilingMs = 60_000,
+): Promise<number> {
   await page.evaluate(() => {
     const stamps = document as Document & PaintStamps;
     document.addEventListener(
@@ -456,7 +465,7 @@ export async function timePressToReport(page: Page, buttonName: string): Promise
   await page.waitForFunction(
     () => (document as Document & PaintStamps).__diffbeaconPaint !== undefined,
     undefined,
-    { timeout: 60_000 },
+    { timeout: hangCeilingMs },
   );
   return page.evaluate(() => {
     const stamps = document as Document & PaintStamps;
