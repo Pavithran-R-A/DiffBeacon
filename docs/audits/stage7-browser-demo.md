@@ -2,7 +2,10 @@
 
 ```text
 STATUS:                  PASS (browser demo qualified in a real Chromium on Windows; no hosted
-                         Safari/macOS qualification; hosted CI contributes nothing — see 'Hosted CI')
+                         Safari/macOS qualification; hosted CI contributes nothing — see 'Hosted CI').
+                         The closure below re-affirms that decision on a tree with 94 browser
+                         scenarios instead of 88, no invented performance SLA, and complete 2/3/4-byte
+                         UTF-8 coverage; it changed no product code.
 
 STARTING SHA:            3f1f314c4826fcf162e1f24f13dd5529a469e6be  (rescue/stage0-source tip at start;
                          no Stage-7 commit existed on GitHub)
@@ -19,6 +22,13 @@ ENDING BRANCH SHA:       the commit this document is made in — 'docs: record D
                          evidence directory, not in a second commit).
 BRANCH:                  rescue/stage0-source
 ORIGIN MAIN SHA:         e0ff98143bfe39c80c338518d006525a846a8739  (unchanged; not merged, not moved)
+CLOSURE START SHA:       27a98b4cda08df5a450f01e81304ae9131062971  (the tip above, which the
+                         'STAGE 7 CLOSURE — PERFORMANCE CONTRACT + UTF-8 COVERAGE' section below
+                         repairs. The closure adds two commits on top of it: 'test: close DiffBeacon
+                         Stage 7 browser qualification' (every change under tests/) and this document
+                         in 'docs: close DiffBeacon Stage 7 browser audit'. Neither moves the
+                         QUALIFIED PRODUCT SHA above: the closure changes no product code, so the
+                         browser demo it qualifies is still d2b482e's.)
 ```
 
 ## What Stage 7 is
@@ -232,7 +242,8 @@ GREEN    'shares the engine byte limit' (MAX_DIFF_BYTES === 8 * 1024 * 1024), 'r
          paste before it reaches the draft', 'accepts input at exactly the limit and rejects one byte
          more', 'fails closed when typing on a full draft would cross the limit', 'never stores a
          draft above the limit even when the value is replaced directly' (fill() of limit+1 bytes),
-         'counts a multi-byte paste in UTF-8 bytes, not code units' (€ / 中 / 🚀), and 'keeps ordinary
+         'counts a multi-byte paste in UTF-8 bytes, not code units' (é / € / 中 / 🚀 — see the closure
+         section for why the labels this scenario shipped with were wrong), and 'keeps ordinary
          typing inside the limit working as expected'.
 8 MiB INPUT  The boundary scenarios paste genuine 8 MiB strings built from MAX_DIFF_BYTES, not
          abbreviations: header + 'a'.repeat(MAX_DIFF_BYTES - utf8Length(header)) is accepted at
@@ -438,6 +449,15 @@ FALSIFIABLE  The new budget is proved able to fail, on every run: the scenario '
            renderer 20x  4 838.6 ms   — what the guard scenario asserts
          So the gate fires between a 4x and a 10x regression in the application, and stays silent
          when only the host is busy. That is the opposite of the behaviour it replaced.
+CLOSURE  Everything above about the INSTRUMENT stands: the page clock measures the page and the
+         Date.now() window measured the scheduler. Everything above about the 1 000 ms CEILING was
+         itself a defect of the same kind D15 was written to fix, and has been removed — see
+         'STAGE 7 CLOSURE — PERFORMANCE CONTRACT + UTF-8 COVERAGE'. D15 replaced one invented number
+         (2 000 ms) with another invented number (1 000 ms), and bought the new number's credibility
+         by asserting that a 20x-throttled renderer must EXCEED it, which is a test that passes
+         because throttling a renderer makes it slower. Stage 7 has no product requirement that
+         defines a millisecond budget, so it has no business asserting one in either direction. The
+         page-clock instrument survives as what it is: a way to record an observation.
 ```
 
 ## Injection, storage, and the unsafe APIs
@@ -488,15 +508,19 @@ RESPONSIVE    no horizontal page overflow at 1440x900, 768x1024, 375x812 or 320x
    stacks under the map once the rail breakpoint is passed; clipboard scenarios use controlled
    browser permissions (clipboard-read/clipboard-write granted for the app origin) or a controlled
    rejection stub, so a pass is not an artefact of the machine's clipboard state.
-PERFORMANCE   one product budget is asserted in the built page: from the moment the press lands on
-   the Analyze control to the moment the report is painted, under 1 000 ms for the auth+tests
-   fixture, measured with the browser's own clock inside the page (see D15 for why the earlier
-   Date.now() window around the same interaction was the wrong instrument). Measured on this host:
-   59.0, 66.6, 69.2 and 83.2 ms unthrottled; 338 ms with the renderer throttled 4x; 2 014 ms at 10x,
-   which is outside the budget. The suite asserts the 20x case fails the budget on every run, so the
-   number is a gate, not a description. Stage 7 sets no other performance budget and makes no
-   performance claim beyond it — no claim about cold start, network transfer size beyond the
-   bounded-download scenario, or any device other than this one.
+PERFORMANCE   Stage 7 asserts NO product performance budget. What the built page proves is that
+   analysis completes and the page stays usable: a sample diff, a 200 KB diff and an 8 MiB-minus-1-KiB
+   diff each paint a report whose FILES / ADDITIONS / DELETIONS counts equal `analyzeDiff(sameBytes)`
+   from packages/core; the painted markup, request count and node count stop moving once the report is
+   up (no repeated render/analyze loop); the Clear control still works at the end of the largest run;
+   and the whole thing still finishes and matches the engine with the renderer throttled 20x. The only
+   durations in the file are labelled HARNESS TIMEOUTS that fail a hung page instead of hanging the run
+   (60 s small / 120 s heavy / 180 s vitest), never a threshold a measurement is compared with.
+   Measured timings are recorded as non-normative observations only — press-to-paint on this host ran
+   54-85 ms unthrottled and 0.8-4.6 s at 20x — and are not an SLA. See 'STAGE 7 CLOSURE — PERFORMANCE
+   CONTRACT + UTF-8 COVERAGE' for the invented 1 000 ms budget that used to be asserted here and was
+   removed. No claim is made about cold start, about transfer size beyond the bounded-download
+   scenario, or about any device other than this one.
 ```
 
 ## Contrast, measured rather than claimed
@@ -537,10 +561,10 @@ SOURCE totals (vitest, whole repository, one clean un-contended run)
    745 engine/CLI/Action/source scenarios in 38 files, and the browser scenarios in 4 files below.
 
 BROWSER scenario totals (Stage 7 only, real Chromium 151.0.7922.34)
-   ../stage7/green-full-3.log — authoritative run: the `browser` project on its own, default file
-   parallelism, with the cross-process slot still serialising the four files against each other.
-   'page time' is the sum of the scenario timings inside the engine; wall time additionally covers
-   two production builds, four engine launches and the slot queue.
+   ../stage7/green-full-3.log — the authoritative run at the time of the original qualification: the
+   `browser` project on its own, default file parallelism, with the cross-process slot still serialising
+   the four files against each other. 'page time' is the sum of the scenario timings inside the engine;
+   wall time additionally covers two production builds, four engine launches and the slot queue.
    stage7.browser-accessibility.test.ts   18 scenarios   36.8 s page time  0 failed  0 skipped
    stage7.browser-contract.test.ts        39 scenarios   46.0 s page time  0 failed  0 skipped
    stage7.browser-security.test.ts        18 scenarios   30.0 s page time  0 failed  0 skipped
@@ -557,7 +581,14 @@ BROWSER scenario totals (Stage 7 only, real Chromium 151.0.7922.34)
     test-content changes were correcting the false 44 x 44-as-AA standard in D1 (which renamed
     'keeps primary controls large enough to hit with a finger'), re-wording the storage scenario to
     name the marker it now probes, widening the privacy-copy assertion in place, and re-pointing the
-    performance budget at the page clock in D15.)
+    timing instrument at the page clock in D15.)
+   SUPERSEDED BY THE CLOSURE, 2026-09-27. The throttled-renderer guard above was an invented SLA and
+   is gone; the built-page file gained seven scenarios that qualify completion, interactivity and
+   settle-instead-of-looping instead. Stage 7 now totals 94 browser scenarios (18 + 39 + 18 + 19),
+   measured in ../stage7/closure-browser-all.log — 4 files, 94 passed, 0 failed, 0 skipped, 184.19 s
+   wall on the `browser` project alone. The two files the closure changed were also each run serially
+   and alone first: closure-serial-contract.log (39 passed) and closure-serial-build.log (19 passed).
+   The repository-wide total for the closure tree is quoted in the closure section below.
    Per-cluster GREEN logs kept: green-access-1/2, green-contract-1, green-security-1/2/3,
    green-build-1. RED evidence kept: green-1.log (misnamed RED baseline), red-contract-1/2,
    red-rest-1/2/3, red-parallel-repro-1, red-privacy-chip-1, baseline-probe-1.
@@ -637,6 +668,18 @@ MANIFEST SHA-256     68edc24150ff3165ca9abf8cd6e2a4c7c55e04a255d5b4e1e4bbca8d0ac
                      hashes them from the working tree; `npm run verify` re-derives it and fails on
                      any drift. Drift computed with ../stage7/tools/manifest-drift.mjs against
                      ../stage7/SOURCE_MANIFEST.at-HEAD.txt.
+
+CLOSURE (2026-09-27)   the closure commit 46f4907 changes the manifest in exactly three hashes and
+   no path: tests/stage7.browser-build.test.ts 6626ba2a… → 871bc89e…,
+   tests/stage7.browser-contract.test.ts 9029663e… → 281d0dd9…,
+   tests/stage7.browser-harness.ts d75eeef8… → 1b37cd61…. Entry count is unchanged at 128 before and
+   after (`grep -cE '^[0-9a-f]{64}  '` on both blobs), no path under client/, packages/ or the
+   workflow files appears, and the file's own SHA-256 moves
+   68edc24150ff3165ca9abf8cd6e2a4c7c55e04a255d5b4e1e4bbca8d0ac964a5 →
+   bcfb4c3e006ff3f5a1e7fc61f0e8de8f93ec54011c09edbbab5fa53730c70605, which is the expected hash
+   change the closure instruction authorises. `npm run manifest` regenerated it, `npm run verify`
+   re-derived it and passed, and docs/audits/** remains excluded — which is why this document can
+   carry a long closure narrative without moving the count.
 NEVER COMMITTED      screenshots, videos, browser binaries, browser profiles, test logs, dist/,
    temporary HTTP servers, node_modules, pnpm-lock.yaml, pnpm-workspace.yaml. All Stage 7 evidence
    lives OUTSIDE the repository in ../stage7/.
@@ -700,6 +743,55 @@ BROWSER SUPPLY           playwright-core 1.63.0 drives an engine that is already
                          profile, screenshot or video exists inside the repository or inside any cell
                          clone — cells/win-node24 and cells/win-node22 have no browser artefacts, and
                          the Linux containers have none to have.
+
+CLEAN-CLONE MATRIX ON THE CLOSURE TREE (PHASE 5)   the same ten gates re-run from scratch in four
+                         fresh clones of the closure commit 46f49074736f1f0c31c234b598cf84ff8d9d5559,
+                         each with its own `npm ci` and no node_modules carried over. Logs:
+                         ../stage7/cells/<cell>/logs/, per-cell summaries ../stage7/cell-<cell>.log.
+
+  win-node24-closure    Windows 10.0.26200 x64 · v24.21.0 npm 11.19.0 · git 2.55.0.windows.5 ·
+                        autocrlf=true · 10/10 PASS · npm test 42 files / 839 tests / 0 failed /
+                        0 SKIPPED in 201.64 s — the four Chromium files executed for real ·
+                        build 874 ms · CLI b4faa11d… · Action 5b088ecf… = the committed blob ·
+                        untracked_after=0 · cell_status=0
+  win-node22-closure    Windows, portable Node · v22.23.3 npm 10.9.9 · same git/autocrlf ·
+                        10/10 PASS · 42 / 839 / 0 / 0 SKIPPED in 229.66 s · build 543 ms ·
+                        identical bundles · untracked_after=0 · cell_status=0
+  linux-node24-closure  Debian (node:24), overlay · v24.21.0 npm 11.19.0 · git 2.39.5 · autocrlf
+                        unset · 10/10 PASS · 38 files passed / 4 skipped · 744 passed / 95 skipped
+                        in 7.11 s · build 326 ms · identical bundles · untracked_after=0
+  linux-node22-closure  Debian (node:22), overlay · v22.23.3 npm 10.9.9 · git 2.39.5 ·
+                        10/10 PASS · 38 / 4 skipped · 744 passed / 95 skipped in 7.19 s ·
+                        build 1.66 s · identical bundles · untracked_after=0
+
+  A FIFTH CLONE, UNPLANNED.  win-node24-closure has a sibling: the first attempt at the Node 22 cell
+  fell back to Node 24 and so ran a complete second Windows Node 24 clone, also 10/10 with
+  untracked_after=0. It is not counted as a Node 22 result, and its cause is recorded in
+  ../stage7/closure-cell-node22-attempt.txt — that file also corrects the paragraph above, because
+  the trap proved to be the drive-letter FORM of the PATH entry, not the quoting the earlier Stage 7
+  record blamed. The closure's Windows Node 24 qualification therefore rests on two clones.
+
+  THE SKIP ARITHMETIC STILL CLOSES ON LINUX.  95 skipped = the 94 Stage 7 browser scenarios plus the
+  1 pre-existing conditional skip in stage3c.release.test.ts, where it was 89 = 88 + 1 before the
+  closure, and each of the four files printed the harness's own recorded reason ("no Chromium-class
+  browser engine is installed on this host; Stage 7 refuses to present a DOM simulation as browser
+  E2E") four times in each Linux cell. Linux browser E2E remains UNQUALIFIED and is not claimed; the
+  browser qualification travels on the two Windows Node-24 clones and the Windows Node 22 clone,
+  where all 94 scenarios run.
+
+  THE SHIPPED CLIENT ARTIFACT IS UNMOVED.  Every `npm ci` clone built the same
+  dist/assets/index-BgA58wCK.js at 232.79 kB (gzip 73.48, map 977.01) that the pre-closure Stage 7
+  cells built, with the same 19.20 kB index-9I3gIet4.css. So the closure changed nothing in what a
+  visitor downloads — which is the clean-tree answer to the 262.05 kB figure the drifted working
+  tree produced (see BUILD ARTIFACT NOTE in the closure section).
+
+  ONE INSTALL-WARNING OBSERVATION, DISCLOSED.  Both npm 11.19.0 cells printed
+  `npm warn install-scripts … esbuild@0.27.7 (postinstall: node install.js) … not yet covered by
+  allowScripts`, which npm 10.9.9 in the Node 22 cells does not. Nothing depended on it: the same
+  ten gates passed in those cells, including the type-checking, building and browser-running ones,
+  so the gate is recorded as an npm 11 notice rather than a defect — but it is recorded rather than
+  omitted, because an install that declines a postinstall script is exactly the kind of thing a
+  later stage should not have to rediscover.
 ```
 
 ## Working tree
@@ -726,6 +818,18 @@ WORKING TREE AT DECISION   `git status --porcelain` on the qualified tree, immed
    test log, dist/ output or node_modules path is tracked or untracked-but-pending anywhere in the
    repository or in a cell clone (verified with a media-extension sweep of DiffBeacon/ and
    stage7/cells/, which found none).
+
+WORKING TREE AT THE CLOSURE   the hash quoted above (68edc241…) was the Stage 7 tip's manifest; the
+   closure moves it to bcfb4c3e… with the entry count unchanged at 128 (see CLOSURE under
+   Manifest). Immediately before the closure's test commit, `git status --short` reported exactly the
+   five paths the closure owns — SOURCE_MANIFEST.txt, this document and the three
+   tests/stage7.browser-*.ts files — with `git diff --check` clean and `npm run format:check`
+   reporting 'All matched files use Prettier code style!'. The pnpm pair reappeared after that commit
+   as it always does, with a new lock digest this time (`pnpm-lock.yaml` d07aa982…,
+   `pnpm-workspace.yaml` d6d0c244… unchanged) and was quarantined to
+   ../stage7/quarantine/pnpm-debris-2026-09-27-1945-closuretestcommit/ rather than staged or deleted;
+   the working tree is reported clean only after that move. Each closure clone finished with
+   untracked_after=0, so none of this is a repository state the gates had to tolerate.
 ```
 
 ## Hosted CI
@@ -817,31 +921,293 @@ ACTUAL RUNTIME QUALIFICATION (macOS / Safari):   NO
     can still fail. So this is recorded as a diagnosed harness defect, not as a product failure — but
     the diagnosis came after the failure, which is the correct order to report it in.
 
+## STAGE 7 CLOSURE — PERFORMANCE CONTRACT + UTF-8 COVERAGE
+
+```text
+AUDITOR RULING: REPAIR REQUIRED
+
+Two defects were reported against the qualified Stage 7 tree and both were verified against the
+code before anything changed. Neither is a product defect: every repair is in tests/ and in this
+document, and no line of `client/`, `packages/core`, `packages/cli` or `packages/action` moved.
+
+PERFORMANCE FINDING
+   Stage 7 invented a hard 1 000 ms performance SLA that no DiffBeacon product requirement
+   defines, and then invented a second assertion that the same quantity must EXCEED 1 000 ms
+   under a 20x-throttled renderer so the first number would look like a gate. The Stage 7 brief
+   says it directly: "Do not claim milliseconds as a hard SLA unless product requirements define
+   one." There is no such requirement anywhere in the repository, so the number was not a
+   conservative estimate of a real budget — it was a budget with nothing behind it. This is the
+   same class of error D15 was written to fix, and D15 fixed it by replacing one invented number
+   (2 000 ms) with another (1 000 ms) instead of asking whether the stage is entitled to assert a
+   millisecond budget at all. It is not.
+
+OLD TEST   tests/stage7.browser-build.test.ts at 27a98b4, verbatim (kept in
+           ../stage7/closure-old-wording.txt):
+
+             const paintedIn = await timePressToReport(page, 'Analyze diff');
+             …
+             expect(paintedIn, `the report painted ${paintedIn}ms after the press`).toBeLessThan(1_000);
+
+           and a whole second scenario, 'refuses to call a slow report prompt':
+
+             await client.send('Emulation.setCPUThrottlingRate', { rate: 20 });
+             const paintedIn = await timePressToReport(opened.page, 'Analyze diff');
+             expect(paintedIn, `${paintedIn}ms on a 20x throttled renderer must not pass`)
+               .toBeGreaterThan(1_000);
+
+           Report wording that carried the same claim: the PERFORMANCE paragraph declared
+           "one product budget is asserted in the built page … under 1 000 ms", and REMAINING
+           LIMITATIONS excluded itself with "no performance budget beyond the one measured in the
+           built page". All of it is removed below rather than re-worded into something vaguer.
+
+NEW CONTRACT
+   Both 1 000 ms assertions are deleted, the 20x-must-fail scenario is deleted, and no replacement
+   millisecond number was introduced anywhere. What Stage 7 now proves, in the built page, in real
+   Chromium, is only what the stage actually requires:
+
+     sample analysis completes                'analyzes in the built page exactly like the engine'
+     reasonably large analysis completes      'completes a reasonably large analysis with the
+                                               counts the engine gives' (204 800 bytes, 12 files)
+     near-limit analysis completes            'completes: the report is on screen for 8 MiB minus
+                                               1 KiB of diff' (8 387 584 bytes)
+     browser remains interactive              'stays interactive: its own Clear control still
+                                               closes the report at the end of all of it'
+     no repeated render/analyze loop          'stops working once the report is painted instead of
+                                               re-rendering or re-analyzing' — after a 2 s window
+                                               with no input at all, the painted report's markup,
+                                               the request count and the node count are unchanged
+     no crash and no hang                     every scenario in the cluster asserts 0 page errors
+                                               and 0 console errors; a page that never paints is
+                                               failed by a harness timeout instead of hanging the
+                                               run (see below)
+     over-limit input is rejected             unchanged and already qualified in
+                                             stage7.browser-contract.test.ts ('refuses an over-limit
+                                             paste before it reaches the draft', 'accepts input at
+                                             exactly the limit and rejects one byte more', 'fails
+                                             closed when typing on a full draft would cross the
+                                             limit', 'never stores a draft above the limit even
+                                             when the value is replaced directly')
+     throttled renderer still finishes        'completes, matches the engine and stays usable with
+                                               the renderer throttled 20x' — completion, engine
+                                               parity and a working Clear control only. Its
+                                               duration is measured and logged and gated on
+                                               nothing: the artificial requirement that a 20x
+                                               throttle must EXCEED a threshold is gone.
+
+   Each "completes" is judged against an independent oracle, not against a stopwatch: the counts
+   the page displays (FILES / ADDITIONS / DELETIONS) must equal `analyzeDiff(sameBytes).summary`
+   from packages/core, and the report must actually be in the DOM.
+
+HARNESS TIMEOUT VS PRODUCT SLA
+   The only durations left in the file are watchdogs, and they are labelled as such in
+   tests/stage7.browser-build.test.ts (a `harness` block whose header reads "HARNESS TIMEOUTS —
+   NOT PRODUCT BUDGETS") and in tests/stage7.browser-harness.ts, where `timePressToReport()`'s
+   third parameter is now `hangCeilingMs` with a comment saying it "is a HARNESS TIMEOUT: it exists
+   so a page that never paints fails the run instead of hanging it, and says nothing about
+   acceptable product speed".
+
+     harness.report   60 000 ms   small and 200 KB drafts
+     harness.heavy   120 000 ms   the near-limit draft, the 20x-throttled run, and page action
+                                  ceilings derived from the same figure
+     vitest per-test 180 000 ms   the outer watchdog on the two heavy scenarios
+     vitest hook     900 000 ms   scheduling allowance for queueing behind three other Chromium
+                                  files; explicitly not a per-case budget
+
+   A slow run therefore cannot pass a hang off as a pass, and a busy host cannot fail a product
+   claim, because there is no product claim to fail. The ceilings sit 26x to 1 000x above the
+   slowest thing this machine has measured (see below), which is the point: they are reachable only
+   by a hang.
+
+FALSIFIABLE  the new contract is proved able to fail, three ways, with the evidence kept:
+   ../stage7/closure-red-paint-ceiling.log — the paint ceiling alone dropped to 1 ms: the large
+       analysis scenario fails with `page.waitForFunction: Timeout 1ms exceeded`, i.e. the
+       watchdog fires exactly when the report does not appear.
+   ../stage7/closure-red-ceilings.log — ceilings dropped to 1 500 ms for every wait: the
+       20x-throttled scenario fails with `locator.click: Timeout 1500ms exceeded` while the other
+       18 pass, which is what a too-small harness ceiling looks like (and why they are generous).
+   ../stage7/closure-red-oracle.log — the parity oracle perturbed by one count: 'agrees with the
+       engine about those exact bytes' fails while 'completes: the report is on screen' still
+       passes, proving completion and correctness are separate claims and that the counts come
+       from the rendered page, not from the engine call.
+   In addition, the no-loop check is validated inside the suite itself, on every run: 'renders a
+   different report for different bytes, which is what makes the check above real' clears the
+   draft, loads another diff and requires the painted markup to change. A comparison that can
+   never move would be worthless.
+
+TIMING OBSERVATIONS (NON-NORMATIVE — nothing below is a budget, and no test compares any of it
+with a threshold). Measured on this host only: Windows 10.0.26200 x64, Chromium 151.0.7922.34
+headless driven by playwright-core 1.63.0, run serially with nothing else on the machine.
+"press-to-paint" is the page's own `performance.now()` from the click that lands to the frame after
+the report appears; "paste" is the harness getting the draft into the textarea through the
+browser's clipboard and Ctrl+V. Full numbers in ../stage7/closure-paste-measurements.txt.
+
+     sample       562 B      paste   109 ms     press-to-paint  63.7 / 74.7 / 84.5 ms
+     large    204 800 B      paste   205 ms     press-to-paint  54.1 / 54.2 / 63.6 ms
+     near-limit 8 387 584 B  paste 4 605 ms     press-to-paint 135.8 ms
+     sample, renderer 20x     paste 4 336 ms     press-to-paint 5 378.2 ms
+     large,   renderer 20x    paste 5 439 ms     press-to-paint 808.2 / 2 924.7 / 4 585.3 ms
+     near-limit, renderer 20x paste 82 893 ms    press-to-paint 7 739.0 ms (98.0 s end to end)
+
+   Two honest caveats. The three unthrottled press-to-paint figures for one fixture differ because
+   they come from three different runs; the spread is machine noise, not a property of the page.
+   And the input route matters more than the application at these sizes: Playwright's `fill()` took
+   179 057 ms for the same 204 800-byte draft that the clipboard route settled in 205 ms
+   (../stage7/closure-near-limit-measurements.txt), so `fill()` was replaced by a paste in the
+   large scenarios — measuring the driver instead of the product would have made every number above
+   meaningless.
+
+UTF-8 FINDING
+   tests/stage7.browser-contract.test.ts qualified multi-byte counting with
+
+             for (const sample of ['€ 2-byte', '中 3-byte', '🚀 4-byte']) { … }
+
+   '€' is U+20AC EURO SIGN, which encodes as E2 82 AC — 3 bytes, not 2. The loop therefore covered
+   3-byte, 3-byte and 4-byte and never once touched a genuine 2-byte code point, while its own
+   labels claimed it did. The assertion was computed from `utf8Length(sample)`, so it agreed with
+   whatever the string actually was and could not have caught the mislabelling: the labels were
+   decoration, and the coverage hole was invisible.
+
+FINAL UTF-8 COVERAGE
+   Four code points, each with its expected byte count written as a literal and checked twice
+   before it reaches the application — once by the browser's own `TextEncoder` inside the page,
+   once by the harness in Node — and then a third time against the byte count the page displays:
+
+     é  U+00E9  C3 A9          2 bytes
+     €  U+20AC  E2 82 AC       3 bytes
+     中  U+4E2D  E4 B8 AD       3 bytes
+     🚀  U+1F680  F0 9F 9A 80    4 bytes (and 2 UTF-16 code units, which is the confusion the
+                                   scenario is named after)
+
+   The 3-byte slot deliberately keeps both candidates rather than picking one: the euro sign is the
+   character that caused the original mistake, so it stays in the suite as a 3-byte case with its
+   label corrected, next to the ideograph. Each glyph is pasted through the real textarea, and the
+   number in `.textarea-wrap__rail` must equal the literal. Proof of the encodings, produced with
+   TextEncoder before any of this was written: ../stage7/closure-utf8-proof.txt.
+FALSIFIABLE  ../stage7/closure-red-utf8-labels.log runs the OLD labels through the NEW mechanism:
+   'treats € as its shipped label' fails with `the browser must encode € as 2 UTF-8 bytes: expected
+   3 to be 2`, while 中 and 🚀 pass. The check catches exactly the mistake that shipped, and only
+   that mistake. (That log came from a throwaway copy of the scenario, `tests/
+   stage7.browser-tmp-labels.test.ts`, deleted immediately after the run; `git status` is clean of
+   it and the real suite was never mutated.)
+   The exact-limit and limit+1 cases were kept and still pass, and no application change was
+   needed: the page counted every one of these code points correctly on the first try, so the
+   defect was entirely in the test's labels and in its self-computing assertion.
+
+PRODUCT UI CODE CHANGED   NO. `git status --porcelain client/` is empty and no path under `client/`
+   appears in the closure diff; the browser scenarios drive the shipped page as it stands.
+CORE / CLI / ACTION CHANGED   NO. No path under `packages/core`, `packages/cli` or `packages/action`
+   appears in the closure diff, and `analyzeDiff` is imported by the tests as the oracle, unchanged.
+ACTION BUNDLE CHANGED   NO. `packages/action/dist/index.js` is byte-identical to the Stage 6/7
+   bundle, sha256 5b088ecfe215f77a65ab109365574b5a6f583f4b05cb63370bde6629f41e6c6d, rebuilt by
+   `npm run build` and re-proved by `npm run action-smoke` on the closure tree.
+
+GATES ON THE CLOSURE TREE   the eight gates that the closure can affect, run in order on the final
+   tree and logged in ../stage7/closure-gate-<name>.log with the process exit code appended to each:
+
+     npm run format:check  PASS exit 0   'All matched files use Prettier code style!'
+     npm run lint          PASS exit 0   'eslint . --max-warnings=0', no output, no warnings
+     npm run typecheck     PASS exit 0   'tsc --noEmit -p tsconfig.json'
+     npm test              PASS exit 0   42 files / 839 tests / 0 failed / 0 skipped, 349.87 s
+     npm run build         PASS exit 0   'built in 774ms' (see BUILD ARTIFACT NOTE below)
+     npm run package-smoke PASS exit 0   package-smoke: 0.1.0; bin=true; engines=>=22; stdinFiles=1;
+                                          rangeFiles=1; fileStdoutBytes=0; noRepositoryExit=3;
+                                          usageExit=2; tarballFiles=3
+     npm run action-smoke  PASS exit 0   packages/action/dist/index.js wrote 1250 bytes to the Job
+                                          Summary; stdout=""; stderr=""; cliLeak=false;
+                                          hostilePaths=true; cleanWorkspace=true;
+                                          oversizeRejected=true; partialSummary=false;
+                                          pullRequestTargetRejected=true
+     npm run verify        PASS exit 0   nested suite 42 files / 839 tests / 0 failed / 0 skipped in
+                                          205.75 s, then 'DiffBeacon source-first verification
+                                          passed.' — including the SOURCE_MANIFEST re-derivation
+     npm run check         PASS exit 0   the same verification again on the committed tree: nested
+                                          suite 42 / 839 / 0 / 0 in 243.96 s, same closing line
+
+   839 = the 745 engine/CLI/Action/source scenarios plus the 94 Stage 7 browser scenarios, and the
+   closure added six net scenarios to the repository total (833 → 839) without adding or removing a
+   test FILE: 42 files before, 42 after. Nothing was skipped in any of these runs, so the four
+   Chromium files executed for real in every one of them.
+
+   NINETY-FOUR vs EIGHTY-THREE. The +6 is arithmetically accounted for: the built-page file lost the
+   invented-SLA guard scenario and gained seven completion/interactivity/settle scenarios (13 → 19),
+   and the UTF-8 repair widened one existing scenario's loop from three mislabelled samples to four
+   correctly labelled code points, which changes what that scenario proves but not how many run.
+
+   THE TENTH GATE. `npm ci` was not re-run on this working tree, because the closure commit changes
+   no dependency manifest path — `git diff --name-only 27a98b4..HEAD` is exactly
+   SOURCE_MANIFEST.txt and the three tests/stage7.browser-*.ts files. The lockfile installation for
+   the closure tree is therefore proved in the clean-clone cells below, which each begin with
+   `npm ci` from package-lock.json and run all ten gates.
+
+   DISCLOSED LOG OVERLAP. closure-gate-test.log contains two complete, interleaved vitest summaries:
+   the chain's own run (start 19:27:44, 349.87 s, exit 0) and a run from an earlier chain whose
+   wrapper was killed but whose vitest child survived it (start 19:23:02, 459.35 s). Both report
+   42 files / 839 tests / 0 failed / 0 skipped on identical content, so the overlap is a bookkeeping
+   blemish in one evidence file, not an unexplained failure — and it is disclosed rather than
+   quietly re-run, because the second summary is also the reason the earlier sentence in this report
+   warns that browser suites sharing a machine with source suites is the failure mode D14 fixed.
+
+BUILD ARTIFACT NOTE (measured, and it changed for a reason outside Stage 7)   this tree's `npm run
+   build` produced dist/assets/index-Bz7ZgAtR.js at 262.05 kB where the qualified Stage 7 clones
+   produced 232.79 kB, with no `client/` change and an identical CSS asset
+   (index-9I3gIet4.css, 19.20 kB). The cause is that the working tree's node_modules has been
+   replaced by a pnpm-resolved layout — `node_modules/.pnpm/react@19.3.0`,
+   `vite@8.3.1_…` against the 19.2.8 / 8.2.1 that package-lock.json pins — the same phenomenon that
+   keeps dropping the untracked pnpm-lock.yaml / pnpm-workspace.yaml pair that has to be quarantined
+   (full measurement in ../stage7/closure-dependency-drift.txt). Consequences are stated rather than
+   smoothed over: the nine local gates above ran on a non-lockfile dependency tree, which is why the
+   authoritative artifact figures in the Gates section come from `npm ci` clones, and the
+   bounded-download scenario in the build suite passed under both trees, so no claim here rests on
+   which of the two numbers a host happened to produce. The CLI and Action bundles are unaffected:
+   packages/cli/dist/index.js is b4faa11d92db1270d5b197cd9a56e1f1bed3d433f9075c0b6ef783664abf3ef8
+   and packages/action/dist/index.js is 5b088ecfe215f77a65ab109365574b5a6f583f4b05cb63370bde6629f41e6c6d
+   on this tree, both equal to their committed blobs.
+```
+
 ## STAGE 7 DECISION
 
 ```text
-STAGE 7 DECISION:   PASS (local, evidence-backed)
+STAGE 7 DECISION:   PASS (local, evidence-backed; re-affirmed after the closure below)
 
-   - All 88 Stage 7 browser scenarios pass in a real Chromium (0 failed, 0 skipped; 271.35 s for the
-     browser project on its own, and 0 skipped inside the whole-repository run as well).
-   - All ten repository gates pass on the qualified tree (npm ci, format:check, lint, typecheck, test,
-     build, package-smoke, action-smoke, verify, check) and pass again from scratch, all ten, in each
-     of the four clean clones: Windows Node 24, Windows Node 22, Linux Node 24 and Linux Node 22.
-   - In the two Windows clones the whole suite runs with 0 skipped (42 files / 833 tests), which is
-     where the browser qualification travels on a machine that has an engine. In the two Linux clones
-     744 tests pass and the 88 Stage 7 browser scenarios skip with the harness's own recorded reason,
-     because no Chromium-class engine exists in the container and none was downloaded — the expected,
-     disclosed shape, not a failure.
+   - All 94 Stage 7 browser scenarios pass in a real Chromium (0 failed, 0 skipped): 184.19 s for
+     the four files on their own, and 0 skipped inside the whole-repository 839-test run too. Before
+     the closure the count was 88; the closure deleted one invented-SLA scenario and added seven
+     completion/interactivity/settle scenarios.
+   - All ten repository gates pass on the qualified tree (npm ci, format:check, lint, typecheck,
+     test, build, package-smoke, action-smoke, verify, check) and pass again from scratch, all ten, in
+     each of the four clean clones: Windows Node 24, Windows Node 22, Linux Node 24 and Linux
+     Node 22. The closure re-ran that whole matrix on its own commit, so the ten gates are green on
+     the closure tree in five clean clones (the fifth being the mis-launched Node 22 attempt that ran
+     as a second Windows Node 24 clone).
+   - In the Windows clones the whole suite runs with 0 skipped (42 files / 839 tests), which is
+     where the browser qualification travels on a machine that has an engine. In the Linux clones
+     744 tests pass and 95 skip with the harness's own recorded reason — the 94 Stage 7 browser
+     scenarios plus one pre-existing conditional skip — because no Chromium-class engine exists in
+     the container and none was downloaded: the expected, disclosed shape, not a failure, and not
+     Linux browser qualification.
    - Hosted CI is blocked by runner supply rather than by this code, and contributes nothing to this
      decision.
-   - The engine, CLI and Action bundle are untouched and the Action bundle is byte-identical.
+   - The engine, CLI and Action bundle are untouched and the Action bundle is byte-identical; under
+     `npm ci` the client bundle is byte-identical too (index-BgA58wCK.js, 232.79 kB).
    - Zero unexplained Stage 7 browser failures remain.
    - Every claim in this report is either a measured browser observation, a diff of the repository,
      or a hash. Where Stage 7 could not qualify something, it says so instead of asserting it.
 
+WHAT THE CLOSURE CHANGED ABOUT THIS DECISION   the two auditor findings were both real and both were
+   in the tests, not the product: an invented 1 000 ms performance SLA with a companion
+   "20x-throttled renderer must exceed it" assertion, and a multi-byte UTF-8 scenario whose labels
+   claimed 2/3/4-byte coverage while its samples were 3/3/4 bytes. Stage 7 now asserts NO
+   millisecond budget at all — durations are recorded as non-normative observations and the only
+   numbers left in the suites are labelled harness watchdogs — and the UTF-8 coverage is four code
+   points with literal byte counts proved in the browser's own TextEncoder, in the harness, and on
+   screen. `client/`, `packages/core`, `packages/cli` and `packages/action` were not touched, no
+   scenario was weakened to reach green, and every replacement claim is falsifiable by a kept RED
+   log. See 'STAGE 7 CLOSURE — PERFORMANCE CONTRACT + UTF-8 COVERAGE'.
+
    NOT claimed: WCAG compliance, screen-reader certification, colour-conformance, Safari or macOS
-   behaviour, hosted E2E, "zero network" for a hosted page, or any performance budget beyond the one
-   measured in the built page.
+   behaviour, hosted E2E, "zero network" for a hosted page, Linux browser E2E, or any performance
+   budget at all — Stage 7 asserts no millisecond requirement, and the timings it records are
+   observations about one machine (see the closure section).
 
 NEXT: Stage 8 — Security Hardening.  Do NOT begin Stage 8.
 ```
