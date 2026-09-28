@@ -1095,7 +1095,7 @@ STARTING SHA      41ec737fd4758ddbfb0c0305d838d86e85246c5f  (Stage 8 first-pass 
 PRODUCT SHA       98d0ab2fa7942d21e94b04305cd5fe04b2a0a9b1  fix: close DiffBeacon Stage 8 trust boundaries
                   10 files changed, 914 insertions(+), 65 deletions(-)
 BRANCH            rescue/stage0-source
-ORIGIN MAIN SHA   e0ff98143bfe39c80338518d006525a846a8739   (untouched — no merge, no PR)
+ORIGIN MAIN SHA   e0ff98143bfe39c80c338518d006525a846a8739   (untouched — no merge, no PR)
 FINAL TEST TOTAL  Windows: 1009 passed | 2 skipped (1011)   ← 979 collected before the closure, +32 closure cases
                   Linux:    878 passed | 133 skipped (1011)  (same 1011 collected; 133 honest skips, no Chromium)
 ACTION BUNDLE     45660da735388dee35fc581e94490d2aacc295b2382f8bea23ab12dff2350049
