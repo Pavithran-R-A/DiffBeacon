@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeDiff, renderJson, renderMarkdown } from '../packages/core/src/index.js';
 import { HOSTILE_PATHS, PIPE_PATHS, diffForPath, diffForPaths } from './stage8.hostile-corpus.js';
+import { paintAsHumanSurface } from './stage8.display-policy-oracle.js';
 
 const SECTION_HEADINGS = [
   '## Summary',
@@ -80,10 +81,15 @@ function outsideCodeSpans(markdown: string): string {
   return markdown.replace(/`[^`\n]*`/g, '');
 }
 
-/** How a table cell presents a path: line endings become spaces, a backtick becomes
- * an entity, and a documented `\|` shows as a pipe. */
+/**
+ * How a table cell presents a path. Since the Stage 8 closure this is the *painted* name, not the
+ * raw one: reordering controls are gone, a line shaper is one space, and an executable control
+ * shows as the surface's marker — all decided by the test-only oracle, not imported from the
+ * renderer under test. Then the cell's own encoding applies: a backtick becomes an entity and a
+ * documented `\|` shows as a pipe. The raw name stays in JSON, asserted elsewhere.
+ */
 const presented = (path: string): string =>
-  path.replaceAll('\r', ' ').replaceAll('\n', ' ').replaceAll('`', '&#96;').replaceAll('\\|', '|');
+  paintAsHumanSurface(path, '\uFFFD').replaceAll('`', '&#96;').replaceAll('\\|', '|');
 
 /** A name holding a backslash directly before a pipe reads differently depending on
  * whether the Markdown reader consumes `\\` as an escaped backslash first, so the

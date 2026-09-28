@@ -1,8 +1,11 @@
 /**
  * DiffBeacon Git boundary: fixed argument arrays, shell=false, no hooks or
  * target-code execution, and a bounded streaming diff collector shared by CLI
- * and Action. The explicit diff controls make the structural input independent
- * of user/repository diff prefixes, algorithms, and rename settings. Myers is
+ * and Action. The caller may hand one explicit child environment to every Git
+ * process in a collection; leaving it unset keeps Git's own inheritance, which
+ * is what a CLI operator in their own environment expects. The explicit diff
+ * controls make the structural input independent of user/repository diff
+ * prefixes, algorithms, and rename settings. Myers is
  * selected for reproducibility, not because it is objectively superior; the
  * fixed 50% rename threshold and limit 1000 bound rename work. Binary payloads
  * are intentionally omitted because DiffBeacon classifies, never applies, patches.
@@ -63,9 +66,10 @@ function gitArgs(range: string): string[] {
   ];
 }
 
-function gitSmall(args: string[], cwd: string): string {
+function gitSmall(args: string[], cwd: string, env?: NodeJS.ProcessEnv): string {
   return execFileSync('git', args, {
     cwd,
+    env,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -74,20 +78,30 @@ function gitSmall(args: string[], cwd: string): string {
   });
 }
 
-function repositoryRoot(cwd: string): string {
+/**
+ * The child environment every Git process in one collection uses. Callers that must pin a
+ * repository boundary — the Action — supply it; `undefined` keeps Git's own inheritance, which is
+ * what a CLI operator running DiffBeacon in their own environment expects.
+ */
+export interface GitProcessOptions {
+  env?: NodeJS.ProcessEnv;
+}
+
+function repositoryRoot(cwd: string, env?: NodeJS.ProcessEnv): string {
   try {
-    return gitSmall(['rev-parse', '--show-toplevel'], cwd).trim();
+    return gitSmall(['rev-parse', '--show-toplevel'], cwd, env).trim();
   } catch (error) {
     throw gitFailure(error, 'rev-parse --show-toplevel');
   }
 }
 
-function resolveRevision(revision: string, cwd: string): string {
+function resolveRevision(revision: string, cwd: string, env?: NodeJS.ProcessEnv): string {
   validateRevision(revision);
   try {
     return gitSmall(
       ['rev-parse', '--verify', '--quiet', '--end-of-options', `${revision}^{commit}`],
       cwd,
+      env,
     ).trim();
   } catch {
     throw new DiffUnavailableError(
@@ -103,17 +117,26 @@ function rangeParts(range: string): string[] {
   return [safeRange];
 }
 
-function validateRepositoryRange(range: string, cwd: string): { root: string; range: string } {
-  const root = repositoryRoot(cwd);
+function validateRepositoryRange(
+  range: string,
+  cwd: string,
+  options: GitProcessOptions,
+): { root: string; range: string } {
+  const root = repositoryRoot(cwd, options.env);
   const safeRange = validateRange(range);
-  for (const part of rangeParts(safeRange)) resolveRevision(part ?? '', root);
+  for (const part of rangeParts(safeRange)) resolveRevision(part ?? '', root, options.env);
   return { root, range: safeRange };
 }
 
-export async function collectGitDiffAsync(range: string, cwd = process.cwd()): Promise<string> {
-  const { root, range: safeRange } = validateRepositoryRange(range, cwd);
+export async function collectGitDiffAsync(
+  range: string,
+  cwd = process.cwd(),
+  options: GitProcessOptions = {},
+): Promise<string> {
+  const { root, range: safeRange } = validateRepositoryRange(range, cwd, options);
   const child = spawn('git', gitArgs(safeRange), {
     cwd: root,
+    env: options.env,
     shell: false,
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -161,11 +184,16 @@ export async function collectGitDiffAsync(range: string, cwd = process.cwd()): P
 
 /** Compatibility helper for existing synchronous integrations. The CLI and
  * Action use the async streaming function for bounded large-diff behavior. */
-export function collectGitDiff(range: string, cwd = process.cwd()): string {
-  const { root, range: safeRange } = validateRepositoryRange(range, cwd);
+export function collectGitDiff(
+  range: string,
+  cwd = process.cwd(),
+  options: GitProcessOptions = {},
+): string {
+  const { root, range: safeRange } = validateRepositoryRange(range, cwd, options);
   try {
     return execFileSync('git', gitArgs(safeRange), {
       cwd: root,
+      env: options.env,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,

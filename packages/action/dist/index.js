@@ -910,6 +910,9 @@ function neutralizeDisplayControls(value, marker) {
 function number(value) {
   return value === null ? "\u2014" : new Intl.NumberFormat("en-US").format(value);
 }
+function paintedText(value) {
+  return neutralizeDisplayControls(value, "\uFFFD");
+}
 function escapeMarkdown(value) {
   return value.replaceAll("\\", "\\\\").replaceAll("|", "\\|").replaceAll("`", "\\`").replaceAll("*", "\\*").replaceAll("_", "\\_").replaceAll("[", "\\[").replaceAll("]", "\\]").replaceAll("(", "\\(").replaceAll(")", "\\)").replaceAll("#", "\\#").replaceAll("!", "\\!").replaceAll(">", "\\>").replaceAll("~", "\\~").replaceAll("<", "&lt;").replaceAll("\n", " ");
 }
@@ -954,7 +957,7 @@ function renderMarkdown(report) {
       "",
       escapeMarkdown(item.message),
       "",
-      `Observed in: ${item.relatedFiles.map(markdownCode).join(", ")}`,
+      `Observed in: ${item.relatedFiles.map((file) => markdownCode(paintedText(file))).join(", ")}`,
       ""
     ]),
     "## Review order",
@@ -970,7 +973,7 @@ function renderMarkdown(report) {
     "| Status | Path | Additions | Deletions | Surfaces |",
     "| --- | --- | ---: | ---: | --- |",
     ...report.files.length === 0 ? ["| \u2014 | No files observed | \u2014 | \u2014 | \u2014 |"] : report.files.map(
-      (file) => `| ${escapeMarkdown(file.status)} | ${markdownTableCellCode(file.displayPath)} | ${number(file.additions)} | ${number(file.deletions)} | ${file.surfaces.map(escapeMarkdown).join(", ") || "unclassified"} |`
+      (file) => `| ${escapeMarkdown(file.status)} | ${markdownTableCellCode(paintedText(file.displayPath))} | ${number(file.additions)} | ${number(file.deletions)} | ${file.surfaces.map(escapeMarkdown).join(", ") || "unclassified"} |`
     ),
     ""
   ];
@@ -1085,9 +1088,10 @@ function gitArgs(range) {
     "--"
   ];
 }
-function gitSmall(args, cwd) {
+function gitSmall(args, cwd, env) {
   return execFileSync("git", args, {
     cwd,
+    env,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -1095,19 +1099,20 @@ function gitSmall(args, cwd) {
     maxBuffer: 256 * 1024
   });
 }
-function repositoryRoot(cwd) {
+function repositoryRoot(cwd, env) {
   try {
-    return gitSmall(["rev-parse", "--show-toplevel"], cwd).trim();
+    return gitSmall(["rev-parse", "--show-toplevel"], cwd, env).trim();
   } catch (error) {
     throw gitFailure(error, "rev-parse --show-toplevel");
   }
 }
-function resolveRevision(revision, cwd) {
+function resolveRevision(revision, cwd, env) {
   validateRevision(revision);
   try {
     return gitSmall(
       ["rev-parse", "--verify", "--quiet", "--end-of-options", `${revision}^{commit}`],
-      cwd
+      cwd,
+      env
     ).trim();
   } catch {
     throw new DiffUnavailableError(
@@ -1121,16 +1126,17 @@ function rangeParts(range) {
   if (safeRange.includes("..")) return safeRange.split("..");
   return [safeRange];
 }
-function validateRepositoryRange(range, cwd) {
-  const root = repositoryRoot(cwd);
+function validateRepositoryRange(range, cwd, options) {
+  const root = repositoryRoot(cwd, options.env);
   const safeRange = validateRange(range);
-  for (const part of rangeParts(safeRange)) resolveRevision(part ?? "", root);
+  for (const part of rangeParts(safeRange)) resolveRevision(part ?? "", root, options.env);
   return { root, range: safeRange };
 }
-async function collectGitDiffAsync(range, cwd = process2.cwd()) {
-  const { root, range: safeRange } = validateRepositoryRange(range, cwd);
+async function collectGitDiffAsync(range, cwd = process2.cwd(), options = {}) {
+  const { root, range: safeRange } = validateRepositoryRange(range, cwd, options);
   const child = spawn("git", gitArgs(safeRange), {
     cwd: root,
+    env: options.env,
     shell: false,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"]
@@ -1251,6 +1257,18 @@ function summaryBytesBefore(summaryPath) {
     return 0;
   }
 }
+function workspaceGitEnv(env, workspace) {
+  const gitEnv = { ...env };
+  for (const name of [
+    "GIT_DIR",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES"
+  ])
+    delete gitEnv[name];
+  gitEnv.GIT_WORK_TREE = workspace;
+  return gitEnv;
+}
 function writeSummary(summaryPath, markdown) {
   const addition = Buffer.byteLength(markdown, "utf8");
   const before = summaryBytesBefore(summaryPath);
@@ -1272,7 +1290,9 @@ async function runAction(env = process3.env) {
   const { base, head } = pullRequestRange(event);
   const workspace = required(env, "GITHUB_WORKSPACE");
   const summaryPath = required(env, "GITHUB_STEP_SUMMARY");
-  const diff = await collectGitDiffAsync(`${base}...${head}`, workspace);
+  const diff = await collectGitDiffAsync(`${base}...${head}`, workspace, {
+    env: workspaceGitEnv(env, workspace)
+  });
   const markdown = renderMarkdown(analyzeDiff(diff));
   writeSummary(summaryPath, markdown);
   return markdown;

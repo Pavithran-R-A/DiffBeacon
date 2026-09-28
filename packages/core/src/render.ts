@@ -15,7 +15,13 @@ function countNoun(value: number | null, singular: string): string {
   return value === null ? '—' : `${number(value)} ${value === 1 ? singular : `${singular}s`}`;
 }
 
-function terminalText(value: string): string {
+/**
+ * Paint repository text for a human surface. The terminal report and the Markdown report are the
+ * same kind of surface — a reader's line editor acts on what they print — so both run names,
+ * messages and evidence through the shared display policy. This is presentation only: the parsed
+ * model keeps its raw name, and `renderJson()` prints that raw factual record instead.
+ */
+function paintedText(value: string): string {
   return neutralizeDisplayControls(value, '\uFFFD');
 }
 
@@ -124,7 +130,7 @@ export function renderMarkdown(report: ReviewAttentionMap): string {
           '',
           escapeMarkdown(item.message),
           '',
-          `Observed in: ${item.relatedFiles.map(markdownCode).join(', ')}`,
+          `Observed in: ${item.relatedFiles.map((file) => markdownCode(paintedText(file))).join(', ')}`,
           '',
         ])),
     '## Review order',
@@ -146,7 +152,7 @@ export function renderMarkdown(report: ReviewAttentionMap): string {
       ? ['| — | No files observed | — | — | — |']
       : report.files.map(
           (file) =>
-            `| ${escapeMarkdown(file.status)} | ${markdownTableCellCode(file.displayPath)} | ${number(file.additions)} | ${number(file.deletions)} | ${file.surfaces.map(escapeMarkdown).join(', ') || 'unclassified'} |`,
+            `| ${escapeMarkdown(file.status)} | ${markdownTableCellCode(paintedText(file.displayPath))} | ${number(file.additions)} | ${number(file.deletions)} | ${file.surfaces.map(escapeMarkdown).join(', ') || 'unclassified'} |`,
         )),
     '',
   ];
@@ -170,7 +176,7 @@ export function renderPretty(
     ...(report.attention.length === 0
       ? ['NOTE   No mapped surfaces observed.']
       : report.attention.flatMap((item) => [
-          `${level(item.level, color)}  ${terminalText(item.title)}`,
+          `${level(item.level, color)}  ${paintedText(item.title)}`,
           `       ${countNoun(item.fileCount, 'file')} · +${number(item.additions)}  -${number(item.deletions)}`,
         ])),
     '',
@@ -179,8 +185,8 @@ export function renderPretty(
     ...(report.evidence.length === 0
       ? ['No evidence relationships were triggered by this diff.']
       : report.evidence.flatMap((item) => [
-          terminalText(item.message),
-          `Observed in: ${item.relatedFiles.map(terminalText).join(', ')}`,
+          paintedText(item.message),
+          `Observed in: ${item.relatedFiles.map(paintedText).join(', ')}`,
         ])),
     '',
     'REVIEW ORDER',
@@ -188,8 +194,8 @@ export function renderPretty(
     ...(report.reviewOrder.length === 0
       ? ['No review order produced.']
       : report.reviewOrder.flatMap((item) => [
-          `${item.position}. ${terminalText(item.title)}`,
-          ...wrap(terminalText(item.reason), orderWidth - orderIndent.length).map(
+          `${item.position}. ${paintedText(item.title)}`,
+          ...wrap(paintedText(item.reason), orderWidth - orderIndent.length).map(
             (line) => `${orderIndent}${line}`,
           ),
         ])),
@@ -200,7 +206,7 @@ export function renderPretty(
       ? ['No files observed.']
       : report.files.map(
           (file) =>
-            `${file.status.padEnd(9)} ${terminalText(file.displayPath)}  +${number(file.additions)} -${number(file.deletions)}`,
+            `${file.status.padEnd(9)} ${paintedText(file.displayPath)}  +${number(file.additions)} -${number(file.deletions)}`,
         )),
   ];
   return lines.filter((line, index) => !(line === '' && lines[index - 1] === '')).join('\n');

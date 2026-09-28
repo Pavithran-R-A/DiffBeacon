@@ -59,6 +59,37 @@ function summaryBytesBefore(summaryPath: string): number {
   }
 }
 
+/**
+ * GITHUB_WORKSPACE is the reviewed-repository boundary, so Git is handed a copy of the runner's
+ * environment with the repository-identity selectors taken out and the work tree set to the
+ * workspace. Measured on Windows Git 2.55.0 and Linux Git 2.39.5: `GIT_DIR`, `GIT_COMMON_DIR` and
+ * `GIT_OBJECT_DIRECTORY` make Git read another repository's object store, `GIT_WORK_TREE` moves the
+ * reported repository root, and `GIT_ALTERNATE_OBJECT_DIRECTORIES` makes another repository's
+ * content reachable through a range the workspace does not hold.
+ *
+ * Deliberately kept: `GIT_INDEX_FILE` and `GIT_NAMESPACE`. A commit-to-commit range consults no
+ * index, and Stage 6 lets the event name only full object IDs, which a ref namespace cannot change;
+ * removing a variable because its name starts with `GIT_` would be a guess, not a control. `PATH`,
+ * locale and runtime variables reach Git exactly as the runner set them.
+ *
+ * Setting the work tree is also what closes the one channel a denylist cannot reach: a
+ * `core.worktree` written in the reviewed repository's own configuration moves
+ * `rev-parse --show-toplevel`, and the environment value outranks it.
+ */
+function workspaceGitEnv(env: NodeJS.ProcessEnv, workspace: string): NodeJS.ProcessEnv {
+  const gitEnv: NodeJS.ProcessEnv = { ...env };
+  for (const name of [
+    'GIT_DIR',
+    'GIT_COMMON_DIR',
+    'GIT_OBJECT_DIRECTORY',
+    'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  ])
+    delete gitEnv[name];
+  // Assigned rather than merely deleted: the workspace value outranks anything inherited.
+  gitEnv.GIT_WORK_TREE = workspace;
+  return gitEnv;
+}
+
 function writeSummary(summaryPath: string, markdown: string): void {
   const addition = Buffer.byteLength(markdown, 'utf8');
   const before = summaryBytesBefore(summaryPath);
@@ -84,8 +115,11 @@ export async function runAction(env: NodeJS.ProcessEnv = process.env): Promise<s
   const workspace = required(env, 'GITHUB_WORKSPACE');
   const summaryPath = required(env, 'GITHUB_STEP_SUMMARY');
   // The reviewed repository is only read: Git runs against the named workspace through a
-  // fixed argument vector, and nothing from the reviewed tree is imported or executed.
-  const diff = await collectGitDiffAsync(`${base}...${head}`, workspace);
+  // fixed argument vector and an environment that cannot name a different repository, and nothing
+  // from the reviewed tree is imported or executed.
+  const diff = await collectGitDiffAsync(`${base}...${head}`, workspace, {
+    env: workspaceGitEnv(env, workspace),
+  });
   const markdown = renderMarkdown(analyzeDiff(diff));
   writeSummary(summaryPath, markdown);
   return markdown;
