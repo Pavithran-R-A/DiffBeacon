@@ -9,8 +9,9 @@ STATUS:                  PASS (qualified on the local contracts measured in this
                          browser-lane schedule and re-run to 10/10 in a fresh clone; see
                          QUALIFICATION MATRIX. No hosted Safari or macOS qualification. No security
                          verdict is made here: this report records the trust boundaries that were
-                         attacked, the five defects that were reproduced and repaired, and the
-                         boundaries that were measured as already holding.
+                         attacked, the defects that were reproduced and repaired — five in the first
+                         pass (R1–R5) and two in the closure pass (C-A, C-B, recorded under STAGE 8
+                         CLOSURE below) — and the boundaries that were measured as already holding.
 
 STARTING SHA:            74d79f948b5b3ecdf5299a9a06d93d07ec34bbd8  ('docs: close DiffBeacon Stage 7
                          browser audit' — the rescue/stage0-source tip at the start of Stage 8)
@@ -51,25 +52,25 @@ was measured, and the repair. That matrix is recorded here because this document
 no earlier Stage 8 artifact contains it, and nothing in this pass should be read as claiming it was
 delivered before.
 
-| #   | Trust domain                      | Attacker / control source                                                                       | Trust                           | Control in place before Stage 8                                                                                                                                                                          | Tests                                                                                                                                               | Remaining plausible attack                                                                            | Measured defect                           | Repair                                                                                          |
-| --- | --------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 1   | Unified diff text                 | anything pasted into the demo, a diff file on disk, Git's own output                            | untrusted                       | line-at-a-time parser, published 8 MiB input bound, diagnostics instead of invented counts (Stage 2)                                                                                                     | `stage2.hostile-input`, `stage2.bounded-input`, `stage2.patch-dialects`, `stage8.hostile-corpus` (6), `stage8.numeric-edges` (7), `stage8.fuzz` (7) | an input that throws, hangs, or publishes a count the diff does not prove                             | NO                                        | none                                                                                            |
-| 2   | Git revision / range argument     | workflow `with:` values, operator argv, a ref name that looks like an option                    | untrusted                       | pinned 12-flag vector + `--end-of-options`, argv-only start, `shell: false` (Stage 5/6)                                                                                                                  | `stage5.cli-adversarial-refs`, `stage6.action-security-boundary`, `stage8.git-boundary` (13)                                                        | an extra Git option smuggled through the range string                                                 | NO                                        | none — the `--src-prefix` control proved the pins load-bearing                                  |
-| 3   | Repository-level Git config       | the reviewed repository's `.git/config`, `.gitattributes`                                       | untrusted                       | the pinned vector overrides the diff-affecting config (`--no-ext-diff`, `--no-textconv`, `--ignore-submodules=none`, `--submodule=short`, `--find-renames=50%`, `--unified=3`, `--diff-algorithm=myers`) | `stage8.git-boundary` external-diff trio, `stage8.no-target-execution` (5)                                                                          | `diff.external` or a textconv driver run while diffing                                                | NO                                        | none — live sentinel controls show it runs under a plain `git diff` and never under the pin     |
-| 4   | Ambient Git / process environment | the runner or operator environment, not the repository                                          | operator-owned                  | none, deliberately (see GIT ENVIRONMENT)                                                                                                                                                                 | `stage8.git-boundary` ambient cases + `../stage8/probe-git-env.mjs`                                                                                 | redirection of `GIT_DIR` / `GIT_WORK_TREE` / `GIT_ALTERNATE_OBJECT_DIRECTORIES` to another repository | NO (measured, disposition recorded)       | none — wiping them would hide a workflow misconfiguration that already controls which code runs |
-| 5   | Git output                        | Git itself, under a hostile repository (C-quoted paths, raw octets, mode lines, binary markers) | untrusted-but-structured        | `decodeGitQuoted` escape table, non-fatal UTF-8 decoding, streaming byte-capped collector                                                                                                                | `stage8.invalid-byte-paths` (10), `stage8.invalid-path-shapes` (7), `stage8.git-boundary` quotePath cases                                           | an undecodable octet producing a lone surrogate, a crash, or a rewritten name in the data             | NO                                        | none — the non-fatal decoder is now pinned by two mutation controls                             |
-| 6   | Filename / path text              | the reviewed repository                                                                         | untrusted                       | display policy at paint time (added this stage); names are labels and are never opened                                                                                                                   | `stage8.hostile-corpus`, `stage8.browser-corpus` (30), `stage8.no-target-execution`                                                                 | a name that reorders or rewrites the trusted text around it                                           | YES                                       | R2 (terminal/CLI paint), R3 (browser paint)                                                     |
-| 7   | Markdown output                   | a path or hunk text containing `\|`, backslash, markup, or a heading marker                     | untrusted                       | code-span cell rendering (Stage 2/3 shapes)                                                                                                                                                              | `stage8.markdown-security` (9)                                                                                                                      | a path that splits a table row or opens a heading/section                                             | YES                                       | R1 (cell escaping)                                                                              |
-| 8   | Terminal output                   | ANSI/C1/bidi/zero-width text inside the diff                                                    | untrusted                       | none — `renderPretty` emitted name bytes verbatim before this stage                                                                                                                                      | `stage8.terminal-security` (12)                                                                                                                     | a name that changes cursor colour, scrolls the scrollback, or reorders the following trusted line     | YES                                       | R2                                                                                              |
-| 9   | JSON output                       | the same hostile text, consumed by a machine                                                    | untrusted                       | schema published by Stage 2-4; `displayPath` kept raw                                                                                                                                                    | `stage8.json-contract` (5), fuzz round-trip                                                                                                         | presentation hardening leaking into the data, or a non-finite count                                   | NO                                        | none — the policy is provably paint-only                                                        |
-| 10  | Browser DOM                       | pasted diff text in the visitor's own tab                                                       | untrusted                       | React text children only; no markup sink; Stage 7 runtime injection proofs                                                                                                                               | `stage8.browser-bidi` (8), `stage8.browser-corpus` (30), `stage7.browser-security` (18, re-green)                                                   | a control sequence that visually reorders the page or escapes its box                                 | YES                                       | R3 (`paintedName`)                                                                              |
-| 11  | Action event JSON                 | `GITHUB_EVENT_PATH`, i.e. the runner-provided payload                                           | untrusted-in-shared-context     | object-ID contract + required `pull_request` fields (Stage 6)                                                                                                                                            | `stage8.action-event-summary-paths` (10), `stage6.action-event`                                                                                     | a well-formed JSON value that is not the expected object                                              | YES                                       | R5 (non-object rejection message)                                                               |
-| 12  | `GITHUB_WORKSPACE`                | the workflow that calls the Action                                                              | operator-controlled             | explicit workspace requirement, no implicit cwd search (Stage 6)                                                                                                                                         | `stage8.action-event-summary-paths`, `stage6.action-security-boundary`                                                                              | a path that is a file, missing, or space/UTF-8 bearing                                                | NO                                        | none — every case already fails closed with a stable message                                    |
-| 13  | `GITHUB_STEP_SUMMARY`             | the report DiffBeacon itself generates                                                          | self-generated, platform-capped | append with no size check before this stage                                                                                                                                                              | `stage8.action-summary-bound` (4)                                                                                                                   | a large diff producing a summary over GitHub's documented 1,048,576-byte limit                        | YES                                       | R4 (fail-closed byte bound)                                                                     |
-| 14  | CLI output path                   | the operator's `--output` argument                                                              | operator-owned                  | single `writeFile` sink, no directory creation                                                                                                                                                           | `stage8.invalid-path-shapes`, `stage8.filesystem-boundary` (7)                                                                                      | traversal-looking segments or a reserved-looking basename                                             | NO                                        | none — an intentional output path is honoured, a missing parent still exits 4                   |
-| 15  | Package / build scripts           | the dependency tree and this repository's scripts                                               | semi-trusted                    | npm-workspaces, pinned lockfile, `engine-strict=true`                                                                                                                                                    | `npm run package-smoke`, `npm run action-smoke`, `stage8.no-target-execution`                                                                       | a lifecycle script running while a target repository is reviewed                                      | NO                                        | none — measured zero sentinels, no `node_modules`, clean `git status`                           |
-| 16  | Dependencies                      | upstream packages reachable from the lockfile                                                   | semi-trusted                    | zero runtime dependencies in all three published packages                                                                                                                                                | `npm audit --json` recorded in DEPENDENCY AUDIT                                                                                                     | an advisory that reaches a shipped artifact                                                           | NO (4 advisories, all build/test tooling) | none in Stage 8; carried with evidence                                                          |
-| 17  | GitHub workflow metadata          | `uses:` references and `permissions:` grants                                                    | supply chain                    | all 3 `uses:` lines pinned to full commit SHAs; `permissions: contents: read` only                                                                                                                       | read and recorded in WORKFLOW SUPPLY CHAIN                                                                                                          | a mutable ref resolving to different code later                                                       | NO                                        | none — no pin churned; pin→tag _resolution_ left unverified (no network in this pass)           |
+| #   | Trust domain                      | Attacker / control source                                                                       | Trust                                                     | Control in place before Stage 8                                                                                                                                                                          | Tests                                                                                                                                               | Remaining plausible attack                                                                                                                                                                                                                | Measured defect                                                           | Repair                                                                                                                                                                                                                                |
+| --- | --------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Unified diff text                 | anything pasted into the demo, a diff file on disk, Git's own output                            | untrusted                                                 | line-at-a-time parser, published 8 MiB input bound, diagnostics instead of invented counts (Stage 2)                                                                                                     | `stage2.hostile-input`, `stage2.bounded-input`, `stage2.patch-dialects`, `stage8.hostile-corpus` (6), `stage8.numeric-edges` (7), `stage8.fuzz` (7) | an input that throws, hangs, or publishes a count the diff does not prove                                                                                                                                                                 | NO                                                                        | none                                                                                                                                                                                                                                  |
+| 2   | Git revision / range argument     | workflow `with:` values, operator argv, a ref name that looks like an option                    | untrusted                                                 | pinned 12-flag vector + `--end-of-options`, argv-only start, `shell: false` (Stage 5/6)                                                                                                                  | `stage5.cli-adversarial-refs`, `stage6.action-security-boundary`, `stage8.git-boundary` (13)                                                        | an extra Git option smuggled through the range string                                                                                                                                                                                     | NO                                                                        | none — the `--src-prefix` control proved the pins load-bearing                                                                                                                                                                        |
+| 3   | Repository-level Git config       | the reviewed repository's `.git/config`, `.gitattributes`                                       | untrusted                                                 | the pinned vector overrides the diff-affecting config (`--no-ext-diff`, `--no-textconv`, `--ignore-submodules=none`, `--submodule=short`, `--find-renames=50%`, `--unified=3`, `--diff-algorithm=myers`) | `stage8.git-boundary` external-diff trio, `stage8.no-target-execution` (5)                                                                          | `diff.external` or a textconv driver run while diffing                                                                                                                                                                                    | NO                                                                        | none — live sentinel controls show it runs under a plain `git diff` and never under the pin                                                                                                                                           |
+| 4   | Ambient Git / process environment | the runner or operator environment, not the repository                                          | split — operator-owned for the CLI, shared for the Action | none, deliberately, for both callers (see GIT ENVIRONMENT)                                                                                                                                               | `stage8.git-boundary` ambient cases + `../stage8/probe-git-env.mjs`; after the closure pass, `stage8c.action-workspace-isolation` (17)              | redirection of `GIT_DIR` / `GIT_WORK_TREE` / `GIT_COMMON_DIR` / `GIT_OBJECT_DIRECTORY` / `GIT_ALTERNATE_OBJECT_DIRECTORIES`, or a repository-local `core.worktree`, moving which repository the Action diffs away from `GITHUB_WORKSPACE` | YES for the Action (C-A); NO for the CLI, measured and left unchanged     | Action-scoped only: `workspaceGitEnv()` for every Git process the Action starts. **CLI ambient Git policy remains operator-owned if left unchanged; the Action workspace policy is stricter.**                                        |
+| 5   | Git output                        | Git itself, under a hostile repository (C-quoted paths, raw octets, mode lines, binary markers) | untrusted-but-structured                                  | `decodeGitQuoted` escape table, non-fatal UTF-8 decoding, streaming byte-capped collector                                                                                                                | `stage8.invalid-byte-paths` (10), `stage8.invalid-path-shapes` (7), `stage8.git-boundary` quotePath cases                                           | an undecodable octet producing a lone surrogate, a crash, or a rewritten name in the data                                                                                                                                                 | NO                                                                        | none — the non-fatal decoder is now pinned by two mutation controls                                                                                                                                                                   |
+| 6   | Filename / path text              | the reviewed repository                                                                         | untrusted                                                 | display policy at paint time (added this stage); names are labels and are never opened                                                                                                                   | `stage8.hostile-corpus`, `stage8.browser-corpus` (30), `stage8.no-target-execution`, `stage8c.markdown-display-controls` (15)                       | a name that reorders or rewrites the trusted text around it                                                                                                                                                                               | YES                                                                       | R2 (terminal/CLI paint), R3 (browser paint), C-B (Markdown paint)                                                                                                                                                                     |
+| 7   | Markdown output                   | a path or hunk text containing `\|`, backslash, markup, a heading marker, or a display control  | untrusted                                                 | code-span cell rendering (Stage 2/3 shapes); the shared display policy at the Markdown paint boundary (closure pass)                                                                                     | `stage8.markdown-security` (9), `stage8c.markdown-display-controls` (15)                                                                            | a path that splits a table row, opens a heading/section, or reorders the row it is reported in                                                                                                                                            | YES                                                                       | R1 (cell escaping), C-B (explicit-control paint)                                                                                                                                                                                      |
+| 8   | Terminal output                   | ANSI/C1/bidi/zero-width text inside the diff                                                    | untrusted                                                 | none — `renderPretty` emitted name bytes verbatim before this stage                                                                                                                                      | `stage8.terminal-security` (12)                                                                                                                     | a name that changes cursor colour, scrolls the scrollback, or reorders the following trusted line                                                                                                                                         | YES                                                                       | R2                                                                                                                                                                                                                                    |
+| 9   | JSON output                       | the same hostile text, consumed by a machine                                                    | untrusted                                                 | schema published by Stage 2-4; `displayPath` kept raw                                                                                                                                                    | `stage8.json-contract` (5), fuzz round-trip                                                                                                         | presentation hardening leaking into the data, or a non-finite count                                                                                                                                                                       | NO                                                                        | none — the policy is provably paint-only                                                                                                                                                                                              |
+| 10  | Browser DOM                       | pasted diff text in the visitor's own tab                                                       | untrusted                                                 | React text children only; no markup sink; Stage 7 runtime injection proofs                                                                                                                               | `stage8.browser-bidi` (8), `stage8.browser-corpus` (30), `stage7.browser-security` (18, re-green)                                                   | a control sequence that visually reorders the page or escapes its box                                                                                                                                                                     | YES                                                                       | R3 (`paintedName`)                                                                                                                                                                                                                    |
+| 11  | Action event JSON                 | `GITHUB_EVENT_PATH`, i.e. the runner-provided payload                                           | untrusted-in-shared-context                               | object-ID contract + required `pull_request` fields (Stage 6)                                                                                                                                            | `stage8.action-event-summary-paths` (10), `stage6.action-event`                                                                                     | a well-formed JSON value that is not the expected object                                                                                                                                                                                  | YES                                                                       | R5 (non-object rejection message)                                                                                                                                                                                                     |
+| 12  | `GITHUB_WORKSPACE`                | the workflow that calls the Action                                                              | operator-controlled                                       | explicit workspace requirement, no implicit cwd search (Stage 6)                                                                                                                                         | `stage8.action-event-summary-paths`, `stage6.action-security-boundary`, `stage8c.action-workspace-isolation` (17)                                   | a path that is a file, missing, or space/UTF-8 bearing — and, until the closure pass, an ambient Git selector naming a different repository                                                                                               | NO for the path handling; the repository-identity half was the C-A defect | none needed for the path (every case fails closed with a stable message); C-A's `workspaceGitEnv()` makes the workspace authoritative over ambient Git identity, proven by that suite on Windows and re-run in the closure Linux cell |
+| 13  | `GITHUB_STEP_SUMMARY`             | the report DiffBeacon itself generates                                                          | self-generated, platform-capped                           | append with no size check before this stage                                                                                                                                                              | `stage8.action-summary-bound` (4)                                                                                                                   | a large diff producing a summary over GitHub's documented 1,048,576-byte limit                                                                                                                                                            | YES                                                                       | R4 (fail-closed byte bound)                                                                                                                                                                                                           |
+| 14  | CLI output path                   | the operator's `--output` argument                                                              | operator-owned                                            | single `writeFile` sink, no directory creation                                                                                                                                                           | `stage8.invalid-path-shapes`, `stage8.filesystem-boundary` (7)                                                                                      | traversal-looking segments or a reserved-looking basename                                                                                                                                                                                 | NO                                                                        | none — an intentional output path is honoured, a missing parent still exits 4                                                                                                                                                         |
+| 15  | Package / build scripts           | the dependency tree and this repository's scripts                                               | semi-trusted                                              | npm-workspaces, pinned lockfile, `engine-strict=true`                                                                                                                                                    | `npm run package-smoke`, `npm run action-smoke`, `stage8.no-target-execution`                                                                       | a lifecycle script running while a target repository is reviewed                                                                                                                                                                          | NO                                                                        | none — measured zero sentinels, no `node_modules`, clean `git status`                                                                                                                                                                 |
+| 16  | Dependencies                      | upstream packages reachable from the lockfile                                                   | semi-trusted                                              | zero runtime dependencies in all three published packages                                                                                                                                                | `npm audit --json` recorded in DEPENDENCY AUDIT                                                                                                     | an advisory that reaches a shipped artifact                                                                                                                                                                                               | NO (4 advisories, all build/test tooling)                                 | none in Stage 8; carried with evidence                                                                                                                                                                                                |
+| 17  | GitHub workflow metadata          | `uses:` references and `permissions:` grants                                                    | supply chain                                              | all 3 `uses:` lines pinned to full commit SHAs; `permissions: contents: read` only                                                                                                                       | read and recorded in WORKFLOW SUPPLY CHAIN                                                                                                          | a mutable ref resolving to different code later                                                                                                                                                                                           | NO                                                                        | none — no pin churned; pin→tag _resolution_ left unverified (no network in this pass)                                                                                                                                                 |
 
 "Do not call a hypothetical issue a defect until reproduced" was held: every YES row above has a RED
 log and a falsification control named in DEFECTS FOUND, and every NO row was probed rather than
@@ -94,7 +95,10 @@ Confirmed on this tree by running the suites that pin them, not by reading them:
 
 ## DEFECTS FOUND
 
-Five defects were reproduced. Each entry gives the input, the behavior before the repair, the
+Seven defects were reproduced across the two Stage 8 passes. The five the first pass found are R1–R5
+below; the two the closure pass found are recorded as C-A (Action workspace isolation) and C-B
+(Markdown display controls) in the closure section at the end of this document, which is their final
+home. Each entry gives the input, the behavior before the repair, the
 security-contract consequence, the RED proof, the repair, the GREEN proof, and the falsification
 control that shows the new test would notice the repair disappearing.
 
@@ -189,10 +193,16 @@ control that shows the new test would notice the repair disappearing.
 - Input: a large but in-bounds diff. Reachability measured inside a permanent test: 30,000 changed
   files, 4,703,340 diff bytes (under the 8 MiB input bound) render to **1,958,803** summary bytes
   against GitHub's documented **1,048,576** byte limit.
-- Before: `writeSummary` appended unconditionally, so the platform's own limit would be exceeded
-  mid-write and the failure would surface as a truncated or rejected summary with no DiffBeacon
-  explanation.
-- Consequence: a silently truncated review artifact — the one output the Action owns.
+- Before: `writeSummary` appended unconditionally. The platform record matters here, so it is stated
+  precisely: GitHub gives each **step summary** 1 MiB, and passing that limit makes the upload of
+  that step's summary fail and raises an error annotation — it does **not** by itself change the
+  status of the step or the job. The unbounded append therefore could not corrupt a write midway;
+  what it could do was let DiffBeacon finish successfully while GitHub later refused to publish the
+  report the Action had just written.
+- Consequence: a review artifact the Action believed it had delivered, with the job still green and
+  no DiffBeacon message to explain the missing summary — the one output the Action owns. The guard
+  moves that failure into the Action, where it names its own arithmetic instead of leaving it in a
+  platform annotation beside an unrelated green check.
 - RED: `../stage8/red-summary-bound.log` — 2 failed cases ("takes the summary up to the exact limit
   and no further", "names the arithmetic it used instead of truncating silently").
 - Repair: `MAX_STEP_SUMMARY_BYTES = 1 * 1024 * 1024` with `summaryBytesBefore()` (`statSync`) — the
@@ -240,6 +250,13 @@ control that shows the new test would notice the repair disappearing.
 Measured shape worth recording: a hostile name can legitimately appear on two Markdown lines (the
 Changed-files row and an evidence `Observed in:` line), and the invalid-byte test pins that exact
 structure — two lines, both code spans — rather than assuming one.
+
+Closure-pass note: C-B made `renderMarkdown` apply the shared display policy at its paint boundary, so
+this file's `presented()` helper now derives the expected text from the policy statement rather than
+from the raw name. Its 9 cases, their structure, and their assertions are unchanged — no case was
+deleted, relaxed, or skipped — and the change is disclosed here because it alters what one
+previous-stage helper expects. `../stage8c/green-B-restored.log` records this file at 9/9 on the
+closure tree.
 
 ## TERMINAL
 
@@ -308,19 +325,28 @@ BUNDLE).
 
 ## GIT ENVIRONMENT
 
-Variables tested, with the result of each:
+Variables tested, with the result of each. "Neutralised" is split by caller because the two callers
+have different owners: the CLI inherits the operator's environment, while the Action pins
+`GITHUB_WORKSPACE` and therefore cannot treat the environment as trusted input (see C-A in the
+closure section).
 
-| Variable                                           | Measured effect                                                           | Neutralised by DiffBeacon?                                                                | Rationale                                                                                                                                                                                                                                                               |
-| -------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GIT_DIR`                                          | selects the repository Git reads (`../stage8/probe-git-env.mjs` / `.log`) | NO                                                                                        | the operator owns the runner environment; a workflow that can set this under `uses: ./` already selects the code that runs, so wiping it would hide a misconfiguration without removing it. DiffBeacon fails bounded when the environment hides the requested revision. |
-| `GIT_WORK_TREE`                                    | selects the work tree                                                     | NO                                                                                        | same                                                                                                                                                                                                                                                                    |
-| `GIT_ALTERNATE_OBJECT_DIRECTORIES`                 | adds object stores Git may read                                           | NO                                                                                        | same                                                                                                                                                                                                                                                                    |
-| `GIT_EXTERNAL_DIFF`                                | would run an external diff program                                        | YES — the pinned `--no-ext-diff` makes it inert; the same fixture does run it unprotected | measured, and the control proves the non-vacuity                                                                                                                                                                                                                        |
-| `GIT_CONFIG_COUNT` + `GIT_CONFIG_KEY_n`/`_VALUE_n` | injects config such as `diff.external`                                    | YES — blocked by the pin, proven against a live unprotected run                           | measured                                                                                                                                                                                                                                                                |
-| pager-related variables                            | no live control reproducible on this host                                 | not claimed                                                                               | recorded as not-proven rather than as a verified defence                                                                                                                                                                                                                |
+| Variable                                           | Measured effect                                                           | Neutralised by DiffBeacon?                                                                                                                                | Rationale                                                                                                                                                                                                                |
+| -------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GIT_DIR`                                          | selects the repository Git reads (`../stage8/probe-git-env.mjs` / `.log`) | CLI: NO (inherited, disposition recorded) — Action: YES, removed from the child environment                                                               | measured on Windows Git 2.55.0 and Linux Git 2.39.5; outranking it with a pinned work tree was not enough, because `GIT_DIR` pointing at another repository still won on Linux, so it is removed rather than overridden. |
+| `GIT_WORK_TREE`                                    | selects the work tree                                                     | CLI: NO (inherited) — Action: YES, assigned the workspace value                                                                                           | an assigned value outranks the inherited one and a repository-local `core.worktree`, which no denylist can reach.                                                                                                        |
+| `GIT_COMMON_DIR`                                   | redirects the common repository directory                                 | CLI: NO (inherited) — Action: YES, removed                                                                                                                | measured as a redirector.                                                                                                                                                                                                |
+| `GIT_OBJECT_DIRECTORY`                             | selects the object store Git reads                                        | CLI: NO (inherited) — Action: YES, removed                                                                                                                | measured as a redirector.                                                                                                                                                                                                |
+| `GIT_ALTERNATE_OBJECT_DIRECTORIES`                 | adds object stores Git may read                                           | CLI: NO (inherited) — Action: YES, removed                                                                                                                | measured: a range the workspace does not hold becomes reachable through it.                                                                                                                                              |
+| `GIT_INDEX_FILE`                                   | no effect on a commit-to-commit range diff                                | NO, for both callers                                                                                                                                      | deliberately kept — a range consults no index, so removing it would be a guess about a name, not a control.                                                                                                              |
+| `GIT_NAMESPACE`                                    | no effect on the Action's range, which names full object IDs              | NO, for both callers                                                                                                                                      | deliberately kept, for the same reason (Stage 6 accepts only full object IDs).                                                                                                                                           |
+| repository-local `core.worktree`                   | moves `rev-parse --show-toplevel`                                         | CLI: not applicable to the diff's bytes — Action: YES, outranked by the pinned `GIT_WORK_TREE`                                                            | measured; this is the channel an environment denylist cannot close.                                                                                                                                                      |
+| `GIT_EXTERNAL_DIFF`                                | would run an external diff program                                        | YES for both — the pinned `--no-ext-diff` makes it inert; the same fixture does run it unprotected                                                        | measured, and the control proves the non-vacuity                                                                                                                                                                         |
+| `GIT_CONFIG_COUNT` + `GIT_CONFIG_KEY_n`/`_VALUE_n` | injects config such as `diff.external` or `core.worktree`                 | YES for both — `diff.external` blocked by the pin, proven against a live unprotected run; an injected `core.worktree` measured not to move the range diff | measured                                                                                                                                                                                                                 |
+| pager-related variables                            | no live control reproducible on this host                                 | not claimed                                                                                                                                               | recorded as not-proven rather than as a verified defence                                                                                                                                                                 |
 
 No "wipe the environment" change was made and no ambient variable is blindly cleared — the brief's
-constraint against an environment-wide wipe is held, and the disposition is documented in
+constraint against an environment-wide wipe is held, the Action's policy is the measured set rather
+than a `GIT_`-prefix denylist, and the disposition is documented in
 `docs/architecture/security.md`.
 
 ## GIT CONFIG
@@ -392,7 +418,10 @@ kept in the suite because it costs 194 s per run; numbers from
 
 ## ACTION SUMMARY
 
-- Platform limit: GitHub's documented 1,048,576 bytes for the Job Summary file.
+- Platform limit: 1,048,576 bytes, which GitHub documents for **each step's summary**. Passing it
+  fails that step's summary upload and produces an error annotation; it does not itself change the
+  step's or the job's status, which is why the Action checks the bound rather than trusting the
+  platform to report one.
 - Maximum generated summary measured: **1,958,803 bytes** from 30,000 changed files / 4,703,340 diff
   bytes — inside the input bound, above the platform bound, so the boundary is reachable rather than
   theoretical.
@@ -410,10 +439,14 @@ fully is now measured and recorded.
 
 ## EVENT FILE
 
-Decision: an event file up to the same 8 MiB input discipline is still reviewed; **no smaller event
-limit was invented**, and this is recorded in the test itself
-(`stage8.action-event-summary-paths.test.ts`). What is required is shape, not size: the parsed event
-must be an object carrying `pull_request.base.sha` and `pull_request.head.sha`. Arrays, strings,
+Decision: **no DiffBeacon-specific event-file size cap is imposed.** `MAX_DIFF_BYTES` bounds the diff
+the Action collects, not the event file it reads, and no smaller event limit was invented (the
+record was corrected in the Stage 8 closure because an earlier sentence here described the event as
+held to "the same 8 MiB input discipline", which is not what the code does). What the Action applies
+is shape: the parsed event must be an object carrying `pull_request.base.sha` and
+`pull_request.head.sha`, each a full commit object ID. Measured, inside a permanent test
+(`stage8.action-event-summary-paths.test.ts`): an event fixture carrying approximately 8 MiB of extra
+JSON alongside those fields is accepted and the review completes. Arrays, strings,
 numbers, booleans, `null`, a 100,000-deep nesting (rejected on the object-ID contract), an unreadable
 event path, a missing summary parent, a summary path that is a directory or runs through a file, and a
 path containing spaces and `café` were each measured to fail closed with a stable message, empty stdout,
@@ -862,3 +895,264 @@ serialized browser lane against a 900 s hook budget is exactly the kind of thing
 has to settle deliberately rather than inherit).
 
 **DO NOT begin Stage 9.** Stage 8 stops here.
+
+## STAGE 8 CLOSURE — ACTION WORKSPACE + MARKDOWN DISPLAY BOUNDARY
+
+```text
+AUDITOR RULING:
+REPAIR REQUIRED
+```
+
+The first pass above qualified five defects (R1–R5). The auditor then reviewed that record and found two
+contract claims the code did not keep, plus two places where this report described the platform and the
+input bounds incorrectly. This closure pass reproduced both defects, repaired both, corrected both
+records, and re-qualified the tree. It began from HEAD `41ec737fd4758ddbfb0c0305d838d86e85246c5f` on
+`rescue/stage0-source` — the commit the report above was made in — and changed no other product surface.
+
+### A — ACTION WORKSPACE DEFECT
+
+- PRE-FIX: the Action documents `GITHUB_WORKSPACE` as the reviewed-repository boundary, but
+  `packages/cli/src/git.ts` started every Git process with no explicit child environment, so each one
+  inherited `process.env`. An ambient `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`,
+  `GIT_OBJECT_DIRECTORY` or `GIT_ALTERNATE_OBJECT_DIRECTORIES` therefore moved the review to a different
+  repository — measured, not assumed, on Windows Git 2.55.0.windows.5 and Linux Git 2.39.5. The
+  requirement was not converted into a threat-model waiver because the workflow operator owns the
+  environment: a pull request does not own the runner's environment, so the Action cannot treat that
+  environment as trusted input.
+- RED: `../stage8c/red-A-action-isolation.log` —
+  `tests/stage8c.action-workspace-isolation.test.ts` runs the **committed Action bundle** the way a runner
+  does (`GITHUB_WORKSPACE` = disposable repository A, an unrelated disposable repository B holding the
+  objects the event could name, full 40-hex object IDs in the event, no fabricated SHA collision), once
+  per selector. 10 of its 17 cases failed: the five single-selector redirects (`GIT_DIR`,
+  `GIT_WORK_TREE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`), a
+  workspace whose own `core.worktree` points elsewhere, the same `GIT_DIR` redirect against a workspace
+  path containing spaces and against one containing non-ASCII characters, the case that must refuse a
+  workspace which is not a repository even when `GIT_DIR` names one that is, and the case asserting that
+  the rebuilt environment still runs nothing from the repository it reads.
+- REPAIR: `workspaceGitEnv()` (`packages/action/src/index.ts`) rebuilds the child environment from the one
+  the Action received, deletes the four measured redirecting selectors, and **assigns**
+  `GIT_WORK_TREE = GITHUB_WORKSPACE` — assigned, not deleted, because the value outranks a
+  repository-local `core.worktree`, the one channel no denylist reaches. It is handed to
+  `collectGitDiffAsync` as one `GitProcessOptions.env`, which the shared collector passes to every Git
+  process in the collection: `rev-parse --show-toplevel`, the `rev-parse --verify` of each range part, and
+  the diff `spawn`. Sanitizing only the final spawn would not have been sufficient, and the test proves
+  the earlier calls were the redirectable ones. `GIT_INDEX_FILE` and `GIT_NAMESPACE` are deliberately kept
+  (measured not to redirect a full-object-ID range diff), and PATH, locale and runtime variables pass
+  through — the policy is the measured set rather than a `GIT_`-prefix denylist, and no part of
+  `process.env` is wiped.
+- CLI POLICY: **unchanged.** The CLI inherits its operator's environment exactly as before, and the
+  `stage8.git-boundary` (13 cases), Stage 5 CLI-contract and `stage8.no-target-execution` suites pass on
+  the closure tree. Measurement found no CLI defect to repair, so the recorded operator-owned disposition
+  stands.
+- ACTION POLICY: **`GITHUB_WORKSPACE` is authoritative.** No ambient Git variable can move the Action's
+  review off it, and the reviewed repository's own configuration cannot move the reported root. The Action
+  policy is therefore stricter than the CLI policy, and this is the claim Domain 12 of the threat matrix
+  previously declined to make.
+- FALSIFICATION: `../stage8c/control-A-isolation-removed.log` — with `workspaceGitEnv()` neutralised to
+  return the environment unchanged, exactly the same 10 cases fail again and the same 7 still pass, so the
+  suite is proving the repair and not the fixture. The 7 cases that held before the repair are the
+  non-redirecting channels the policy must not touch: the plain control (an environment naming nothing
+  else), an alternate object store that the workspace legitimately holds, `core.worktree` injected through
+  `GIT_CONFIG_COUNT` and through an ambient global config file (measured not to redirect), `GIT_NAMESPACE`
+  and `GIT_INDEX_FILE` kept because a commit-to-commit range diff reads neither, and a linked worktree
+  whose `.git` is a file. With the repair in place all 17 pass (`../stage8c/green-A-first-run.log`),
+  including workspace paths containing spaces and containing non-ASCII characters, the refusal of a
+  workspace that is not a repository even when `GIT_DIR` names one that is, and the assertion that the
+  rebuilt environment still installs and runs nothing from the repository it reads. The `diff.external`
+  sentinels are re-measured in the same run by `stage8.git-boundary` (its 13 cases, unchanged), so
+  `--no-ext-diff --no-textconv` remain load-bearing rather than newly assumed.
+
+### B — MARKDOWN DISPLAY CONTROL DEFECT
+
+- PRE-FIX: `neutralizeDisplayControls()` was applied to the terminal, the CLI message surface and the
+  browser, but `renderMarkdown()` interpolated `file.displayPath` and `relatedFiles` into the report
+  without it, so U+202E, U+202A–U+202E, U+2066–U+2069, U+061C, the single-code CSI/OSC introducers
+  U+009B and U+009D, and U+2028/U+2029 reached the human GitHub Job Summary intact.
+- RED: `../stage8c/red-B-markdown-controls.log` — 12 of the 15 cases in
+  `tests/stage8c.markdown-display-controls.test.ts` failed, each asserting the painted name rather than
+  merely "no control present".
+- JSON: **raw contract, unchanged.** `renderJson()` was not touched. `JSON.parse(renderJson(report))`
+  still contains each original path byte for byte, and a sweep over the whole hostile corpus asserts that
+  rendering a report to Markdown and to the terminal leaves `JSON.stringify(report)` unchanged — so a
+  "repair" that sanitized the data model instead of the paint would fail. The parser output and the data
+  model are not sanitized.
+- MARKDOWN: **presentation contract.** The repair sits at the Markdown paint boundary —
+  `markdownCode(paintedText(...))` for the `Observed in:` list and
+  `markdownTableCellCode(paintedText(file.displayPath))` for the Changed-files row — using the existing
+  shared policy with the renderers' U+FFFD marker. `paintedText()` is the former `terminalText()`, renamed
+  because it now serves both human surfaces. Reordering controls are removed, line-shaping controls reduce
+  to one space, executable controls show as U+FFFD, while ordinary Arabic and Hebrew text is preserved and
+  U+200B/U+200C/U+200D stay painted verbatim per the existing measured policy. Terminal/Markdown parity is
+  asserted over the corpus on the painted shape, since the two surfaces encode backtick, pipe and
+  backslash differently.
+- PIPE ESCAPE: the Stage 8 R1 GFM-pipe repair is preserved — its cases remain in
+  `tests/stage8.markdown-security.test.ts` and the pipe-bearing hostile names are re-asserted with display
+  controls in the closure suite.
+- FALSIFICATION: `../stage8c/falsify-B-paint-removed.log` — reverting the two paint sites to the raw name
+  fails 13 cases across the two Markdown suites (12 of the 15 closure cases plus 1 case of
+  `stage8.markdown-security.test.ts`, whose expectation helper derives from the policy), and restoring them
+  returns both files to 24 passed of 24 (`../stage8c/green-B-restored.log`, 15 + 9). The expectation helper
+  the closure tests use is `tests/stage8.display-policy-oracle.ts`, a test-only module that re-derives the
+  presentation from the policy's statement instead of importing `packages/core/src/display.ts`, so a repair
+  that quietly moved the boundary cannot agree with itself.
+
+### C — SUMMARY PLATFORM-RECORD CORRECTION
+
+- OLD RECORD: this report said the platform's 1,048,576-byte limit would be exceeded "mid-write" and
+  surface as a truncated or rejected summary. That is not what the platform does.
+- CORRECT BEHAVIOR: GitHub gives **each step its own** 1 MiB step summary. Passing it fails that step's
+  summary **upload** and raises an error annotation in the run; the upload failure does **not** itself
+  change the status of the step or the job. The real pre-repair risk was a review DiffBeacon reported as
+  successful beside a Job Summary GitHub refused to publish.
+- GUARD: unchanged and still justified — `MAX_STEP_SUMMARY_BYTES = 1 * 1024 * 1024` and the
+  existing-bytes-plus-addition check were not removed and the exact limit was not altered. The guard moves
+  the failure into the Action, where it names the arithmetic and writes nothing partial. Corrected in
+  R4/ACTION SUMMARY above and in `docs/architecture/security.md` (Job Summary row).
+
+### D — EVENT SIZE RECORD CORRECTION
+
+- OLD RECORD: the event file was described as held to "the same 8 MiB input discipline" as the diff. That
+  is not what the code does, so the record was corrected rather than the code changed to fit it.
+- MEASUREMENT: the Action applies no DiffBeacon-specific size cap to `GITHUB_EVENT_PATH`; `MAX_DIFF_BYTES`
+  bounds the diff it collects, not the event it reads. An event fixture carrying approximately 8 MiB of
+  extra JSON alongside valid `pull_request.base.sha`/`.head.sha` is accepted and the review completes —
+  recorded as a permanent case in `tests/stage8.action-event-summary-paths.test.ts`.
+- DECISION: no arbitrary event limit was invented to make the old prose true. Event validity is governed by
+  shape and the full-object-ID contract. The corrected record is in EVENT FILE above and in
+  `docs/architecture/security.md`.
+
+## CLOSURE REGRESSION
+
+- Targeted suites (PHASE 10), Windows, `../stage8c/phase10-targeted-windows-final.log`: 11 files, 115
+  cases — `stage8.git-boundary`, `stage8c.action-workspace-isolation` (17),
+  `stage8c.markdown-display-controls` (15), `stage6.action-runner`, `stage6.action-security-boundary`,
+  `stage8.markdown-security`, `stage8.terminal-security`, `stage8.json-contract`,
+  `stage8.action-summary-bound`, `stage8.action-event-summary-paths`, `stage8.no-target-execution`.
+- Browser project (shared display code changed): `../stage8c/phase10-browser-windows.log` — 6 files, 132
+  cases, real Chromium.
+- Full gate chain on the working tree, Windows Node 24 (`../stage8c/phase11-full-windows-final.log`,
+  `CHECK_EXIT=0`): `format:check`, `lint`, `typecheck`, `test`, `build`, `package-smoke`, `action-smoke`,
+  `verify`, `check` all pass — `Test Files 59 passed (59)`, `Tests 1009 passed | 2 skipped (1011)`,
+  `Duration 768.17 s`; `action-smoke` reports `partialSummary=false`, `cliLeak=false`,
+  `oversizeRejected=true`, `cleanWorkspace=true`; `package-smoke` reports
+  `0.1.0; bin=true; engines=>=22; tarballFiles=3`.
+- Disclosed instability, three attempts before the run above: the first full run of the closure tree
+  (`../stage8c/phase11-full-windows-2.log`) failed one browser case,
+  `stage8.browser-corpus.test.ts` "paints name 6 exactly as the display policy decides", with
+  `page.goto: net::ERR_NETWORK_CHANGED` at `tests/stage7.browser-harness.ts:378` — the host network stack
+  changing underneath a live navigation, not an assertion about display controls. That run reported
+  `Tests 1008 passed | 1 failed | 2 skipped (1011)`. The case was not altered, weakened or skipped. The
+  second run (`phase11-full-windows-3.log`) stopped at `format:check` because a documentation edit landed
+  mid-run, and the third (`phase11-full-windows-4.log`) reached the manifest gate, which is where PHASE 14
+  had not yet been run. Only the final run is quoted as the result.
+
+## CLOSURE QUALIFICATION MATRIX (CLEAN CLONES OF THE PRODUCT SHA)
+
+Each cell is a fresh disposable clone of `98d0ab2fa7942d21e94b04305cd5fe04b2a0a9b1` made outside the
+repository (`../stage8c/cells/`), with its own `npm ci` and all ten gate commands
+(`npm ci`, `format:check`, `lint`, `typecheck`, `test`, `build`, `package-smoke`, `action-smoke`,
+`verify`, `check`). `check` aliases `verify` and `verify` runs the whole suite, so each cell executes the
+full suite three times.
+
+- **Linux `node:24`, container-native `/tmp` — 10/10 PASS.** `node=v24.21.0 npm=11.19.0 git=2.39.5`,
+  `core.autocrlf` unset, `worktree_clean_at_start=0`, `untracked_after=0`. `Test Files 53 passed | 6 skipped (59)`,
+  `Tests 878 passed | 133 skipped (1011)`. The 6 skipped files and 133 skipped cases are the serialized
+  browser lane (no Chromium in the container) plus the one pre-existing `runIf(win32)` release case; each
+  skip prints its own reason, so nothing here is a silent pass. Evidence:
+  `../stage8c/cell-linux-node24.log`, `../stage8c/cells/linux-node24/logs/`.
+  This cell is also the Linux half of Finding A: in it `stage8c.action-workspace-isolation.test.ts` passed
+  17/17 under Git 2.39.5 (4,636 ms), so the workspace-isolation contract is measured on both gitlines, not
+  only on Windows Git 2.55.0.windows.5.
+- **Windows Node 24 — 10/10 PASS.** `node=v24.21.0 npm=11.19.0 git=2.55.0.windows.5`, `autocrlf=true`,
+  `worktree_clean_at_start=0`, `untracked_after=0`. `Test Files 59 passed (59)`,
+  `Tests 1009 passed | 2 skipped (1011)`, `Duration 595.22 s`. The 2 skips are
+  `stage8.invalid-byte-paths`' real-Git half (Windows cannot hold a filename whose bytes are invalid
+  UTF-8), each printing its reason. All six browser files executed in real Chromium (85,666 ms to
+  537,983 ms per file, inside the serialized lane's 900 s per-hook budget). Evidence:
+  `../stage8c/cell-win-node24.log`, `../stage8c/cells/win-node24/logs/`.
+- **Linux `node:22` — 10/10 PASS.** `node=v22.23.3 npm=10.9.9 git=2.39.5`, `worktree_clean_at_start=0`,
+  `untracked_after=0`, `878 passed | 133 skipped (1011)`, same two bundle digests as the other cells.
+  Evidence: `../stage8c/cell-linux-node22.log`, `../stage8c/cells/linux-node22/logs/`.
+- **Windows Node 22 — 10/10 PASS.** The portable `node=v22.23.3 npm=10.9.9` runtime under
+  `../stage1/node22/`, host `git=2.55.0.windows.5`, `autocrlf=true`, `worktree_clean_at_start=0`,
+  `untracked_after=0`. `Test Files 59 passed (59)`, `Tests 1009 passed | 2 skipped (1011)`,
+  `Duration 665.53 s`, with all six browser files executed in real Chromium (144,518 ms to 615,720 ms per
+  file). Evidence: `../stage8c/cell-win-node22.log`, `../stage8c/cells/win-node22/logs/`. The `node=` line
+  was read from the cell's own log before the result was believed, because a PATH prepend given in Windows
+  drive-letter form silently resolves to the host Node 24 and turns a Node 22 cell into a duplicate Node 24
+  cell; the POSIX form was used. This cell was run last and alone — it took materially longer than the
+  Node 24 cells, and the brief's condition for spending that time ("if cheaply reusable") was met because
+  the runtime was already on this host from Stage 1.
+- `bundle_after_build` equals `bundle_committed` in every cell and equals the working-tree rebuild:
+  `45660da735388dee35fc581e94490d2aacc295b2382f8bea23ab12dff2350049`. The rebuilt CLI bundle is
+  `0ceb2e1e2ff3c8b77a793d654e1b66be3eaf5a685f6d8afcd1824b85524a4275` on Windows and Linux alike. No cell
+  needed a workflow, timeout or test-hospitality change; no cell was run concurrently with another.
+
+## CLOSURE RECORD
+
+```text
+STARTING SHA      41ec737fd4758ddbfb0c0305d838d86e85246c5f  (Stage 8 first-pass report commit)
+PRODUCT SHA       98d0ab2fa7942d21e94b04305cd5fe04b2a0a9b1  fix: close DiffBeacon Stage 8 trust boundaries
+                  10 files changed, 914 insertions(+), 65 deletions(-)
+BRANCH            rescue/stage0-source
+ORIGIN MAIN SHA   e0ff98143bfe39c80338518d006525a846a8739   (untouched — no merge, no PR)
+FINAL TEST TOTAL  Windows: 1009 passed | 2 skipped (1011)   ← 979 collected before the closure, +32 closure cases
+                  Linux:    878 passed | 133 skipped (1011)  (same 1011 collected; 133 honest skips, no Chromium)
+ACTION BUNDLE     45660da735388dee35fc581e94490d2aacc295b2382f8bea23ab12dff2350049
+                  (was 5f63ac2e6a04a755b2f8617ec27ae3ffb8a20ca54eecf1c078030c516ae00d61 at 41ec737)
+CLI BUNDLE        0ceb2e1e2ff3c8b77a793d654e1b66be3eaf5a685f6d8afcd1824b85524a4275  (untracked artifact)
+MANIFEST          SOURCE_MANIFEST.txt 145 → 148 entries; 3 added, 0 removed, 6 changed hashes
+                  sha256 859205c9d4f9ef96dc1b5d8690a58afac737776a2497b497cbf0e9e5a2a9e384
+```
+
+- **FINAL TEST TOTAL** moved from 979 collected cases to 1011 because the closure added two suites
+  (17 + 15 = 32 cases). Not one previous-stage test was deleted, relaxed or duplicated to reach the number;
+  the only change to an existing file's assertions was the disclosed derivation of
+  `stage8.markdown-security.test.ts`'s expectation helper from the shared policy, with its 9 cases and its
+  structure intact (`../stage8c/green-B-restored.log`).
+- **MANIFEST**: added `tests/stage8c.action-workspace-isolation.test.ts`,
+  `tests/stage8c.markdown-display-controls.test.ts`, `tests/stage8.display-policy-oracle.ts`; changed
+  `docs/architecture/security.md`, `packages/action/src/index.ts`, `packages/action/dist/index.js`,
+  `packages/cli/src/git.ts`, `packages/core/src/render.ts`,
+  `tests/stage8.markdown-security.test.ts`. `docs/audits/**` remains excluded, so this report costs no
+  manifest churn. `npm run manifest` then `npm run verify` are green (`../stage8c/phase14-manifest.log`).
+- **HOSTED CI**: per HOSTED CI above, the single observation this closure permits is taken after the one
+  forward push that carries it and is written **outside** the repository to
+  `../stage8c/ci-observation.md` — a commit cannot contain its own hash, and recording the branch tip's CI
+  result by committing again would start the docs-commit chain the brief forbids. The most recent hosted
+  observation on this branch remains run `36328635359` (head `74d79f94…`): four jobs, 2–3 s each, every one
+  with `steps: []` and no runner, conclusion failure — **EXTERNAL CI BLOCKED**. Nothing of DiffBeacon's was
+  checked out, installed, built or tested on a hosted runner for this closure, no hosted claim is made, and
+  the qualification behind the decision below is entirely the local gate chains and clean-clone cells
+  recorded above. No re-run was triggered and no workflow file was changed because of the blockage.
+- **WORKING TREE**: after the final `npm run check`, `git status --short --untracked-files=all` shows only
+  files this closure intentionally created or modified; the pnpm debris that reappears in this working tree
+  (`pnpm-lock.yaml`, `pnpm-workspace.yaml`) was hashed and moved out to `../stage8c/pnpm-debris/`, never
+  staged, never deleted, and no `node_modules`, dist bundle (other than the tracked Action bundle), browser
+  binary, profile, screenshot, log, sentinel or temporary repository is staged. `untracked_after=0` inside
+  every clean-clone cell.
+
+## STAGE 8 CLOSURE DECISION
+
+**PASS.** Both defects the auditor identified are reproduced from the committed artifacts, repaired, and
+pinned by GREEN suites that each carry a falsification control failing when the repair is removed: the
+Action now holds `GITHUB_WORKSPACE` as the reviewed-repository boundary against every ambient Git selector
+that measurably redirected it, on both gitlines, while the CLI's operator-owned inheritance is left as
+recorded; Markdown now applies the shared display-control policy at the human presentation boundary while
+JSON stays byte-exactly raw and the Stage 8 GFM pipe repair stays green. Both record corrections (per-step
+1 MiB summary upload semantics; the absence of a DiffBeacon event-file size cap) are written into this
+report and `docs/architecture/security.md` without weakening either guard. Full regression is green at
+1011 collected cases on Windows and Linux, the shipped bundles rebuild byte-for-byte in every cell, and
+the qualification ran on four clean clones of the product SHA — Windows Node 24 and Node 22, Linux
+`node:24` and Linux `node:22` — each of them passing all ten gates.
+
+## NEXT RECOMMENDED ROADMAP STAGE AFTER CLOSURE
+
+Unchanged by this closure: **Stage 9 — CI AND PACKAGE QUALIFICATION**, whose first decisions are the ones
+listed above plus the two this closure adds — the `GIT_*` child-environment policy now differing between the
+CLI and the Action (Stage 9 must not unify them casually; the difference is measured), and the serialized
+browser lane's headroom, which this closure re-measured at 85.7 s to 538.0 s per file on Windows Node 24
+and 144.5 s to 615.7 s per file on Windows Node 22 — inside a 900 s per-hook budget on both, but with only
+one file's worth of headroom left on the slower runtime.
+
+**DO NOT begin Stage 9.** Stage 8 and its closure stop here.
