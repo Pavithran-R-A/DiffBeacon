@@ -5,6 +5,7 @@
 
 export * from './analyze.js';
 export * from './detectors/registry.js';
+export * from './display.js';
 export * from './model.js';
 export * from './parser.js';
 export * from './render.js';

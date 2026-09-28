@@ -4,18 +4,20 @@ DiffBeacon is designed to analyze untrusted change descriptions without executin
 
 ## Threat surface and controls
 
-| Input                   | Threat                                                                                                                            | Control                                                                                                                                                                                                                                                   |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Revision/range argument | Shell injection, option confusion, object ambiguity                                                                               | Reject whitespace/control/metacharacters and option-leading tokens; resolve with bounded `git rev-parse --verify --quiet --end-of-options` argv; use `shell: false`                                                                                       |
-| Diff text               | Parser confusion, resource exhaustion, terminal/Markdown/HTML injection                                                           | Parse line-by-line; never evaluate; browser input cap at 8 MiB; sanitize terminal controls; escape Markdown table/HTML characters                                                                                                                         |
-| File path               | Path traversal-looking or markup-looking display text                                                                             | Treat as an opaque label; pass `--` to Git; never use diff paths as filesystem targets; render as text                                                                                                                                                    |
-| PR event metadata       | Untrusted SHA/ref injection                                                                                                       | Action accepts only `pull_request`, and only full commit object IDs (40 hexadecimal, or 64 for SHA-256) from `pull_request.base.sha`/`.head.sha`; it runs Git in `GITHUB_WORKSPACE`, never the process' own location                                      |
-| Target repository       | Arbitrary code execution                                                                                                          | No hooks, scripts, test/build commands, changed-file execution, dependency installation, or shell sourcing                                                                                                                                                |
-| Git behavior            | Config-dependent patch shape, hidden/expanded submodule diffs, external diff/text-conversion execution, unbounded binary payloads | `--no-ext-diff --no-textconv --no-color --src-prefix=a/ --dst-prefix=b/ --ignore-submodules=none --submodule=short --diff-algorithm=myers --find-renames=50% -l1000 --unified=3`; omit `--binary` because the parser only needs structural binary markers |
-| GitHub token            | Excessive write capability                                                                                                        | Recommended workflow permission is `contents: read` with `persist-credentials: false`; the Action writes only `$GITHUB_STEP_SUMMARY` and authenticates to nothing                                                                                         |
-| Source code             | Unwanted upload                                                                                                                   | Browser path is local-only; no backend or telemetry dependency                                                                                                                                                                                            |
+| Input                   | Threat                                                                                                                            | Control                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revision/range argument | Shell injection, option confusion, object ambiguity                                                                               | Reject whitespace/control/metacharacters and option-leading tokens; resolve with bounded `git rev-parse --verify --quiet --end-of-options` argv; use `shell: false`                                                                                                                                                                         |
+| Diff text               | Parser confusion, resource exhaustion, terminal/Markdown/HTML injection                                                           | Parse line-by-line; never evaluate; browser input cap at 8 MiB; paint-time display policy in `packages/core/src/display.ts` (see "Rendering boundary"); escape Markdown table/HTML characters                                                                                                                                               |
+| File path               | Path traversal-looking or markup-looking display text                                                                             | Treat as an opaque label; pass `--` to Git; never use diff paths as filesystem targets; render as text; measured over traversal-, shell-, markup-, and Windows-device-shaped names, of which none is ever opened — the only path the program honours is the operator's own explicit `--output`                                              |
+| PR event metadata       | Untrusted SHA/ref injection                                                                                                       | Action accepts only `pull_request`, and only full commit object IDs (40 hexadecimal, or 64 for SHA-256) from `pull_request.base.sha`/`.head.sha`; it runs Git in `GITHUB_WORKSPACE`, never the process' own location                                                                                                                        |
+| Event JSON shape        | A well-formed but unusable payload leaking an engine error                                                                        | Anything that is not an object is refused with a message naming `GITHUB_EVENT_PATH` and the two fields the Action reads; arrays, strings, numbers, booleans and `null` each fail that check with the same stable message, and a 100,000-level nesting is stopped by the object-ID contract rather than by a depth limit of DiffBeacon's own |
+| Job Summary size        | An unbounded append to the one file the Action writes                                                                             | Before appending, the Action compares the UTF-8 size of the addition plus the existing file with GitHub's own 1,048,576-byte step-summary limit and fails the review without writing a partial report                                                                                                                                       |
+| Target repository       | Arbitrary code execution                                                                                                          | No hooks, scripts, test/build commands, changed-file execution, dependency installation, or shell sourcing; measured on both adapters, each "nothing ran" case paired with a live control proving the same fixture does run a program when unprotected                                                                                      |
+| Git behavior            | Config-dependent patch shape, hidden/expanded submodule diffs, external diff/text-conversion execution, unbounded binary payloads | `--no-ext-diff --no-textconv --no-color --src-prefix=a/ --dst-prefix=b/ --ignore-submodules=none --submodule=short --diff-algorithm=myers --find-renames=50% -l1000 --unified=3`; omit `--binary` because the parser only needs structural binary markers; `core.quotePath` true and false both parse to the same name                      |
+| GitHub token            | Excessive write capability                                                                                                        | Recommended workflow permission is `contents: read` with `persist-credentials: false`; the Action writes only `$GITHUB_STEP_SUMMARY` and authenticates to nothing                                                                                                                                                                           |
+| Source code             | Unwanted upload                                                                                                                   | Browser path is local-only; no backend or telemetry dependency                                                                                                                                                                                                                                                                              |
 
-## Safe Git flow
+## From a range to a diff
 
 ```text
 user range
@@ -35,6 +37,18 @@ user range
 
 The CLI and Action never construct `exec('git diff ' + userInput)`. Small repository-root and revision-resolution metadata queries use bounded argument-vector execution; the actual diff uses a bounded asynchronous `spawn` stream. Both boundaries use `shell: false`, and diff collection explicitly owns prefixes (`--src-prefix=a/ --dst-prefix=b/`), submodule handling (`--ignore-submodules=none --submodule=short`), the Myers algorithm, a 50% rename threshold, and a bounded rename limit of 1000. Submodule pointer changes are therefore collected in fixed short form and cannot be hidden or expanded by repository Git configuration. Command-line prefixes take precedence over `diff.noprefix`, `diff.srcPrefix`, `diff.dstPrefix`, and `diff.mnemonicPrefix`, and are used instead of `--default-prefix` because that option is not available on older still-common Git releases that the explicit pair supports. `--binary` is intentionally omitted: ordinary `Binary files ... differ` markers preserve classification without emitting `GIT binary patch` payloads. The Action uses trusted event SHAs and the same vectorized `git diff` invocation. It does not use `pull_request_target` or a privileged checkout of untrusted code.
 
+Ambient Git variables are not rewritten. `GIT_DIR`, `GIT_WORK_TREE`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`
+and their siblings do select which repository Git reads — that was measured, not assumed — but the
+operator owns the environment the Action or CLI runs in, and a workflow able to set them is already
+able to select the code that runs. Clearing them would hide a misconfiguration without removing it, so
+DiffBeacon leaves the environment intact and fails bounded when it hides the revision. `diff.external`
+and textconv drivers named by repository config, by `GIT_CONFIG_COUNT`, or by the ambient environment
+are never reached, because `--no-ext-diff --no-textconv` are part of the pinned vector; dropping
+`--no-ext-diff` was measured to make the matching case fail, and dropping the explicit prefixes does
+the same for the four cases that depend on them. No Git command is ever started through a shell, and no
+`GIT_PAGER` defence is claimed: a live pager control could not be reproduced on the host this
+qualification ran on, so that path is recorded as unproven rather than as covered.
+
 ## Action trust domains
 
 The Action separates two things a careless workflow merges:
@@ -52,7 +66,20 @@ drivers cannot name a program.
 package lifecycle scripts, `.npmrc`, Git hooks, external diff, textconv driver, executable
 files, and pull-request-authored `action.yml` and Action bundle each write a sentinel when
 run, and pairs every "nothing ran" assertion with a live control proving the same fixture does
-execute a program under an unprotected Git command.
+execute a program under an unprotected Git command. `tests/stage8.no-target-execution.test.ts`
+makes the same measurement of the operator-facing CLI path — a repository whose package lifecycle
+scripts, `.npmrc`, external diff driver, hooks path and committed executable mode are all booby
+trapped — and records that a review leaves no sentinel, no `node_modules`, no lockfile, an unchanged
+manifest, and a clean `git status`, while the `100755` mode still reaches the report as data.
+
+The Action's two other boundaries are the event payload and its single output file. The event JSON
+must be an object: `null`, an array, a string, a number, and a boolean each fail with the same stable
+message that names `GITHUB_EVENT_PATH` and the two fields read from it, and a deeply nested payload is
+rejected by the object-ID contract rather than by a depth limit of DiffBeacon's own. On the output
+side, a 30,000-file, 4,703,340-byte diff — inside the 8 MiB input bound — renders 1,958,803 bytes of
+Job Summary against GitHub's own 1,048,576-byte limit, so the size is reachable, and the Action now
+compares UTF-8 bytes (the addition plus the file already on disk) before appending and fails closed
+without writing a partial report. No smaller product limit was invented; the guard is GitHub's number.
 
 Because a runner takes its entrypoint from the checked-out tree, `uses: ./` under
 `on: pull_request` makes the reviewed change the one that selects the code that runs — the
@@ -72,8 +99,85 @@ and the Job Summary is the Action's only output.
 
 ## Rendering boundary
 
-The core report contains strings but no HTML. The browser renders React text nodes and `<code>` children, not HTML strings. The Markdown renderer replaces backslashes, pipes, backticks, angle brackets, and newlines before placing dynamic values into tables or headings. The pretty renderer removes control characters before printing path and evidence text.
+The core report contains strings but no HTML. The browser renders React text nodes and `<code>`
+children, not HTML strings. The Markdown renderer replaces backslashes, pipes, backticks, angle
+brackets, and newlines before placing dynamic values into tables or headings.
+
+Control and bidi text is handled by one shared policy, `packages/core/src/display.ts`, applied where
+text is painted — never inside the report data. It has three measured classes. Reordering controls
+(U+061C, U+200E/U+200F, U+202A-U+202E, U+2066-U+2069) are removed, because they move the reader's
+cursor through the rest of the line. Line-shaping controls (a CR/LF pair, tab, the other C0 line
+breaks, U+0085, U+2028, U+2029) become one space, because their whole effect is to reshape the line.
+Executable controls (the remaining C0 and the C1 range, including ESC) become the surface's own marker,
+because a terminal interprets them. Everything else is left alone on purpose: confusables and
+homoglyphs are not detected, ordinary Arabic and Hebrew text is not reordered or stripped, and the
+zero-width formatters U+200B-U+200D are painted verbatim because they carry meaning in Persian, Arabic,
+and Indic names while being unable to move a cursor, execute in a terminal, or reorder a line.
+
+The data stays factual. `renderJson` and the clipboard export keep the raw value, so a control
+character survives to a JSON consumer as an escape rather than being silently rewritten; the same is
+true of a path that merely looks like `../`, a shell command, or a Windows device name, none of which
+is ever opened. A name with trailing whitespace is the one measured exception: Git's C-quoted header
+form is recognised by trimming, so `src/x ` is displayed as `src/x`.
+
+Painting hostile text was measured in real Chromium over the shared corpus, including a name carrying a
+U+202E override at 800 characters, where no `<code>` element escapes its own pile and the page's
+horizontal overflow stays exactly zero; the containment comes from CSS that already existed, so no
+layout change was made for it.
+
+## Outputs, write sinks, and artifacts
+
+Two places in shipped code write anything: the Action appends to `GITHUB_STEP_SUMMARY`, and the CLI
+writes to an explicit `--output`. The `--output` target is the operator's own choice and is honoured
+verbatim — including a basename a Windows shell reserves, where Node's write API really does create a
+file with that name — while a target in a directory that does not exist exits with the CLI's
+write-error code and creates nothing. Nothing on the report path reads `.npmrc`, writes Git config,
+creates a temporary file, or makes a directory.
+
+A permanent guard scans the four shipped source trees for the APIs none of them has a use for:
+`eval(`, `new Function(`, `execSync(`, `shell: true`, and every markup, cookie, storage, and network
+sink. It finds zero of each, and the only process starts remain `execFileSync` plus one asynchronous
+`spawn` of `git`, both with `shell: false`. After a clean build, the tracked Action bundle and the
+built CLI bundle still carry all twelve pinned revision and diff flags verbatim, contain no `http(s)`
+endpoint and no marker of the machine that built them, and list `child_process` as the only entry on
+that dangerous-name scan — the module the single `git` start uses.
+
+Report values are data, including the ones that look like instructions. A path is only ever a value in
+the JSON, never a key, so a `__proto__`-shaped name cannot reach a prototype, and the canaries that
+would have caught a mutation stay unwritten. A seeded fuzz (seed `0x5eed1a11`, 1,500 mutated inputs
+built from nine seed diffs and fourteen fragments) holds the contract across every one: the parser and
+the three renderers never throw, every count is finite and a whole non-negative number or an honest
+`null` on a binary or mode-only file, no rendered terminal line carries a control character, the same
+input always yields the same report, and JSON round-trips unchanged.
+
+A credential scan of the tracked tree and the committed bundles read 151 paths (150 as text, one
+quarantine archive skipped as binary) and reported one match: an `AKIA`-shaped canary inside
+`tests/stage7.browser-security.test.ts`, which exists so that test can assert nothing leaves the page.
+The scanner prints names and counts, never values.
 
 ## What this does not prove
 
-These controls reduce the intended attack surface but do not constitute a claim of “100% secure.” Git implementations, operating systems, dependency supply chains, CI configuration, and future adapters require independent review. The audit should pay particular attention to revision validation, parser edge cases, Markdown escaping, Action workflow permissions, and package-bundle provenance.
+These controls reduce the intended attack surface but do not constitute a claim of “100% secure.” Git
+implementations, operating systems, dependency supply chains, CI configuration, and future adapters
+require independent review. The audit should pay particular attention to revision validation, parser
+edge cases, Markdown escaping, Action workflow permissions, and package-bundle provenance.
+
+Specifically left open, each for a recorded reason rather than by assumption:
+
+- **No hosted CI outcome is claimed here.** Every number above comes from a command run locally; this
+  repository's Actions runs have repeatedly been starved of runners in this environment, and the one
+  run observed after this push is recorded in the Stage 8 report rather than here.
+- **Action pins are not resolved to tags.** Both workflows reference full commit SHAs with minimum
+  permissions, but confirming a SHA really is the tagged release needs a network lookup, so the
+  mapping is recorded as unverified.
+- **Dependency advisories are carried, not closed.** Against the tracked lockfile, `npm audit` reports
+  four advisories in build and test tooling; the three published packages declare zero runtime
+  dependencies, so none reaches a shipped artifact. Refreshing the lockfile needs its own
+  qualification run.
+- **Platform-specific measurements were skipped honestly.** Names that POSIX allows but Windows
+  refuses, and the real-Git oracle for a trailing-space name, need a Linux host; the browser suites
+  skip with a recorded reason where no engine is installed. This pass ran on Windows.
+- **A fuzz corpus is not an absence proof.** The seeded 1,500 inputs guard the contract that was
+  written down; they say nothing about inputs outside it.
+- **DiffBeacon does not decide whether a pull request is safe to merge**, and none of these controls
+  make it a code reviewer, a vulnerability scanner, or a risk model.

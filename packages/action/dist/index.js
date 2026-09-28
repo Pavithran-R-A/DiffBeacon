@@ -1,5 +1,5 @@
 // packages/action/src/index.ts
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, statSync } from "node:fs";
 import process3 from "node:process";
 
 // packages/core/src/model.ts
@@ -898,6 +898,14 @@ function analyzeDiff(input) {
   };
 }
 
+// packages/core/src/display.ts
+var LINE_SHAPING = /\r\n|[\t\u000a-\u000d\u0085\u2028\u2029]/g;
+var EXECUTABLE = /[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/g;
+var REORDERING = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+function neutralizeDisplayControls(value, marker) {
+  return value.replace(REORDERING, "").replace(LINE_SHAPING, " ").replace(EXECUTABLE, marker);
+}
+
 // packages/core/src/render.ts
 function number(value) {
   return value === null ? "\u2014" : new Intl.NumberFormat("en-US").format(value);
@@ -907,6 +915,10 @@ function escapeMarkdown(value) {
 }
 function markdownCode(value) {
   return `\`${value.replaceAll("\r", " ").replaceAll("\n", " ").replaceAll("`", "&#96;")}\``;
+}
+function markdownTableCellCode(value) {
+  const escapedBackslashes = value.includes("|") ? value.replaceAll("\\", "\\\\") : value;
+  return markdownCode(escapedBackslashes.replaceAll("|", "\\|"));
 }
 function renderMarkdown(report) {
   const lines = [
@@ -958,7 +970,7 @@ function renderMarkdown(report) {
     "| Status | Path | Additions | Deletions | Surfaces |",
     "| --- | --- | ---: | ---: | --- |",
     ...report.files.length === 0 ? ["| \u2014 | No files observed | \u2014 | \u2014 | \u2014 |"] : report.files.map(
-      (file) => `| ${escapeMarkdown(file.status)} | ${markdownCode(file.displayPath)} | ${number(file.additions)} | ${number(file.deletions)} | ${file.surfaces.map(escapeMarkdown).join(", ") || "unclassified"} |`
+      (file) => `| ${escapeMarkdown(file.status)} | ${markdownTableCellCode(file.displayPath)} | ${number(file.additions)} | ${number(file.deletions)} | ${file.surfaces.map(escapeMarkdown).join(", ") || "unclassified"} |`
     ),
     ""
   ];
@@ -972,13 +984,13 @@ import process2 from "node:process";
 // packages/cli/src/errors.ts
 var MAX_ECHO_CHARS = 120;
 var MAX_DETAIL_CHARS = 512;
-var CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+var MESSAGE_MARKER = " ";
 function echo(value) {
-  const printable = value.replace(CONTROL_CHARS, " ");
+  const printable = neutralizeDisplayControls(value, MESSAGE_MARKER);
   return printable.length <= MAX_ECHO_CHARS ? JSON.stringify(printable) : `${JSON.stringify(printable.slice(0, MAX_ECHO_CHARS))} ...(truncated)`;
 }
 function boundedSingleLine(value, limit = MAX_DETAIL_CHARS) {
-  const line = value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+  const line = neutralizeDisplayControls(value, MESSAGE_MARKER).trim();
   return line.length <= limit ? line : `${line.slice(0, limit)} ...(truncated)`;
 }
 var UsageError = class extends Error {
@@ -1204,6 +1216,7 @@ function pullRequestRange(event) {
 }
 
 // packages/action/src/index.ts
+var MAX_STEP_SUMMARY_BYTES = 1 * 1024 * 1024;
 function required(env, name) {
   const value = env[name];
   if (typeof value !== "string" || value === "")
@@ -1219,13 +1232,32 @@ function readEvent(eventPath) {
   } catch {
     throw new Error(`GITHUB_EVENT_PATH could not be read: ${echo(eventPath)}.`);
   }
+  let parsed;
   try {
-    return JSON.parse(raw);
+    parsed = JSON.parse(raw);
   } catch {
     throw new Error("GITHUB_EVENT_PATH is not valid JSON for a workflow event.");
   }
+  if (parsed === null || typeof parsed !== "object")
+    throw new Error(
+      "GITHUB_EVENT_PATH does not hold a JSON object for a workflow event: DiffBeacon reads pull_request.base.sha and pull_request.head.sha from the object the runner wrote."
+    );
+  return parsed;
+}
+function summaryBytesBefore(summaryPath) {
+  try {
+    return statSync(summaryPath).size;
+  } catch {
+    return 0;
+  }
 }
 function writeSummary(summaryPath, markdown) {
+  const addition = Buffer.byteLength(markdown, "utf8");
+  const before = summaryBytesBefore(summaryPath);
+  if (before + addition > MAX_STEP_SUMMARY_BYTES)
+    throw new Error(
+      `The step summary already holds ${before} bytes and this review needs ${addition}, which would pass the ${MAX_STEP_SUMMARY_BYTES} bytes GitHub gives GITHUB_STEP_SUMMARY. Nothing was appended, so the file is exactly as it was: narrow the reviewed range, or read the report from the CLI.`
+    );
   try {
     appendFileSync(summaryPath, markdown, { encoding: "utf8" });
   } catch {

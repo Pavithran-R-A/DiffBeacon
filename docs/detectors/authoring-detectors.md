@@ -44,7 +44,7 @@ Word descriptions as observations: "Authentication or authorization files change
    registration order and lists a renamed file once, so a matcher must be written to be
    true of either side; relationship evidence for a rename is tested in
    `tests/stage3.evidence.test.ts`.
-7. **`<unknown path>` safety** — matchers receive only paths the parser proved. Never
+7. **`<unknown path>` handling** — matchers receive only paths the parser proved. Never
    match against `displayPath`, and never let the `UNKNOWN_PATH_SENTINEL` presentation
    placeholder reach a matcher; `consideredPaths()` already filters it out.
 8. **Documented limitation** — add a section to `docs/detectors/initial-detectors.md`

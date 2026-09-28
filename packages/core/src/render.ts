@@ -4,6 +4,7 @@
  */
 
 import type { ReviewAttentionMap } from './model.js';
+import { neutralizeDisplayControls } from './display.js';
 
 function number(value: number | null): string {
   return value === null ? '—' : new Intl.NumberFormat('en-US').format(value);
@@ -15,9 +16,7 @@ function countNoun(value: number | null, singular: string): string {
 }
 
 function terminalText(value: string): string {
-  return value
-    .replace(/[\u0000-\u001f\u007f\u001b]/g, (character) => (character === '\t' ? ' ' : '�'))
-    .replaceAll('\n', ' ');
+  return neutralizeDisplayControls(value, '\uFFFD');
 }
 
 export function escapeMarkdown(value: string): string {
@@ -41,6 +40,17 @@ export function escapeMarkdown(value: string): string {
 
 function markdownCode(value: string): string {
   return `\`${value.replaceAll('\r', ' ').replaceAll('\n', ' ').replaceAll('`', '&#96;')}\``;
+}
+
+/**
+ * A GFM table row splits on every pipe, including one inside a code span, so a pipe
+ * in a path has to reach the cell as `\|` (spec Example 200). A backslash is doubled
+ * only when the same name also holds a pipe: a lone backslash cannot open a cell, and
+ * doubling one would print `\\` in every Windows-style path.
+ */
+function markdownTableCellCode(value: string): string {
+  const escapedBackslashes = value.includes('|') ? value.replaceAll('\\', '\\\\') : value;
+  return markdownCode(escapedBackslashes.replaceAll('|', '\\|'));
 }
 
 function level(level: string, color: boolean): string {
@@ -136,7 +146,7 @@ export function renderMarkdown(report: ReviewAttentionMap): string {
       ? ['| — | No files observed | — | — | — |']
       : report.files.map(
           (file) =>
-            `| ${escapeMarkdown(file.status)} | ${markdownCode(file.displayPath)} | ${number(file.additions)} | ${number(file.deletions)} | ${file.surfaces.map(escapeMarkdown).join(', ') || 'unclassified'} |`,
+            `| ${escapeMarkdown(file.status)} | ${markdownTableCellCode(file.displayPath)} | ${number(file.additions)} | ${number(file.deletions)} | ${file.surfaces.map(escapeMarkdown).join(', ') || 'unclassified'} |`,
         )),
     '',
   ];

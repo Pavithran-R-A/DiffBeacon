@@ -35,6 +35,7 @@ import {
 import {
   analyzeDiff,
   MAX_DIFF_BYTES,
+  neutralizeDisplayControls,
   type ReviewAttentionMap,
   type SurfaceObservation,
 } from '@core/index';
@@ -119,6 +120,15 @@ function utf8Bytes(value: string) {
   return new TextEncoder().encode(value).length;
 }
 
+/**
+ * Paint a repository name without letting an embedded bidi override mirror the rest of the
+ * name, or an 8-bit control open a gap in the page's own text. Same policy as the terminal
+ * renderer; the report keeps the raw name.
+ */
+function paintedName(value: string) {
+  return neutralizeDisplayControls(value, '\uFFFD');
+}
+
 function AppMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className={compact ? 'app-mark app-mark--compact' : 'app-mark'} aria-hidden="true">
@@ -196,7 +206,7 @@ function AttentionRow({ item, index }: { item: SurfaceObservation; index: number
         <p>{item.description}</p>
         <div className="file-pile">
           {item.files.slice(0, 3).map((file) => (
-            <code key={file}>{file}</code>
+            <code key={file}>{paintedName(file)}</code>
           ))}
           {item.files.length > 3 && <span>+{item.files.length - 3} more</span>}
         </div>
@@ -275,7 +285,7 @@ function EvidenceLedger({ report }: { report: ReviewAttentionMap }) {
                 <p>{item.message}</p>
                 <div className="ledger-item__paths">
                   {item.relatedFiles.slice(0, 2).map((file) => (
-                    <code key={file}>{file}</code>
+                    <code key={file}>{paintedName(file)}</code>
                   ))}
                 </div>
               </div>
