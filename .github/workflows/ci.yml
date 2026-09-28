@@ -13,15 +13,20 @@ permissions:
   contents: read
 
 jobs:
-  quality:
-    name: Node ${{ matrix.node }} / ${{ matrix.os }}
+  source:
+    name: Source ${{ matrix.os }} / Node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         node: [22, 24]
+    env:
+      # The Chromium suites belong to the `browser` job below. Running them in all four cells would
+      # repeat 132 engine cases without qualifying anything new; the harness reports this suppression
+      # instead of pretending the cases ran.
+      DIFFBEACON_SKIP_BROWSER: '1'
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -30,7 +35,49 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+      # Runs before `npm ci` on purpose: it needs Node and Git only, so a credential never has to
+      # be installed alongside before the gate notices it.
+      - name: Secret scan
+        run: npm run secret-scan
       - name: Install dependencies
         run: npm ci
+      # The published packages ship no runtime dependencies, so this is the surface a consumer
+      # installs into; it stays blocking at high/critical.
+      - name: Dependency audit (release surface)
+        run: npm audit --omit=dev --audit-level=high
+      # Blocking here is affordable because the current tree is qualified at zero advisories; the
+      # threshold is high rather than moderate so a dev-only moderate finding is triaged instead of
+      # leaving the branch permanently red.
+      - name: Dependency audit (development tree)
+        run: npm audit --audit-level=high
       - name: Verify quality
         run: npm run check
+      - name: Action bundle freshness (committed artifact equals rebuild)
+        run: git diff --exit-code -- packages/action/dist/index.js
+
+  browser:
+    name: Browser lane (ubuntu-latest / Node 24)
+    runs-on: ubuntu-latest
+    # All 132 Chromium cases measured 876.6 s on the qualification host with an engine required;
+    # 45 minutes leaves roughly three times that budget before a wedged engine is killed.
+    timeout-minutes: 45
+    env:
+      # Fail-closed: with this set, a missing Chromium-class engine aborts the lane at import time
+      # rather than skipping every browser suite and reporting success.
+      DIFFBEACON_REQUIRE_BROWSER: '1'
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Secret scan
+        run: npm run secret-scan
+      # Each suite prints `browser engine: <name>; version=<version>` when it first launches, so the
+      # log names the real engine behind any claim this job makes.
+      - name: Browser suites (real Chromium required)
+        run: npm run test:browser

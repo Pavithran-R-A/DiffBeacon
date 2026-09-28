@@ -65,12 +65,36 @@ function candidateEngines(): { name: string; executablePath: string }[] {
   return found;
 }
 
-const selected = candidateEngines().find((engine) => existsSync(engine.executablePath));
+const locatedEngine = candidateEngines().find((engine) => existsSync(engine.executablePath));
+
+/**
+ * Two CI-only switches, both inert when unset so a local run keeps its honest skip:
+ * `DIFFBEACON_REQUIRE_BROWSER=1` fails the lane when no engine exists, and
+ * `DIFFBEACON_SKIP_BROWSER=1` keeps the expensive Chromium cases out of a matrix cell that is there
+ * to qualify source and package behaviour rather than a browser.
+ */
+const engineRequired = process.env.DIFFBEACON_REQUIRE_BROWSER === '1';
+const engineSuppressed = process.env.DIFFBEACON_SKIP_BROWSER === '1';
+
+export const browserSkipReason = engineSuppressed
+  ? 'this lane sets DIFFBEACON_SKIP_BROWSER=1, so the Chromium suites are deliberately not run here; the dedicated browser lane owns them'
+  : 'no Chromium-class browser engine is installed on this host; Stage 7 refuses to present a DOM simulation as browser E2E';
+
+if (engineRequired && engineSuppressed)
+  throw new Error(
+    'DIFFBEACON_REQUIRE_BROWSER=1 and DIFFBEACON_SKIP_BROWSER=1 cannot both be set: the lane would demand a browser engine and forbid one.',
+  );
+
+if (engineRequired && !locatedEngine)
+  throw new Error(
+    `DIFFBEACON_REQUIRE_BROWSER=1 but ${browserSkipReason}. Install a Chromium-class engine or clear the flag.`,
+  );
+
+const selected = engineSuppressed ? undefined : locatedEngine;
 
 export const browserEngine: { name: string; executablePath: string } | null = selected ?? null;
 
-export const browserSkipReason =
-  'no Chromium-class browser engine is installed on this host; Stage 7 refuses to present a DOM simulation as browser E2E';
+let engineReported = false;
 
 /**
  * A non-secure origin is the only honest way to observe a missing clipboard API, so the
@@ -82,10 +106,15 @@ export async function launchBrowser(
   options: { args?: string[]; viewport?: { width: number; height: number } } = {},
 ): Promise<Browser> {
   if (!browserEngine) throw new Error(browserSkipReason);
-  return chromium.launch({
+  const browser = await chromium.launch({
     executablePath: browserEngine.executablePath,
     args: [...resolverArgs, ...(options.args ?? [])],
   });
+  if (!engineReported) {
+    engineReported = true;
+    console.log(`browser engine: ${browserEngine.name}; version=${browser.version()}`);
+  }
+  return browser;
 }
 
 const contentTypes: Record<string, string> = {

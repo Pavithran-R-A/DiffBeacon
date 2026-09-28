@@ -1,10 +1,11 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { npmReviewInvocation, runNpmBinShim } from './npm-bin-shim.mjs';
 import { runTrustedNpm } from './npm-cli.mjs';
+import { scanDirectory } from './secret-scan.mjs';
 
 const root = process.cwd();
 const temp = mkdtempSync(path.join(tmpdir(), 'diffbeacon-package-'));
@@ -56,6 +57,10 @@ try {
     throw new Error(`Tarball is missing the CLI bundle or metadata: ${files.join(', ')}`);
   if (files.some((file) => /(^|\/)(test|tests|node_modules|\.env)(\/|$)/i.test(file)))
     throw new Error(`Tarball contains source junk: ${files.join(', ')}`);
+  // A package that declares `license: MIT` has to ship the text it grants under; the
+  // declared field alone is not something a consumer can read after installation.
+  if (!files.includes('LICENSE'))
+    throw new Error(`Tarball omits the license text: ${files.join(', ')}`);
 
   const project = path.join(temp, 'consumer');
   mkdirSync(project, { recursive: true });
@@ -80,6 +85,49 @@ try {
   const installedManifest = JSON.parse(
     readFileSync(path.join(project, 'node_modules', 'diffbeacon', 'package.json'), 'utf8'),
   );
+  const installedLicense = readFileSync(
+    path.join(project, 'node_modules', 'diffbeacon', 'LICENSE'),
+    'utf8',
+  );
+  if (installedLicense !== readFileSync(path.join(root, 'LICENSE'), 'utf8'))
+    throw new Error('Installed package license is not the repository license text.');
+  // A consumer receives the bundle rather than the source tree, so the credential scan has to
+  // run against what actually landed in node_modules.
+  const packageDir = path.join(project, 'node_modules', 'diffbeacon');
+  // The tarball is packed from the repository manifest, so that file - not whatever the installed
+  // manifest happens to claim - is what the installed version has to agree with.
+  const sourceManifest = JSON.parse(
+    readFileSync(path.join(root, 'packages', 'cli', 'package.json'), 'utf8'),
+  );
+  if (installedManifest.version !== sourceManifest.version)
+    throw new Error(
+      `Installed package version ${installedManifest.version} is not the version the tarball was packed from (${sourceManifest.version}).`,
+    );
+  const runtimeDependencies = Object.entries(installedManifest.dependencies ?? {});
+  if (runtimeDependencies.length > 0)
+    throw new Error(
+      `Installed package declares runtime dependencies: ${runtimeDependencies
+        .map(([name, specifier]) => `${name}@${specifier}`)
+        .join(', ')}`,
+    );
+  // `bin` is the only thing npm hands a consumer, so the file it names has to be in the package and
+  // has to be executable on its own: the Windows shim runs it through Node either way, but a POSIX
+  // consumer execs it directly.
+  const declaredBin =
+    typeof installedManifest.bin === 'string'
+      ? installedManifest.bin
+      : Object.values(installedManifest.bin ?? {})[0];
+  if (!declaredBin || !existsSync(path.join(packageDir, declaredBin)))
+    throw new Error(`Installed package bin does not point at a shipped file: ${declaredBin}`);
+  if (!readFileSync(path.join(packageDir, declaredBin), 'utf8').startsWith('#!'))
+    throw new Error('Installed CLI bundle has no shebang, so a POSIX consumer cannot exec it.');
+  const artifactFindings = scanDirectory(packageDir);
+  if (artifactFindings.length > 0)
+    throw new Error(
+      `Installed package carries credential-shaped content: ${artifactFindings
+        .map((finding) => `${finding.file}:${finding.line} ${finding.rule}`)
+        .join(', ')}`,
+    );
   const version = runNpmBinShim(bin, ['--version'], {
     cwd: project,
     encoding: 'utf8',
@@ -164,7 +212,7 @@ try {
   if (installedManifest.engines?.node !== '>=22')
     throw new Error('Packed CLI metadata is missing engines.node >=22.');
   console.log(
-    `package-smoke: ${version}; bin=${help.includes('Usage:')}; engines=${installedManifest.engines.node}; stdinFiles=${report.summary.changedFiles}; rangeFiles=${rangeReport.summary.changedFiles}; fileStdoutBytes=${toFile.stdout.length}; noRepositoryExit=${noRepository.status}; usageExit=${usageFailure.status}; tarballFiles=${files.length}`,
+    `package-smoke: ${version}; bin=${help.includes('Usage:')}; engines=${installedManifest.engines.node}; stdinFiles=${report.summary.changedFiles}; rangeFiles=${rangeReport.summary.changedFiles}; fileStdoutBytes=${toFile.stdout.length}; noRepositoryExit=${noRepository.status}; usageExit=${usageFailure.status}; tarballFiles=${files.length}; license=${installedManifest.license}; installedLicenseBytes=${Buffer.byteLength(installedLicense)}; runtimeDependencies=${Object.keys(installedManifest.dependencies ?? {}).length}; artifactSecretFindings=${artifactFindings.length}`,
   );
 } finally {
   rmSync(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

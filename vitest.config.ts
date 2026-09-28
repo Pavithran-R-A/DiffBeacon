@@ -30,6 +30,14 @@ export default defineConfig({
           name: 'browser',
           include: browser,
           sequence: { groupOrder: 2 },
+          /**
+           * The Chromium suites already serialise themselves on one cross-process slot, so running six
+           * files in parallel does not add engine throughput - it only queues five `beforeAll` hooks
+           * behind the holder. Measured with all six files eligible: the lane took 933 s and the last
+           * file spent its whole 900 s hook budget waiting, reporting 39 real cases skipped. One file at
+           * a time claims the slot immediately, so every case runs inside the same wall-clock budget.
+           */
+          fileParallelism: false,
         },
       },
     ],

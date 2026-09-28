@@ -90,10 +90,10 @@ describe('Git diff determinism boundary', () => {
     expect(rootReadme).toContain('node packages/cli/dist/index.js review');
     expect(manifest.repository).toEqual({
       type: 'git',
-      url: 'git+https://github.com/Pavithran-R-A/diffbeacon.git',
+      url: 'git+https://github.com/Pavithran-R-A/DiffBeacon.git',
     });
-    expect(manifest.homepage).toBe('https://github.com/Pavithran-R-A/diffbeacon#readme');
-    expect(manifest.bugs.url).toBe('https://github.com/Pavithran-R-A/diffbeacon/issues');
+    expect(manifest.homepage).toBe('https://github.com/Pavithran-R-A/DiffBeacon#readme');
+    expect(manifest.bugs.url).toBe('https://github.com/Pavithran-R-A/DiffBeacon/issues');
     expect(manifest.keywords).toEqual([
       'git',
       'github-actions',

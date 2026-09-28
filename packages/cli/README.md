@@ -11,6 +11,8 @@ node packages/cli/dist/index.js review main..release/1.2 --format markdown
 git diff main...HEAD | node packages/cli/dist/index.js review --stdin
 ```
 
+`engines.node` is `>=22`, which is a floor rather than a tested matrix: this package is qualified on Node 22.x and Node 24.x, and any other Node release installs it unqualified.
+
 ## Accepted forms
 
 ```text

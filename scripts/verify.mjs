@@ -80,6 +80,7 @@ function assertSourceCompleteness() {
     'scripts/npm-cli.mjs',
     'scripts/npm-bin-shim.mjs',
     'scripts/npm-bin-shim.d.mts',
+    'scripts/secret-scan.mjs',
     'scripts/source-manifest.mjs',
     'scripts/action-metadata.mjs',
     'scripts/action-metadata.d.mts',
@@ -202,6 +203,7 @@ runNpm('typecheck');
 runNpm('test');
 runNpm('build');
 assertFreshArtifacts();
+runNpm('secret-scan');
 assertManifestCurrent();
 run(node, ['packages/cli/dist/index.js', '--version']);
 run(node, ['packages/cli/dist/index.js', '--help']);

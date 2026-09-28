@@ -6,11 +6,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Pavithran-R-A/diffbeacon.git"
+    "url": "git+https://github.com/Pavithran-R-A/DiffBeacon.git"
   },
-  "homepage": "https://github.com/Pavithran-R-A/diffbeacon#readme",
+  "homepage": "https://github.com/Pavithran-R-A/DiffBeacon#readme",
   "bugs": {
-    "url": "https://github.com/Pavithran-R-A/diffbeacon/issues"
+    "url": "https://github.com/Pavithran-R-A/DiffBeacon/issues"
   },
   "keywords": [
     "git",
@@ -28,7 +28,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "node ../../scripts/build-cli.mjs"

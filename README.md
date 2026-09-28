@@ -14,7 +14,7 @@ The core engine has no runtime network requirement and can run in Node or in a b
 
 ## Quick start
 
-The repository is an unpublished npm workspace. For local development, use Node 22 or newer and npm 10+.
+The repository is an unpublished npm workspace. For local development, use Node 22 or newer and npm 10+. `engines.node: ">=22"` is a floor, not a tested matrix: every release surface in this workspace is qualified on Node 22.x and Node 24.x only.
 
 ```bash
 npm ci
