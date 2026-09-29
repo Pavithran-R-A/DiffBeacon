@@ -1,0 +1,539 @@
+name: CI (self-hosted Stage 9)
+
+# Stage 9 alternative CI lane, authorized because the account's GitHub-hosted Actions allowance is
+# exhausted and hosted jobs are allocated no runner at all. This workflow runs the same gates as
+# `.github/workflows/ci.yml` on repository-scoped self-hosted runners that carry the
+# `diffbeacon-stage9` label. It does not replace `ci.yml`: the hosted contract stays exactly as
+# written, and GitHub-hosted runner qualification for this repository remains unqualified.
+#
+# Trigger: a push restricted to `rescue/stage9-selfhosted-ci`, plus `workflow_dispatch`. The
+# dispatch event alone was measured to be unusable here: `POST
+# /repos/{owner}/{repo}/actions/workflows/{file}/dispatches` answers 404 unless the workflow file
+# exists on the repository's default branch, and the default branch of this repository is `main`,
+# which Stage 9 is not authorized to change. A push to the dedicated branch below is therefore the
+# narrowest way to get one deliberate, single invocation of a pinned SHA. Pull-request events are
+# absent on purpose: this machine must never execute untrusted fork code.
+on:
+  push:
+    branches:
+      - rescue/stage9-selfhosted-ci
+  workflow_dispatch:
+
+concurrency:
+  group: ci-self-hosted-stage9-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The seven lanes below are chained with `needs:` on purpose. Both runners are the same physical
+  # machine, and the Stage 9 local matrix already measured that overlapping lanes starve the Chromium
+  # lane; a serialized chain trades wall clock for a result that means what it says.
+  linux-node24:
+    name: Source self-hosted Linux / Node 24
+    runs-on: [self-hosted, linux, x64, diffbeacon-stage9]
+    timeout-minutes: 30
+    env:
+      DIFFBEACON_SKIP_BROWSER: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - name: Discard prior job artifacts (this runner's own workspace only)
+        run: |
+          git clean -ffdx
+          git status --porcelain --untracked-files=all
+          test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Runner and toolchain identity
+        run: |
+          uname -a
+          echo "runner_name=${RUNNER_NAME}"
+          echo "runner_os=${RUNNER_OS}"
+          echo "runner_arch=${RUNNER_ARCH}"
+          echo "runner_workspace=${RUNNER_WORKSPACE}"
+          node -v
+          npm -v
+          git --version
+      - name: Assert the requested Node major
+        run: |
+          node -e 'const major = process.versions.node.split(".")[0]; if (major !== "24") { console.error(`expected Node 24, got ${process.version}`); process.exit(1); } console.log(`node_major_ok=${major}`);'
+      - name: Secret scan
+        run: npm run secret-scan
+      - name: Install dependencies
+        run: npm ci
+      - name: Dependency audit (release surface)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Dependency audit (development tree)
+        run: npm audit --audit-level=high
+      - name: Format check
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      # `npm run check` already runs the three gates above; they stay as named steps so this lane's
+      # log states which gate produced a result instead of leaving it inside one aggregate command.
+      - name: Source verification (browser suites suppressed)
+        run: npm run check
+      - name: Package smoke
+        run: npm run package-smoke
+      - name: Action smoke
+        run: npm run action-smoke
+      - name: Action bundle freshness (committed artifact equals rebuild)
+        run: git diff --exit-code -- packages/action/dist/index.js
+      - name: Workspace cleanliness after gates
+        run: |
+          git status --short --untracked-files=all
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+  windows-node24:
+    name: Source self-hosted Windows / Node 24
+    needs: [linux-node24]
+    runs-on: [self-hosted, windows, x64, diffbeacon-stage9]
+    timeout-minutes: 30
+    env:
+      DIFFBEACON_SKIP_BROWSER: '1'
+    # Windows PowerShell is used because the Git Bash step host cannot be invoked on this machine:
+    # the generated step script lives under a profile path containing a space and bash receives it
+    # unquoted (measured: `/usr/bin/bash: C:\Users\Pavithran: No such file or directory`). PowerShell
+    # does not propagate a native command's exit code, so every gate step ends with an explicit guard.
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - name: Discard prior job artifacts (this runner's own workspace only)
+        run: |
+          git clean -ffdx
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git status --porcelain --untracked-files=all
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $debris = git status --porcelain --untracked-files=all
+          if ($debris) { Write-Error 'workspace is not clean before the build'; exit 1 }
+      - name: Runner and toolchain identity
+        run: |
+          Write-Output "runner_name=$env:RUNNER_NAME"
+          Write-Output "runner_os=$env:RUNNER_OS"
+          Write-Output "runner_arch=$env:RUNNER_ARCH"
+          Write-Output "runner_workspace=$env:RUNNER_WORKSPACE"
+          (Get-CimInstance Win32_OperatingSystem | ForEach-Object { "os=$($_.Caption) $($_.Version) build $($_.BuildNumber)" })
+          node -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Assert the requested Node major
+        run: |
+          $major = (node -p "process.versions.node.split('.')[0]")
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($major -ne '24') { Write-Error "expected Node 24, got $major"; exit 1 }
+          Write-Output "node_major_ok=$major"
+      - name: Secret scan
+        run: |
+          npm run secret-scan
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install dependencies
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Dependency audit (release surface)
+        run: |
+          npm audit --omit=dev --audit-level=high
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Dependency audit (development tree)
+        run: |
+          npm audit --audit-level=high
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Format check
+        run: |
+          npm run format:check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Lint
+        run: |
+          npm run lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Typecheck
+        run: |
+          npm run typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Source verification (browser suites suppressed)
+        run: |
+          npm run check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package smoke
+        run: |
+          npm run package-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Action smoke
+        run: |
+          npm run action-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Action bundle freshness (committed artifact equals rebuild)
+        run: |
+          git diff --exit-code -- packages/action/dist/index.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Workspace cleanliness after gates
+        run: |
+          git status --short --untracked-files=all
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $debris = git status --porcelain --untracked-files=all
+          if ($debris) { Write-Error 'the build left tracked or untracked debris in the workspace'; exit 1 }
+
+  windows-node22:
+    name: Source self-hosted Windows / Node 22
+    needs: [windows-node24]
+    runs-on: [self-hosted, windows, x64, diffbeacon-stage9]
+    timeout-minutes: 30
+    env:
+      DIFFBEACON_SKIP_BROWSER: '1'
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+      - name: Discard prior job artifacts (this runner's own workspace only)
+        run: |
+          git clean -ffdx
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $debris = git status --porcelain --untracked-files=all
+          if ($debris) { Write-Error 'workspace is not clean before the build'; exit 1 }
+      - name: Runner and toolchain identity
+        run: |
+          Write-Output "runner_name=$env:RUNNER_NAME"
+          Write-Output "runner_os=$env:RUNNER_OS"
+          Write-Output "runner_arch=$env:RUNNER_ARCH"
+          node -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Assert the requested Node major
+        run: |
+          $major = (node -p "process.versions.node.split('.')[0]")
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($major -ne '22') { Write-Error "expected Node 22, got $major"; exit 1 }
+          Write-Output "node_major_ok=$major"
+      - name: Secret scan
+        run: |
+          npm run secret-scan
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install dependencies
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Dependency audit (release surface)
+        run: |
+          npm audit --omit=dev --audit-level=high
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Dependency audit (development tree)
+        run: |
+          npm audit --audit-level=high
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Format check
+        run: |
+          npm run format:check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Lint
+        run: |
+          npm run lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Typecheck
+        run: |
+          npm run typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Source verification (browser suites suppressed)
+        run: |
+          npm run check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package smoke
+        run: |
+          npm run package-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Action smoke
+        run: |
+          npm run action-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Action bundle freshness (committed artifact equals rebuild)
+        run: |
+          git diff --exit-code -- packages/action/dist/index.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Workspace cleanliness after gates
+        run: |
+          git status --short --untracked-files=all
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $debris = git status --porcelain --untracked-files=all
+          if ($debris) { Write-Error 'the build left tracked or untracked debris in the workspace'; exit 1 }
+
+  linux-node22:
+    name: Source self-hosted Linux / Node 22
+    needs: [windows-node22]
+    runs-on: [self-hosted, linux, x64, diffbeacon-stage9]
+    timeout-minutes: 30
+    env:
+      DIFFBEACON_SKIP_BROWSER: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+      - name: Discard prior job artifacts (this runner's own workspace only)
+        run: |
+          git clean -ffdx
+          git status --porcelain --untracked-files=all
+          test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Runner and toolchain identity
+        run: |
+          uname -a
+          echo "runner_name=${RUNNER_NAME}"
+          echo "runner_os=${RUNNER_OS}"
+          echo "runner_arch=${RUNNER_ARCH}"
+          node -v
+          npm -v
+          git --version
+      - name: Assert the requested Node major
+        run: |
+          node -e 'const major = process.versions.node.split(".")[0]; if (major !== "22") { console.error(`expected Node 22, got ${process.version}`); process.exit(1); } console.log(`node_major_ok=${major}`);'
+      - name: Secret scan
+        run: npm run secret-scan
+      - name: Install dependencies
+        run: npm ci
+      - name: Dependency audit (release surface)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Dependency audit (development tree)
+        run: npm audit --audit-level=high
+      - name: Format check
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Source verification (browser suites suppressed)
+        run: npm run check
+      - name: Package smoke
+        run: npm run package-smoke
+      - name: Action smoke
+        run: npm run action-smoke
+      - name: Action bundle freshness (committed artifact equals rebuild)
+        run: git diff --exit-code -- packages/action/dist/index.js
+      - name: Workspace cleanliness after gates
+        run: |
+          git status --short --untracked-files=all
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+  browser-windows-node24:
+    name: Browser lane (self-hosted Windows / Node 24)
+    needs: [linux-node22]
+    runs-on: [self-hosted, windows, x64, diffbeacon-stage9]
+    timeout-minutes: 45
+    env:
+      DIFFBEACON_REQUIRE_BROWSER: '1'
+    # PLATFORM DEVIATION, recorded rather than hidden: the release browser contract is
+    # ubuntu-latest / Node 24. This repository's WSL2 Ubuntu runner has no Chromium-class engine
+    # (measured: `google-chrome`, `chromium` and `chromium-browser` are all absent) and the harness
+    # locates an existing engine instead of downloading one, so the real-browser lane runs on the
+    # Windows self-hosted runner. Windows Chromium qualifies the engine and the 132 cases; it does
+    # not qualify the Linux hosted-browser cell.
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - name: Discard prior job artifacts (this runner's own workspace only)
+        run: |
+          git clean -ffdx
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $debris = git status --porcelain --untracked-files=all
+          if ($debris) { Write-Error 'workspace is not clean before the build'; exit 1 }
+      - name: Runner identity and located browser engine
+        run: |
+          Write-Output "runner_name=$env:RUNNER_NAME"
+          Write-Output "runner_os=$env:RUNNER_OS"
+          Write-Output "engine_search=$env:LOCALAPPDATA\ms-playwright"
+          Get-ChildItem "$env:LOCALAPPDATA\ms-playwright" -Name
+          node -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Assert the requested Node major
+        run: |
+          $major = (node -p "process.versions.node.split('.')[0]")
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($major -ne '24') { Write-Error "expected Node 24, got $major"; exit 1 }
+          Write-Output "node_major_ok=$major"
+      - name: Install dependencies
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Secret scan
+        run: |
+          npm run secret-scan
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Browser suites (real Chromium required)
+        run: |
+          npm run test:browser
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Workspace cleanliness after the lane
+        run: |
+          git status --short --untracked-files=all
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $debris = git status --porcelain --untracked-files=all
+          if ($debris) { Write-Error 'the browser lane left debris in the workspace'; exit 1 }
+
+  package-linux-node24:
+    name: Package lane (self-hosted Linux / Node 24)
+    needs: [browser-windows-node24]
+    runs-on: [self-hosted, linux, x64, diffbeacon-stage9]
+    timeout-minutes: 30
+    env:
+      DIFFBEACON_SKIP_BROWSER: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - name: Discard prior job artifacts (this runner's own workspace only)
+        run: |
+          git clean -ffdx
+          test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Runner and toolchain identity
+        run: |
+          uname -a
+          echo "runner_name=${RUNNER_NAME}"
+          echo "runner_os=${RUNNER_OS}"
+          node -v
+          npm -v
+          git --version
+      - name: Assert the requested Node major
+        run: |
+          node -e 'const major = process.versions.node.split(".")[0]; if (major !== "24") { console.error(`expected Node 24, got ${process.version}`); process.exit(1); } console.log(`node_major_ok=${major}`);'
+      - name: Install dependencies and build
+        run: |
+          npm ci
+          npm run build
+      - name: Pack the release surface
+        run: |
+          mkdir -p "${RUNNER_TEMP}/stage9-pack"
+          npm pack ./packages/cli --pack-destination "${RUNNER_TEMP}/stage9-pack"
+          tar -tzf "${RUNNER_TEMP}"/stage9-pack/diffbeacon-*.tgz | sort
+      - name: Install the exact tarball into a clean consumer
+        run: |
+          mkdir -p "${RUNNER_TEMP}/stage9-consumer"
+          cd "${RUNNER_TEMP}/stage9-consumer"
+          printf '{"name":"diffbeacon-consumer","version":"1.0.0","private":true}\n' >package.json
+          npm install --no-audit --no-fund "${RUNNER_TEMP}"/stage9-pack/diffbeacon-*.tgz
+          ./node_modules/.bin/diffbeacon --version
+          ./node_modules/.bin/diffbeacon --help
+      - name: Workspace cleanliness after the lane
+        run: |
+          git status --short --untracked-files=all
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+  package-windows-node24:
+    name: Package lane (self-hosted Windows / Node 24)
+    needs: [package-linux-node24]
+    runs-on: [self-hosted, windows, x64, diffbeacon-stage9]
+    timeout-minutes: 30
+    env:
+      DIFFBEACON_SKIP_BROWSER: '1'
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - name: Discard prior job artifacts (this runner's own workspace only)
+        run: |
+          git clean -ffdx
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $debris = git status --porcelain --untracked-files=all
+          if ($debris) { Write-Error 'workspace is not clean before the build'; exit 1 }
+      - name: Runner and toolchain identity
+        run: |
+          Write-Output "runner_name=$env:RUNNER_NAME"
+          Write-Output "runner_os=$env:RUNNER_OS"
+          node -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Assert the requested Node major
+        run: |
+          $major = (node -p "process.versions.node.split('.')[0]")
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($major -ne '24') { Write-Error "expected Node 24, got $major"; exit 1 }
+          Write-Output "node_major_ok=$major"
+      - name: Install dependencies and build
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Pack the release surface
+        run: |
+          $pack = Join-Path $env:RUNNER_TEMP 'stage9-pack'
+          New-Item -ItemType Directory -Force -Path $pack | Out-Null
+          npm pack ./packages/cli --pack-destination $pack
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tarball = (Get-ChildItem $pack -Filter 'diffbeacon-*.tgz').FullName
+          Write-Output "tarball=$tarball"
+          tar -tzf $tarball
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install the exact tarball into a clean consumer
+        run: |
+          $consumer = Join-Path $env:RUNNER_TEMP 'stage9-consumer'
+          New-Item -ItemType Directory -Force -Path $consumer | Out-Null
+          $pack = Join-Path $env:RUNNER_TEMP 'stage9-pack'
+          $tarball = (Get-ChildItem $pack -Filter 'diffbeacon-*.tgz').FullName
+          Set-Location $consumer
+          '{"name":"diffbeacon-consumer","version":"1.0.0","private":true}' | Set-Content -Encoding ascii package.json
+          npm install --no-audit --no-fund $tarball
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & (Join-Path $consumer 'node_modules\.bin\diffbeacon.cmd') --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & (Join-Path $consumer 'node_modules\.bin\diffbeacon.cmd') --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Workspace cleanliness after the lane
+        run: |
+          git status --short --untracked-files=all
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $debris = git status --porcelain --untracked-files=all
+          if ($debris) { Write-Error 'the package lane left a tarball or debris in the workspace'; exit 1 }

@@ -73,7 +73,11 @@ describe('the future consumer workflow fixture', () => {
 
   it('is documentation, not a workflow this repository runs', () => {
     expect(fixture.startsWith('.github/')).toBe(false);
+    // The inventory this repository actually runs. Stage 9's self-hosted qualification lane is a
+    // workflow this repository does run, so it belongs here; the documented `pull_request` fixture
+    // still does not, which is the point of the assertion.
     expect(readdirSync(path.join(repository, '.github/workflows')).sort()).toEqual([
+      'ci-self-hosted-stage9.yml',
       'ci.yml',
       'pages.yml',
     ]);
