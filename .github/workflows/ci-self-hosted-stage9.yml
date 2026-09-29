@@ -508,15 +508,29 @@ jobs:
           npm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Pack the release surface
+        # On a Windows runner that has Git for Windows installed, `tar` resolves to
+        # C:\Program Files\Git\usr\bin\tar.exe (GNU tar) instead of System32's bsdtar. GNU tar reads the
+        # `C:` of an absolute Windows path as an rsh host and aborts with `Cannot connect to C: resolve
+        # failed` (measured: run 36556147020 attempt 2; reproduced locally with the same error text).
+        # Listing from inside the pack directory with a bare relative name works with either tar, so the
+        # gate does not depend on which one PATH happens to resolve.
         run: |
           $pack = Join-Path $env:RUNNER_TEMP 'stage9-pack'
           New-Item -ItemType Directory -Force -Path $pack | Out-Null
           npm pack ./packages/cli --pack-destination $pack
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $tarball = (Get-ChildItem $pack -Filter 'diffbeacon-*.tgz').FullName
-          Write-Output "tarball=$tarball"
-          tar -tzf $tarball
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output "tar=$((Get-Command tar.exe).Source)"
+          $tarballs = @(Get-ChildItem $pack -Filter 'diffbeacon-*.tgz')
+          if ($tarballs.Count -ne 1) {
+            Write-Error "expected exactly one tarball, found $($tarballs.Count)"
+            exit 1
+          }
+          Write-Output "tarball=$($tarballs[0].FullName)"
+          Push-Location $pack
+          tar -tzf $tarballs[0].Name
+          $tarExit = $LASTEXITCODE
+          Pop-Location
+          if ($tarExit -ne 0) { exit $tarExit }
       - name: Install the exact tarball into a clean consumer
         run: |
           $consumer = Join-Path $env:RUNNER_TEMP 'stage9-consumer'
