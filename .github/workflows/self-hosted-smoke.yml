@@ -1,7 +1,8 @@
 name: Self-hosted smoke
 
-# Temporary Stage 9 probe: prove that GitHub will dispatch a job to a repository-scoped
-# self-hosted runner for this repository. No dependency installation, no secrets, no publish.
+# Temporary Stage 9 probe: prove that GitHub will dispatch jobs to the repository-scoped
+# self-hosted runners for this repository — one Windows, one Linux. No dependency installation,
+# no secrets, no publish.
 #
 # The trigger is a push restricted to this probe's own branch, not `workflow_dispatch`. Reason,
 # measured: the REST dispatch endpoint answers 404 unless the workflow file exists on the
@@ -45,3 +46,31 @@ jobs:
       - name: Sentinel
         shell: powershell
         run: Write-Output "SELF_HOSTED_STAGE9_SMOKE_OK"
+
+  smoke-linux:
+    name: Self-hosted smoke (Linux runner)
+    runs-on: [self-hosted, linux, x64, diffbeacon-stage9]
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Environment identity
+        run: |
+          uname -a
+          echo "runner_name=${RUNNER_NAME}"
+          echo "runner_os=${RUNNER_OS}"
+          echo "runner_arch=${RUNNER_ARCH}"
+          echo "runner_temp=${RUNNER_TEMP}"
+          echo "runner_workspace=${RUNNER_WORKSPACE}"
+          echo "whoami=$(whoami)"
+          node -v
+          npm -v
+          git --version
+          echo "workspace_head=$(git rev-parse HEAD)"
+
+      - name: Sentinel
+        run: echo "SELF_HOSTED_STAGE9_SMOKE_OK_LINUX"
