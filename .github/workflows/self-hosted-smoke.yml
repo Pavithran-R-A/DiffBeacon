@@ -26,6 +26,11 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Set up Node 24 (probe)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+
       - name: Environment identity
         shell: powershell
         run: |
@@ -45,7 +50,10 @@ jobs:
 
       - name: Sentinel
         shell: powershell
-        run: Write-Output "SELF_HOSTED_STAGE9_SMOKE_OK"
+        run: |
+          Write-Output "node_after_setup=$(node -v)"
+          Write-Output "npm_after_setup=$(npm -v)"
+          Write-Output "SELF_HOSTED_STAGE9_SMOKE_OK"
 
   smoke-linux:
     name: Self-hosted smoke (Linux runner)
@@ -57,6 +65,11 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node 24 (probe)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
 
       - name: Environment identity
         run: |
@@ -73,4 +86,7 @@ jobs:
           echo "workspace_head=$(git rev-parse HEAD)"
 
       - name: Sentinel
-        run: echo "SELF_HOSTED_STAGE9_SMOKE_OK_LINUX"
+        run: |
+          echo "node_after_setup=$(node -v)"
+          echo "npm_after_setup=$(npm -v)"
+          echo "SELF_HOSTED_STAGE9_SMOKE_OK_LINUX"
