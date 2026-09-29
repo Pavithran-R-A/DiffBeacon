@@ -1090,6 +1090,40 @@ reproduction, not by the parity test.
    only for their zero-runner signature. `docs/audits/**` is manifest-excluded, so this section needs no
    `SOURCE_MANIFEST.txt` regeneration and no bundle rebuild.
 
+### RUNNER CLEANUP
+
+Measured after the qualification run, not assumed from a wrapper's exit code:
+
+1. Listeners stopped. The Windows listener was `Runner.Listener.exe` PID 32532, whose
+   `ExecutablePath` was first confirmed to be this task's own
+   `stage9\runner-win\bin\Runner.Listener.exe`; the Linux listener was
+   `/home/pavithran_r_a/diffbeacon-stage9-runner/bin/Runner.Listener run` PID 18800. After the stop, a fresh
+   process inventory shows zero `Runner.Listener`/`runsvc` processes on Windows, and the only listener left in
+   WSL belongs to an unrelated project (`actions-runner-dueweave`, PID 2012) that was deliberately not touched.
+2. Registration removed. `DELETE /repos/Pavithran-R-A/DiffBeacon/actions/runners/21` and `/22` each returned
+   success, and the immediately following `GET …/actions/runners` reports `total_count=0` with an empty
+   `runners` array. `config.cmd remove --unattended` was tried first and answered that removal needs a token
+   (the runner was registered with an ephemeral registration token, which is not stored for removal), so the
+   repository-scoped API deletion is the clean unregister path used here. No Windows service was ever installed,
+   so there was nothing to uninstall.
+3. Local directories. Exactly the two directories this task created were removed:
+   `stage9/runner-win` (Windows runner, 654 MB as measured before removal) and
+   `/home/pavithran_r_a/diffbeacon-stage9-runner` (Linux runner, 1.3 GB as measured before removal). Both paths
+   are now absent. Nothing else was
+   deleted: no user Git repository, no Docker image, no browser cache, no unrelated tool, and the unrelated
+   WSL runner installation was left intact. Each runner's `_diag`, `_work` and `.env` (which held registration
+   credentials) went with its own directory; no token value was read, printed or copied anywhere.
+4. Residual artifacts, disclosed rather than silently removed. The probe branch `tmp/stage9-selfhosted-smoke`
+   (tip `7c2917c`, local and on `origin`) still carries the temporary `Self-hosted smoke` workflow, which stays
+   reachable in history. It is inert now — its jobs can only be taken by a `diffbeacon-stage9` runner and there
+   are none — and deleting a remote branch is a destructive, shared-state action this Stage-9 brief does not
+   authorize (it permits forward commits only), so it is recorded here for the maintainer to prune. The
+   qualification workflow itself is committed on `rescue/stage9-selfhosted-ci` (tip `b6e8842`, the CI-qualified
+   SHA); the authoritative branch `rescue/stage0-source` carries the closure documentation on top of it.
+5. New runs created by this cleanup documentation. Because `ci.yml` triggers on `push`, the closure push also
+   created hosted `CI` runs with the same zero-runner/zero-step signature described under HOSTED STATUS. They
+   are disclosed, not cited as evidence, and no conclusion in this report depends on them.
+
 ### GITHUB-HOSTED: UNQUALIFIED
 
 Hosted allocation is still exhausted. The GitHub-hosted runner environment for this repository is
