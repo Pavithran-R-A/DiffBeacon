@@ -2,7 +2,15 @@ name: Self-hosted smoke
 
 # Temporary Stage 9 probe: prove that GitHub will dispatch a job to a repository-scoped
 # self-hosted runner for this repository. No dependency installation, no secrets, no publish.
+#
+# The trigger is a push restricted to this probe's own branch, not `workflow_dispatch`. Reason,
+# measured: the REST dispatch endpoint answers 404 unless the workflow file exists on the
+# repository's default branch (`main`), and this stage is not authorized to change `main`. One
+# push creates exactly one run, so the probe is still a single, deliberate invocation.
 on:
+  push:
+    branches:
+      - tmp/stage9-selfhosted-smoke
   workflow_dispatch:
 
 permissions:
