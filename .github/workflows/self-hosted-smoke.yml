@@ -21,26 +21,27 @@ jobs:
     name: Self-hosted smoke (Windows runner)
     runs-on: [self-hosted, windows, x64, diffbeacon-stage9]
     timeout-minutes: 10
-    defaults:
-      run:
-        shell: bash
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Environment identity
+        shell: powershell
         run: |
-          echo "uname=$(uname -srm)"
-          echo "runner_name=${RUNNER_NAME}"
-          echo "runner_os=${RUNNER_OS}"
-          echo "runner_arch=${RUNNER_ARCH}"
-          echo "runner_temp=${RUNNER_TEMP}"
-          echo "runner_workspace=${RUNNER_WORKSPACE}"
-          echo "runner_user=$(whoami)"
-          node -v || echo "node=absent"
-          npm -v || echo "npm=absent"
-          git --version || echo "git=absent"
-          echo "workspace_head=$(git rev-parse HEAD)"
+          Write-Output "computer=$env:COMPUTERNAME"
+          Write-Output "runner_name=$env:RUNNER_NAME"
+          Write-Output "runner_os=$env:RUNNER_OS"
+          Write-Output "runner_arch=$env:RUNNER_ARCH"
+          Write-Output "runner_temp=$env:RUNNER_TEMP"
+          Write-Output "runner_workspace=$env:RUNNER_WORKSPACE"
+          Write-Output "workspace=$env:GITHUB_WORKSPACE"
+          Write-Output "shell_ps=$($PSVersionTable.PSVersion)"
+          (Get-CimInstance Win32_OperatingSystem | ForEach-Object { "os=$($_.Caption) $($_.Version) $($_.BuildNumber)" })
+          node -v
+          npm -v
+          git --version
+          Write-Output "workspace_head=$(git rev-parse HEAD)"
 
       - name: Sentinel
-        run: echo "SELF_HOSTED_STAGE9_SMOKE_OK"
+        shell: powershell
+        run: Write-Output "SELF_HOSTED_STAGE9_SMOKE_OK"
