@@ -1,0 +1,38 @@
+name: Self-hosted smoke
+
+# Temporary Stage 9 probe: prove that GitHub will dispatch a job to a repository-scoped
+# self-hosted runner for this repository. No dependency installation, no secrets, no publish.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Self-hosted smoke (Windows runner)
+    runs-on: [self-hosted, windows, x64, diffbeacon-stage9]
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Environment identity
+        run: |
+          echo "uname=$(uname -srm)"
+          echo "runner_name=${RUNNER_NAME}"
+          echo "runner_os=${RUNNER_OS}"
+          echo "runner_arch=${RUNNER_ARCH}"
+          echo "runner_temp=${RUNNER_TEMP}"
+          echo "runner_workspace=${RUNNER_WORKSPACE}"
+          echo "runner_user=$(whoami)"
+          node -v || echo "node=absent"
+          npm -v || echo "npm=absent"
+          git --version || echo "git=absent"
+          echo "workspace_head=$(git rev-parse HEAD)"
+
+      - name: Sentinel
+        run: echo "SELF_HOSTED_STAGE9_SMOKE_OK"
