@@ -842,3 +842,272 @@ run would be the same zero-runner observation of the same product, and would cha
 ## NEXT
 
 Stage 10 (OSS documentation closure) and Stage 11 (release) are **not** started, and Stage 9 does not advance past its boundary: no merge to `main`, no npm publish, no GitHub Release, no tag, no repository visibility change, no Pages deployment. The first thing Stage 10 should consume is the honest boundary recorded here: the package surface is qualified and reproducible locally, the CI contract is committed and mutation-tested, and the single missing element is a real hosted run that receives runners and executes the gates — an account/billing condition, not a code condition.
+
+## STAGE 9 ALTERNATIVE CI CLOSURE
+
+This section closes the alternative-CI work authorized after the hosted lane was found blocked. It is
+appended; nothing above it is rewritten, and every hosted measurement above remains as first recorded.
+
+### USER-AUTHORIZED CHANGE
+
+The brief authorized replacing the exhausted GitHub-hosted hard gate with a **real automated CI execution
+on repository-scoped self-hosted runners**, explicitly not permission to skip CI, and explicitly ordered:
+self-hosted GitHub Actions first, external CI second, a tracked local orchestrator last. The files this
+work added to the repository are exactly:
+
+- `.github/workflows/ci-self-hosted-stage9.yml` — new, separate lane set; `ci.yml` untouched.
+- `tests/stage9.self-hosted-parity.test.ts` — new, 14 committed parity cases.
+- `tests/stage6.action-workflow-docs.test.ts` — one widened assertion (the workflow inventory now names the
+  workflow this repository actually runs; the documented `pull_request` fixture still does not).
+- `SOURCE_MANIFEST.txt` — regenerated after staging; content-hash lines for the two new paths.
+- this audit section.
+
+No product source file, no `package.json`, no lockfile, no `packages/**` file and no registry or release
+surface changed. `pnpm-lock.yaml` / `pnpm-workspace.yaml` were never staged (they reappear as untracked
+debris and `scripts/verify.mjs` fails closed on them; see LIMITATIONS).
+
+### HOSTED STATUS
+
+Still unqualified, and re-measured at the qualification SHA rather than carried over. Both `CI` runs created
+by the `b6e8842` push (`36562157385` on the lane branch, `36562144675` on `rescue/stage0-source`) report the
+same signature for all five jobs: `runner_name: ""`, `runner_id: 0`, `steps: 0`, `conclusion: failure`,
+started→completed in 2–4 s (`stage9/logs/hosted-zero-runner-signature-b6e8842.txt`). The account's hosted
+Actions allowance is the cause; nothing in the repository was changed to work around it, and `ci.yml` still
+declares `ubuntu-latest` / `windows-latest`.
+
+### ALTERNATIVE SELECTED
+
+Self-hosted GitHub Actions runners. External CI was not needed and was not used; the last-resort local
+orchestrator (`scripts/ci-local.mjs`) was not written and is not claimed. The qualification evidence below is
+GitHub Actions run data, retrieved from the Actions API, with per-job logs.
+
+### WHY
+
+The allowance blocks hosted allocation only. GitHub still schedules `push`- and `workflow_dispatch`-triggered
+jobs onto repository-scoped self-hosted runners, so the same gate commands can execute under real Actions
+orchestration, with real logs and real job conclusions, instead of being asserted from a local script. This
+keeps the evidence inside CI rather than next to it.
+
+### RUNNER SCOPE
+
+Two runners, registered against `Pavithran-R-A/DiffBeacon` only (repository-scoped registration token; no
+organization-wide runner, no default-group expansion, no other repository exposed). The workflow grants
+`permissions: contents: read` and nothing else, has no `pull_request`/`pull_request_target` trigger for
+untrusted fork code, references no secrets, and never writes `id-token`. Both runners lived on this machine,
+which the brief declares trusted for this repository.
+
+### RUNNER OS
+
+Honest labels, asserted by the parity test and confirmed by the runner inventory:
+`diffbeacon-stage9-win` → `os=Windows`, labels `self-hosted,Windows,X64,diffbeacon-stage9`;
+`diffbeacon-stage9-linux` → `os=Linux`, labels `self-hosted,linux,x64,diffbeacon-stage9`. The Linux runner is
+WSL2 Ubuntu on the same physical host; `uname -a` inside its job reports
+`Linux Pavithran 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 GNU/Linux`.
+That is a genuine Linux kernel and userland, not a relabelled Windows runner — and it is not a separate
+machine (see LIMITATIONS).
+
+### RUNNER REGISTRATION
+
+Runner version `2.337.0` on both. Ephemeral by design: registered with `config.cmd --unattended --replace
+--labels … --name …` (Windows) and `config.sh` with the same flags (WSL), each in a directory deliberately
+outside the repository (`stage9/runner-win`, `/home/pavithran_r_a/diffbeacon-stage9-runner`) because the
+runner's own `.env` holds registration credentials. The registration token was consumed only by the
+interactive registration command; it was never echoed, committed, written into a repository file, placed in a
+log, or reproduced here. No Windows service was installed. Both runners were removed after qualification
+(RUNNER CLEANUP).
+
+Probe first, as instructed: a minimal `Self-hosted smoke` workflow ran before any real lane was added — run
+`36552556709`, conclusion `success`, printing the sentinel `SELF_HOSTED_STAGE9_SMOKE_OK` with no `npm install`
+and no secrets. An earlier smoke attempt (`36552235057`) failed and is recorded as an attempt, not as
+evidence.
+
+### CI RUN ID
+
+Qualifying run: **`36562157439`** — workflow `CI (self-hosted Stage 9)`, event `push`, head
+`b6e884260e84557807fd9fc2867783e3f8756bee`, attempt 1, `status=completed`, **`conclusion=success`**,
+2026-09-29T11:30:27Z → 11:55:39Z.
+
+Superseded attempts at the previous SHA `48a1520`, recorded rather than deleted:
+
+- attempt 1 — the four source lanes reached real steps; the browser lane failed
+  `131 passed | 1 failed (132)` on `net::ERR_NETWORK_CHANGED`, traced to WSL/Hyper-V virtual-switch creation
+  on this host mid-suite, so the product was not implicated.
+- attempt 2 (`gh run rerun --failed`, same SHA) — all four source lanes, the browser lane (132/132) and the
+  Linux package lane succeeded; the Windows package lane failed at `Pack the release surface`. Root cause read
+  from the log and reproduced locally: `tar` resolves to Git for Windows' GNU tar
+  (`C:\Program Files\Git\usr\bin\tar.exe`), which parses the `C:` of an absolute Windows path as an rsh host
+  (`Cannot connect to C: resolve failed`). Fixed forward in `b6e8842`, which is why the qualifying run is a new
+  SHA and not a third attempt of `48a1520`.
+
+### RUNNER NAMES
+
+From `GET /actions/jobs/{id}` for every job of the qualifying run (the run-level job list reports
+`runner: null`; the per-job endpoint carries the identity): `runner_id=21 runner_name=diffbeacon-stage9-win
+runner_group_name=Default` and `runner_id=22 runner_name=diffbeacon-stage9-linux group=Default`. Both
+non-empty, both non-zero. Evidence: `stage9/logs/selfhosted-qualrun-steps-b6e8842.txt`.
+
+### ACTUAL EXECUTED STEPS
+
+Seven lanes, chained with `needs:` because both runners are one machine — **123 steps executed, every one
+reported `success`**, nothing skipped, and no lane finished in seconds:
+
+| lane | job id | runner | steps | window (UTC) |
+|---|---|---|---|---|
+| Source self-hosted Linux / Node 24 | 109385343212 | diffbeacon-stage9-linux | 21/21 | 11:30:27→11:32:15 |
+| Source self-hosted Windows / Node 24 | 109385988279 | diffbeacon-stage9-win | 21/21 | 11:32:19→11:38:12 |
+| Source self-hosted Windows / Node 22 | 109388017224 | diffbeacon-stage9-win | 21/21 | 11:38:15→11:43:55 |
+| Source self-hosted Linux / Node 22 | 109389940563 | diffbeacon-stage9-linux | 21/21 | 11:43:58→11:45:55 |
+| Browser lane (self-hosted Windows / Node 24) | 109390626643 | diffbeacon-stage9-win | 13/13 | 11:45:58→11:53:08 |
+| Package lane (self-hosted Linux / Node 24) | 109393082482 | diffbeacon-stage9-linux | 13/13 | 11:53:12→11:53:54 |
+| Package lane (self-hosted Windows / Node 24) | 109393347527 | diffbeacon-stage9-win | 13/13 | 11:53:57→11:55:39 |
+
+Each source lane ran, in order: pinned checkout → pinned `setup-node` → workspace-reset assertion →
+runner/toolchain identity → Node-major assertion → `npm run secret-scan` → `npm ci` →
+`npm audit --omit=dev --audit-level=high` → `npm audit --audit-level=high` → `npm run format:check` →
+`npm run lint` → `npm run typecheck` → `npm run check` → `npm run package-smoke` → `npm run action-smoke` →
+bundle-freshness `git diff --exit-code` → workspace-cleanliness assertion.
+
+### NODE MATRIX
+
+Node majors come from `actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7`, never from the
+ambient install, and each lane asserts what it actually got (`node_major_ok=`):
+
+| cell | runner-reported toolchain | assertion |
+|---|---|---|
+| Linux / 24 | `v24.21.0`, npm `11.19.0`, git `2.53.0` | `node_major_ok=24` |
+| Windows / 24 | `v24.21.0`, npm `11.19.0`, git `2.55.0.windows.5` | `node_major_ok=24` |
+| Windows / 22 | `v22.23.3`, git `2.55.0.windows.5` | `node_major_ok=22` |
+| Linux / 22 | `v22.23.3`, git `2.53.0` | `node_major_ok=22` |
+
+Source-gate totals: `928 passed | 133 skipped (1061)` on both Linux cells and
+`927 passed | 134 skipped (1061)` on both Windows cells. The single differing case is
+`stage8.invalid-byte-paths` — its real-Git half runs where the filesystem can hold a filename whose bytes are
+not valid UTF-8 and skips with an explanatory line on NTFS. That is a documented platform condition, not a
+suppressed failure.
+
+### BROWSER
+
+`Browser lane (self-hosted Windows / Node 24)`, `DIFFBEACON_REQUIRE_BROWSER=1`, engine located (not
+downloaded) at `C:\Users\…\AppData\Local\ms-playwright\chromium-1234`, reported by the suite as
+`browser engine: chromium (chromium-1234); version=151.0.7922.34`. Result `Test Files 6 passed (6)` /
+`Tests 132 passed (132)`, duration 338.01 s, step conclusion `success`.
+
+**PLATFORM DEVIATION, recorded:** the release browser contract is `ubuntu-latest / Node 24`. This repository's
+WSL2 runner has no Chromium-class engine (`google-chrome`, `chromium` and `chromium-browser` are all absent)
+and the harness refuses to download one, so the real-browser evidence comes from Windows Chromium. 132/132 on
+Windows Chromium qualifies the engine and the 132 cases; it does **not** qualify the Linux hosted-browser
+cell, which remains unexecuted. No skip, no `|| true`, no reduced case count.
+
+### PACKAGE
+
+Both package lanes prove the release surface from the tarball, not from the working tree:
+`npm pack ./packages/cli` → 4 files, 16.8 kB packed / 62.7 kB unpacked, shasum
+`7c59923703cd08137fad03463e383ee4078486bb`; content listing via `tar -tzf` → `package/LICENSE`,
+`package/dist/index.js`, `package/package.json`, `package/README.md`; then that exact tarball installed into an
+empty consumer (`added 1 package`) and invoked through the npm-created shim — `diffbeacon --version` → `0.1.0`
+and `diffbeacon --help` → `DiffBeacon 0.1.0` with the full usage contract. The Windows lane additionally logs
+the resolved tar (`tar=C:\Program Files\Git\usr\bin\tar.exe`), so the tool that produced the listing is part of
+the record. Each package lane ends on a workspace-cleanliness assertion (the pack and consumer live in
+`RUNNER_TEMP`, so `git status --porcelain --untracked-files=all` stays empty).
+
+**PACKSMOKE:** the independent checker (`packsmoke@f84bbacc`, Node 24 / npm 11.19.0, source pinned, never
+modified by this project) was qualified locally against this same shasum in both a Windows host cell and a
+Linux `node:24` container before this alternative-CI work. `git diff 48a1520..b6e8842` touches only the
+workflow and the manifest, and the CI tarball shasum matches the PackSmoke-qualified artifact exactly, so
+PackSmoke was not re-run inside the lane. Disclosed plainly: the PackSmoke verdict is carried over on
+artifact identity (`7c599237…`); it is not new CI evidence from run `36562157439`. Nothing here claims
+`npm install diffbeacon` or `npx diffbeacon` works — the package is **not published** (`npm view diffbeacon`
+still returns E404), so only the local tarball install path is qualified.
+
+### SECRET SCAN
+
+`npm run secret-scan` in all four source lanes: `secret scan: 12 finding(s), 12 classified, 0 unclassified,
+0 stale`. Identical on both OSes and both Node majors. No secret value is printed by the gate, the workflow or
+this report; the registration token never entered the repository, a log, an artifact or this document.
+`package-smoke` independently reports `artifactSecretFindings=0` for the packed tarball.
+
+### AUDIT
+
+Every source lane runs both surfaces at `--audit-level=high`: `npm audit --omit=dev` (release surface) and
+`npm audit` (full development tree), each reporting `found 0 vulnerabilities`. `npm ci` installed 216 packages
+in the Linux cells and 214 in the Windows cells, with `esbuild@0.28.2` surfaced only as an allow-scripts
+notice, matching the pre-existing local record. No dependency was added, removed or downgraded to obtain it.
+
+### ACTION BUNDLE
+
+Bundle freshness is a CI assertion, not a promise: each source lane rebuilds and runs
+`git diff --exit-code -- packages/action/dist/index.js`, and a clean exit in all four lanes means the committed
+bundle equals the rebuild. `npm run action-smoke` in every lane reports
+`packages/action/dist/index.js wrote 1250 bytes to the Job Summary; stdout=""; stderr=""; cliLeak=false;
+hostilePaths=true; cleanWorkspace=true; oversizeRejected=true; partialSummary=false;
+pullRequestTargetRejected=true`. The self-hosted lane itself has no `pull_request` trigger for fork code and no
+`pull_request_target`, and the parity test forbids adding either.
+
+### WORKFLOW PARITY
+
+`tests/stage9.self-hosted-parity.test.ts` (14 cases, in the normal `source` project) asserts the self-hosted
+path cannot become a weaker CI path: it must run every command the hosted lanes run, use only self-hosted
+`diffbeacon-stage9` labels, leave `ci.yml`'s hosted contract intact, cover both OSes and both Node majors, pin
+`setup-node` to the same immutable SHA, use only 40-hex pins already present in `ci.yml`, stay at
+`contents: read` with no `write` / `id-token` / `secrets.*` / `GITHUB_TOKEN`, refuse `pull_request`,
+`npm publish`, `--force` and Pages, require the engine probe and browser suite while the source lanes suppress
+them, require pack / list / consumer / shim in both package lanes, bound every lane with a timeout, prove
+cleanliness per lane, and require a `$LASTEXITCODE` guard for every npm call in a PowerShell lane.
+
+Mutation-tested, not assumed (`stage9/tools/selfhosted-mutation-check.sh` →
+`stage9/logs/selfhosted-parity-negative-controls.txt`): 11 deliberate weakenings each failed with `rc=1` and
+named the expected assertion (drop `action-smoke`; hosted `runs-on`; remove `node_major_ok`; strip exit
+guards; break `npm run test:browser`; `contents: write`; introduce `npm publish`; set
+`DIFFBEACON_REQUIRE_BROWSER: '0'`; downgrade `--untracked-files`; `setup-node@v4` in one lane; blank one
+`timeout-minutes`), the unmutated baseline passed `14 passed (14)`, and the workflow was verified byte-identical
+to its backup afterwards. Not covered, and stated so: no committed assertion distinguishes the fixed
+relative-path `tar -tzf` from the broken absolute-path form — that fix is qualified by the CI run and by local
+reproduction, not by the parity test.
+
+### LIMITATIONS
+
+1. **One physical machine.** Both runners are on this host, so the lanes are serialized and nothing is proven
+   about concurrency, multiple machines, or a hosted runner class. The Linux runner is WSL2, so "Linux" here
+   means a Microsoft-standard-WSL2 kernel on Windows 11, not a Linux workstation or cloud VM.
+2. **Windows shell deviation.** Every Windows lane uses `shell: powershell`, because the Git Bash step host
+   cannot execute on this machine: the generated step script sits under a profile path containing a space and
+   reaches bash unquoted (`/usr/bin/bash: C:\Users\Pavithran: No such file or directory`). PowerShell does not
+   propagate native exit codes, so each gate carries an explicit guard and the parity test counts those guards.
+3. **Hosted cells remain unqualified.** All four hosted source cells and the hosted
+   `Browser lane (ubuntu-latest / Node 24)` have still never executed a step, before or after this work. The
+   browser deviation is Windows-Chromium-only; no Linux-hosted-browser claim is made.
+4. **Transient host event observed.** Attempt 1's single browser failure (`ERR_NETWORK_CHANGED`) coincided with
+   Hyper-V virtual-switch/NIC creation on this host. It did not recur in either later browser execution and the
+   product was not implicated, but the host is shared and the event is recorded rather than explained away.
+5. **Ephemeral runners.** The qualification is reproducible only after re-registering repository-scoped runners
+   with the same labels; they were removed on purpose so no always-online runner is left behind.
+6. **Local harness noise.** Untracked `pnpm-lock.yaml` / `pnpm-workspace.yaml` reappear in this working tree and
+   make `npm run check` fail closed; they were never staged and CI clones are unaffected. During this closure
+   two local `npm run check` invocations recorded `LOCAL_CHECK_EXIT=1` for harness reasons (that debris, and a
+   `NO_COLOR=1` exported into the colour-contract test); both were root-caused and re-measured, and the final
+   clean-tree run at `b6e8842` recorded `LOCAL_CHECK_EXIT=0` with `927 passed | 134 skipped (1061)`.
+7. **Dispatch discipline.** The push trigger means `b6e8842` also created two more hosted `CI` runs, cited above
+   only for their zero-runner signature. `docs/audits/**` is manifest-excluded, so this section needs no
+   `SOURCE_MANIFEST.txt` regeneration and no bundle rebuild.
+
+### GITHUB-HOSTED: UNQUALIFIED
+
+Hosted allocation is still exhausted. The GitHub-hosted runner environment for this repository is
+**unqualified**: zero runners, zero steps, five failing jobs per push, re-measured at `b6e8842`. The hosted
+matrix in `ci.yml` is kept intact precisely because that environment is unqualified rather than wrong.
+
+### STAGE 9 FINAL DECISION
+
+`PASS — SELF-HOSTED CI QUALIFIED; GITHUB-HOSTED RUNNER ENVIRONMENT UNQUALIFIED DUE EXHAUSTED HOSTED ALLOWANCE`
+
+Every Stage-9 gate contract — secret scan, both dependency-audit surfaces, `npm ci`, the full source chain,
+package-smoke, action-smoke, bundle freshness, real-browser execution, and the pack/listen/install/shim package
+proof — was executed by real GitHub Actions jobs on repository-scoped self-hosted runners in run
+`36562157439`, and is backed by a committed parity test that is itself mutation-tested. The earlier
+`BLOCKED — LOCAL SOURCE/PACKAGE QUALIFICATION COMPLETE; HOSTED CI EXTERNALLY BLOCKED` verdict is superseded for
+CI execution only; the hosted environment's status is unchanged and is not renamed to look qualified.
+
+### NEXT
+
+Stage 10 — OSS DOCUMENTATION. Stage 9 stops at its boundary: no merge to `main`, no tag, no GitHub Release, no
+npm publish, no visibility change, no Pages deployment.
