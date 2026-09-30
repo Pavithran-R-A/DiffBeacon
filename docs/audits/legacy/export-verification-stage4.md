@@ -1,5 +1,19 @@
 # DiffBeacon Stage 4 GitHub-CI Input Export Verification
 
+> **HISTORICAL RECORD — not current project status.** Stage 10 moved this file here by Git
+> rename from the repository root (`EXPORT_VERIFICATION.md`); its prose and measurements are
+> unchanged. Every count, archive name, hash, and test total below is a reading of the Stage 4
+> export tree, and the phrase "input for real GitHub-hosted CI" states that tree's _intent_, not
+> an outcome: no GitHub-hosted Actions run was ever observed for this repository during Stages 0-8
+> (no runner was allocated), and the first CI run that actually executed was the **self-hosted**
+> Stage 9 qualification lane, recorded in
+> [`../stage9-ci-package-qualification.md`](../stage9-ci-package-qualification.md). Do not read
+> this file as evidence about the current package, Action, CI, or publication status.
+>
+> For current status read [`README.md`](../../../README.md),
+> [`docs/architecture/security.md`](../../architecture/security.md),
+> [`docs/releasing.md`](../../releasing.md), and the stage reports in [`docs/audits/`](../).
+
 ## Purpose
 
 This record verifies the small final hardening pass applied to the independently confirmed Stage 3C repository before it is used as input for real GitHub-hosted CI. No product feature or web redesign was added.

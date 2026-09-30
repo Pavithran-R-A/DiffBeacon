@@ -21,4 +21,7 @@ This repository is DiffBeacon, deterministic review-attention infrastructure. Co
 
 ## Audit discipline
 
-When reporting progress, distinguish implemented code from executed verification. Record unresolved uncertainty in `AUDIT_HANDOFF.md` rather than hiding it.
+When reporting progress, distinguish implemented code from executed verification. Record unresolved
+uncertainty in the authoritative stage report under `docs/audits/`, in a "what this does not prove"
+or open-items section, rather than hiding it. The pre-Stage-1 handoffs that used to carry this
+material are preserved as historical records in `docs/audits/legacy/`.

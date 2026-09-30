@@ -1,3 +1,17 @@
+> **HISTORICAL / INTERNAL WORKING NOTES — not current project status and not a roadmap.** Stage 10
+> moved this file here by Git rename from the repository root (`todo.md`). It is the sequence of
+> execution checklists an operator pasted from each stage's instruction attachment while working;
+> every item in it is checked because each checklist belonged to a stage that already closed. The
+> files it names (`AUDIT_HANDOFF_STAGE3A.md`, `EXPORT_VERIFICATION.md`,
+> `diffbeacon-stage3a-fixed.zip`) are the root paths and archives of that era, not the current
+> tree — the two documents now live as legacy records beside this file.
+>
+> Nothing here is a pending action. Current capability lives in
+> [`README.md`](../../../README.md); what remains before publication is stated in
+> [`docs/releasing.md`](../../releasing.md) and the `NEXT` sections of the stage reports in
+> [`docs/audits/`](../). The banner text above is the only Stage 10 addition; the checklists
+> below are preserved verbatim.
+
 # Stage 3A Execution Checklist
 
 - [x] Read the entire authoritative Stage 3A instruction from the attached file.

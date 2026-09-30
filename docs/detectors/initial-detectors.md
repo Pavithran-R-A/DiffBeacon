@@ -5,6 +5,15 @@ surface a human should look at?** It never answers whether the change is correct
 risky, or complete. Every rule below is a path convention, and every convention has a
 boundary where it stops proving anything.
 
+Eleven surfaces ship today, in this order: `ci-build`, `auth-access`, `database-schema`,
+`dependencies`, `api-contracts`, `configuration`, `infrastructure`, `tests`,
+`documentation`, `generated`, and `runtime`. `SURFACE_IDS` in `packages/core/src/model.ts`
+and the registry in `packages/core/src/detectors/registry.ts` are the authority for that
+list; the IDs and titles below are checked against both by
+`tests/stage10.docs-contract.test.ts`, and every positive and negative path example is
+covered by `tests/stage3.detectors.test.ts` and
+`tests/stage3.detector-false-positives.test.ts`.
+
 ## Classification contract
 
 | Fact                  | Rule                                                                                                                                                                                                                                                                                                                         |

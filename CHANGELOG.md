@@ -1,7 +1,47 @@
 # Changelog
 
-## 0.1.0 — Unpublished MVP
+This project aims at [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). It has not made its first release, so
+there is exactly one section: the unreleased `0.1.0` candidate. Capability details live in
+[`README.md`](README.md) and [`docs/architecture/`](docs/architecture/), not here.
 
-This is an unpublished first MVP prepared for independent audit. It includes the deterministic core, secure CLI, bundled read-only GitHub Action, static local browser demo, documentation, tests, and local packaging smoke checks.
+## 0.1.0 — Unreleased
 
-No npm package, GitHub Release, Marketplace listing, public repository, or GitHub Pages deployment has been created by this workspace.
+Declared in `packages/cli/package.json`, **not published**. Measured again on 2026-09-30: `npm view
+diffbeacon` returns `404`; the repository has zero tags, zero GitHub Releases, no Marketplace
+listing, no Pages deployment, and is still private. [`docs/releasing.md`](docs/releasing.md) is the
+checklist an explicit maintainer authorization would follow.
+
+### Added
+
+- **Core** — dependency-free unified-diff parser: explicit metadata/hunk/binary state machine, 8 MiB
+  (`8388608` byte) bound, quoted and octal path decoding, renames read from both paths, `null` counts
+  for mode-only changes; normalized file model shared by Node and browser.
+- **Detectors** — eleven path surfaces (CI / Build, Authentication / Access, Database / Schema,
+  Dependencies, API / Contracts, Configuration, Infrastructure / Deployment, Tests, Documentation /
+  Changelog, Generated Files, Runtime Implementation), each with positive and negative fixtures.
+- **Attention and ordering** — evidence relationships that claim only what the diff showed, a Review
+  Attention Map, and a deterministic review order from one policy table. `FOCUS`/`CHECK`/`NOTE` are
+  navigation bands, never severity, risk, confidence, or probability.
+- **Renderers** — pretty, Markdown, and JSON at `schemaVersion: "1"`, with hostile display controls
+  neutralized at render time while JSON keeps raw values.
+- **CLI** — `review <rev>...<rev>` / `<rev>..<rev>` / `--stdin`, `--format`, `--output`,
+  `--`, `NO_COLOR`, exit codes `0`/`1`/`2`/`3`/`4`, fixed-argument-vector Git with `shell: false`.
+- **GitHub Action** — bundled `node24` artifact; `pull_request` only, full 40-character object IDs,
+  Job Summary as its only output, no inputs or outputs, `contents: read` only, no token; never
+  executes, installs, or tests the reviewed repository.
+- **Browser demo** — static React + Vite page analyzing a pasted diff locally, with an 8 MiB pre-analysis
+  guard and no upload, backend, storage, analytics, or runtime LLM.
+- **Security hardening** — untrusted-input model, terminal and Markdown display-control
+  neutralization, Git argv and ambient-environment boundary, workspace isolation for the Action, a
+  seeded deterministic fuzz corpus, and a credential scan of the tracked tree.
+- **Package and CI qualification** — `npm pack`/tarball inspection, clean-consumer install of the
+  real bin shim on Windows and Linux, reproducible Action bundle rebuild, `SOURCE_MANIFEST.txt` drift
+  gate, four-cell clean-clone matrix (Windows and Linux × Node 22 and 24), and one executed
+  self-hosted GitHub Actions qualification run (`36562157439`).
+
+### Not included, on purpose
+
+No merge gate, verdict, score, severity, confidence, or probability; no AI or LLM reviewer; no
+vulnerability scanner; no hosted service, account, or telemetry; no pull-request comments, labels, or
+check runs; no execution of the analyzed repository.

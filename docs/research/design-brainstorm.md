@@ -1,5 +1,19 @@
 # DiffBeacon Design Brainstorm
 
+> **DESIGN RESEARCH — not product documentation and not a claim about output.** Stage 10 moved
+> this file here by Git rename from the repository root (`ideas.md`); its content is unchanged. It
+> is the pre-implementation exploration that chose the "Field Manual" visual language the browser
+> demo still uses (`--oxide: #cc5a27` and the file-header wording in `client/src/index.css` and
+> `client/src/pages/Home.tsx`).
+>
+> The `Probability:` values under each candidate theme are the brainstorm's own subjective ranking
+> of which direction to pursue. They are **not** output of any kind: DiffBeacon computes no
+> probability, confidence, score, severity, or merge verdict for a diff or a file, and no report
+> field carries such a value. Read [`docs/architecture/overview.md`](../architecture/overview.md)
+> and [`docs/detectors/`](../detectors/) for what the engine actually emits, and
+> [`docs/research/validation.md`](validation.md) for the dated external research behind these
+> decisions.
+
 ## Approach 1 — Instrument Panel
 
 ### Theme Name

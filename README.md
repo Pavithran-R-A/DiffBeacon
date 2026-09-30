@@ -6,9 +6,32 @@ DiffBeacon helps a maintainer understand a pull request before reading every cha
 
 > DiffBeacon maps review attention. It does **not** determine whether a pull request is safe to merge.
 
+## Status
+
+DiffBeacon v0.1.0 is built, tested, and **not published**. Verified on 2026-09-30 against the npm
+registry, this repository's remote, and its Actions API — [`docs/releasing.md`](docs/releasing.md)
+owns the checklist that changes any row below.
+
+| Question                                   | Answer now                                                                                                                                                                                                                          |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Published on npm?                          | No. `npm view diffbeacon` returns `404`; the CLI tarball exists only from `npm pack`, so `npx diffbeacon …` does not resolve.                                                                                                       |
+| Public repository, tag, or GitHub Release? | No. The repository is private, has zero tags and zero releases, so there is no immutable `uses:` reference a consumer could pin.                                                                                                    |
+| Deployed browser demo?                     | No. `client/` builds a self-contained static site, and `.github/workflows/pages.yml` only uploads a build artifact — it has no deploy step.                                                                                         |
+| Has CI ever actually run these gates?      | Yes, on repository-scoped **self-hosted** runners: GitHub Actions run `36562157439` executed the source lanes (Linux and Windows, Node 24 and Node 22), the real-Chromium browser lane (Windows / Node 24), and both package lanes. |
+| Are GitHub-hosted runner images qualified? | No. No GitHub-hosted job for this repository has ever been allocated a runner, so `.github/workflows/ci.yml` is an unexecuted contract, and the browser contract's `ubuntu-latest` cell is unmeasured.                              |
+
 ## What it does
 
-DiffBeacon reports changed surfaces such as CI/build, authentication/access, database/schema, infrastructure, explicit API contracts, dependencies, tests, documentation, generated files, and runtime implementation. Its evidence language is deliberately narrow: “no test-file content changes were observed in this diff” is valid; “this pull request has no tests” is not. A renamed file is classified from both its old and new path, so moving code out of `src/auth/` still reports the authentication/access surface. A pure file-mode change is classified but never used to claim that a companion file is missing, and a line share is only stated when the diff actually reported the line counts behind it.
+Eleven path detectors name the changed surfaces: CI / Build, Authentication / Access, Database /
+Schema, Dependencies, API / Contracts, Configuration, Infrastructure / Deployment, Tests,
+Documentation / Changelog, Generated Files, and Runtime Implementation
+([`docs/detectors/initial-detectors.md`](docs/detectors/initial-detectors.md) lists each matcher
+and its fixtures). Its evidence language is deliberately narrow: “no test-file
+content changes were observed in this diff” is valid; “this pull request has no tests” is not. A
+renamed file is classified from both its old and new path, so moving code out of `src/auth/` still
+reports the authentication/access surface. A pure file-mode change is classified but never used to
+claim that a companion file is missing, and a line share is only stated when the diff actually
+reported the line counts behind it.
 
 The core engine has no runtime network requirement and can run in Node or in a browser. The browser demo analyzes pasted unified diffs locally. No source upload, backend, account, database, analytics, telemetry, or runtime LLM is part of v0.1.
 
@@ -37,20 +60,26 @@ Attention observations do not fail the command. The CLI exits nonzero only for o
 
 ## Example Attention Map
 
-Actual output for a four-file diff piped through `node packages/cli/dist/index.js review --stdin`:
+[`docs/examples/attention-map-sample.diff`](docs/examples/attention-map-sample.diff) is the exact
+four-file input used here — real `git diff` output, so its hunk headers are what Git computed.
+Piped through the built CLI —
+`node packages/cli/dist/index.js review --stdin < docs/examples/attention-map-sample.diff` — it
+produces the block below verbatim, with `summary.diagnostics` at 0.
+`tests/stage10.docs-contract.test.ts` renders the same file through the shipped core and fails if
+this quotation drifts, so the example is a measurement rather than an illustration.
 
 ```text
 DiffBeacon
 ──────────
 
-4 files changed    +18  -5
+4 files changed    +16  -5
 
 REVIEW ATTENTION
 ────────────────
 FOCUS  Authentication / Access
        1 file · +3  -1
 CHECK  Runtime Implementation
-       3 files · +17  -4
+       3 files · +15  -4
 CHECK  Dependencies
        1 file · +1  -1
 
@@ -76,6 +105,13 @@ REVIEW ORDER
 3. Dependencies
    1 dependency file changed in this diff. Manifests and lockfiles name the
    third-party inputs that the implementation above resolves against.
+
+CHANGED FILES
+─────────────
+modified  package.json  +1 -1
+modified  src/auth/session.ts  +3 -1
+modified  src/runtime/host.ts  +9 -2
+modified  src/runtime/pool.ts  +3 -1
 ```
 
 This output is a starting sequence, not an assertion that the first item is objectively more dangerous. `FOCUS`, `CHECK` and `NOTE` are navigation bands rather than severity, risk, urgency, confidence, or merge status, and every order entry states its own reason: how many files of that surface the diff showed, and which reading convention places the surface where it sits. The sequence, bands and reasons all come from one policy table — see [Review ordering policy](docs/architecture/overview.md#review-ordering-policy).
@@ -128,7 +164,14 @@ jobs:
 - `persist-credentials: false`. DiffBeacon performs no authenticated Git operation after checkout, so the runner's credentials do not need to survive into the steps that read untrusted code.
 - `permissions: contents: read` and nothing more. The review writes only to `$GITHUB_STEP_SUMMARY`.
 
-Continuous integration here runs the CLI and Action quality gates against trusted source; no workflow consumes the Action on a pull request, and no hosted consumer run has been qualified.
+The lanes in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) run the CLI and Action quality
+gates against trusted source only; no workflow in this repository consumes the Action on a pull
+request, and no consumer repository has run it. Where CI has genuinely executed, it ran on
+repository-scoped **self-hosted** runners — Actions run `36562157439`, whose lane-by-lane result is
+recorded in [`docs/audits/stage9-ci-package-qualification.md`](docs/audits/stage9-ci-package-qualification.md).
+GitHub-hosted runner images (`ubuntu-latest`, `windows-latest`) have never been allocated a job for
+this repository, so that half of the contract is unexecuted rather than passing, and no hosted
+consumer run of the Action has been qualified anywhere.
 
 ## Browser demo
 
@@ -144,13 +187,13 @@ For a repository-subpath GitHub Pages deployment, set the Vite `base` to `/<repo
 
 ## Architecture
 
-| Workspace         | Responsibility                                                                                                | Runtime boundary                                                        |
-| ----------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `packages/core`   | Unified diff parsing, normalized file model, detectors, evidence relationships, order, renderers, JSON Schema | No filesystem, child process, Git, GitHub, terminal, or network imports |
-| `packages/cli`    | Validated Git range collection, stdin mode, pretty/JSON/Markdown output                                       | Node process only; argument-vector Git execution with `shell: false`    |
-| `packages/action` | Pull-request event SHA validation, diff collection, Job Summary output                                        | GitHub runner; bundled Node 24 artifact                                 |
-| `client/`         | Static interactive demo with local analysis and accessible UI                                                 | Browser only; no source-code upload                                     |
-| `docs/`           | Research, architecture, detector authoring, security boundaries                                               | Maintainer and contributor documentation                                |
+| Workspace         | Responsibility                                                                                                                                                                                         | Runtime boundary                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `packages/core`   | Unified diff parsing, normalized file model, detectors, evidence relationships, order, renderers, JSON Schema                                                                                          | No filesystem, child process, Git, GitHub, terminal, or network imports |
+| `packages/cli`    | Validated Git range collection, stdin mode, pretty/JSON/Markdown output                                                                                                                                | Node process only; argument-vector Git execution with `shell: false`    |
+| `packages/action` | Pull-request event SHA validation, diff collection, Job Summary output                                                                                                                                 | GitHub runner; bundled Node 24 artifact                                 |
+| `client/`         | Static interactive demo with local analysis and accessible UI                                                                                                                                          | Browser only; no source-code upload                                     |
+| `docs/`           | Architecture and detector documentation, workflow and diff examples, the release checklist, design research, quarantined recovery forensics, and the per-stage qualification reports in `docs/audits/` | Documentation only; no code reads it at runtime                         |
 
 The JSON report is versioned at schema `1`. It intentionally contains no risk score, safety percentage, merge confidence, or other meaningless numeric verdict.
 
@@ -174,25 +217,40 @@ DiffBeacon is not an AI code reviewer, security scanner, correctness checker, me
 
 ## Development commands
 
-| Command                 | Purpose                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------ |
-| `npm run format:check`  | Check formatting for DiffBeacon-owned files                                                |
-| `npm run lint`          | Run ESLint with warnings treated as errors                                                 |
-| `npm run typecheck`     | Run strict TypeScript typechecking                                                         |
-| `npm test`              | Run parser, detector/evidence, renderer, CLI-input, and Action-event tests                 |
-| `npm run build`         | Build the core declarations, CLI bundle, Action bundle, and static web demo                |
-| `npm run package-smoke` | Pack the CLI, inspect the tarball, install it in a clean project, invoke the real bin shim |
-| `npm run action-smoke`  | Run the bundled Action against a temporary Git repository and inspect the Job Summary      |
-| `npm run verify`        | Check artifacts and run package/Action smoke tests                                         |
-| `npm run check`         | Execute the complete local quality gate                                                    |
+| Command                 | Purpose                                                                                                                                                                          |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run format:check`  | Check formatting for DiffBeacon-owned files                                                                                                                                      |
+| `npm run lint`          | Run ESLint with warnings treated as errors                                                                                                                                       |
+| `npm run typecheck`     | Run strict TypeScript typechecking                                                                                                                                               |
+| `npm test`              | Run the whole suite, source and browser projects together                                                                                                                        |
+| `npm run test:source`   | Run only the source project (no browser engine needed)                                                                                                                           |
+| `npm run test:browser`  | Run only the browser project; requires a local Chromium-class engine                                                                                                             |
+| `npm run build`         | Build the core declarations, CLI bundle, Action bundle, and static web demo                                                                                                      |
+| `npm run secret-scan`   | Scan tracked files for credential-shaped strings                                                                                                                                 |
+| `npm run manifest`      | Regenerate `SOURCE_MANIFEST.txt` for the tracked source set                                                                                                                      |
+| `npm run package-smoke` | Pack the CLI, inspect the tarball, install it in a clean project, invoke the real bin shim                                                                                       |
+| `npm run action-smoke`  | Run the bundled Action against a temporary Git repository and inspect the Job Summary                                                                                            |
+| `npm run verify`        | The complete gate, in order: source completeness, format, lint, typecheck, tests, build, artifact freshness, secret scan, manifest drift, CLI startup, package and Action smokes |
+| `npm run check`         | Alias for `npm run verify`                                                                                                                                                       |
 
 ## Limitations
 
 Path-based classification cannot understand arbitrary source-code semantics. A pasted diff does not reveal the complete repository state, whether unchanged tests cover a modification, or whether a manifest normally has a lockfile. Contract-file detection does not detect every public API change. Generated-file heuristics, rename forms, quoting, and unusual Git output have edge cases. DiffBeacon is an attention aid, not a security scanner or merge decision system.
 
+[`docs/limitations.md`](docs/limitations.md) is the full statement of scope — what a surface may claim, what a diff cannot show, the patch-format and per-adapter boundaries, and what has not been measured.
+
 ## Contributing
 
-Read [`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md), and the detector authoring guide before changing behavior. Every detector needs positive and negative tests. Do not add risk/safety scores or overclaiming language. Do not publish, release, or create a public repository from this workspace without explicit maintainer authorization.
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md), and the detector authoring
+guide before changing behavior. Every detector needs positive and negative tests. Do not add
+risk/safety scores or overclaiming language. Do not publish, release, or create a public repository
+from this workspace without explicit maintainer authorization;
+[`docs/releasing.md`](docs/releasing.md) is the checklist that such an authorization would follow.
+
+Each stage of this project has an authoritative qualification report under
+[`docs/audits/`](docs/audits/), and superseded handoffs are kept as historical records under
+[`docs/audits/legacy/`](docs/audits/legacy/). Those reports, not the marketing prose above, are
+where a claim was measured.
 
 ## License
 

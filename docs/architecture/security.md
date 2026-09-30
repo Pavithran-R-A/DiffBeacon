@@ -162,22 +162,36 @@ A permanent guard scans the four shipped source trees for the APIs none of them 
 `eval(`, `new Function(`, `execSync(`, `shell: true`, and every markup, cookie, storage, and network
 sink. It finds zero of each, and the only process starts remain `execFileSync` plus one asynchronous
 `spawn` of `git`, both with `shell: false`. After a clean build, the tracked Action bundle and the
-built CLI bundle still carry all twelve pinned revision and diff flags verbatim, contain no `http(s)`
-endpoint and no marker of the machine that built them, and list `child_process` as the only entry on
-that dangerous-name scan — the module the single `git` start uses.
+built CLI bundle each still carry the eleven pinned diff flags and the pinned revision-resolution
+flags (`--verify`, `--quiet`, `--end-of-options`) verbatim, contain no `http(s)` endpoint and no marker
+of the machine that built them, and reach no network, package-manager, or shell surface:
+`tests/stage6.action-metadata.test.ts:169-196` requires the bundle to mention none of `node:http`,
+`node:https`, `node:net`, `node:tls`, `node:dgram`, `fetch(`, `XMLHttpRequest`, `WebSocket`,
+`sendBeacon`, `@actions/`, `octokit`, `npm install`, `npm ci`, `shell: true` or `shell:!0`, and then
+requires the one process module it does carry to be `node:child_process` — the module the single `git`
+start uses.
 
 Report values are data, including the ones that look like instructions. A path is only ever a value in
 the JSON, never a key, so a `__proto__`-shaped name cannot reach a prototype, and the canaries that
 would have caught a mutation stay unwritten. A seeded fuzz (seed `0x5eed1a11`, 1,500 mutated inputs
-built from nine seed diffs and fourteen fragments) holds the contract across every one: the parser and
+built from nine seed diffs and fifteen fragments, in `tests/stage8.fuzz.test.ts:28-74`) holds the
+contract across every one: the parser and
 the three renderers never throw, every count is finite and a whole non-negative number or an honest
 `null` on a binary or mode-only file, no rendered terminal line carries a control character, the same
 input always yields the same report, and JSON round-trips unchanged.
 
-A credential scan of the tracked tree and the committed bundles read 151 paths (150 as text, one
-quarantine archive skipped as binary) and reported one match: an `AKIA`-shaped canary inside
-`tests/stage7.browser-security.test.ts`, which exists so that test can assert nothing leaves the page.
-The scanner prints names and counts, never values.
+A credential scan is a gate, not a report. `npm run secret-scan` reads every path `git ls-files`
+reports, skips binary files and anything over its own size bound, and matches eight rules: a private
+key, a GitHub fine-grained token, a GitHub token, an npm token, an AWS access-key id, a Slack token, a
+credential-bearing URL, and a generic secret assignment. Measured on 2026-09-30 against this tree it
+read 182 tracked paths and reported 12 findings, all classified: an `AKIA`-shaped marker in
+`tests/stage7.browser-security.test.ts` and a placeholder npmrc in
+`tests/stage6.action-security-boundary.test.ts`, each present so its own test can prove the program
+never uses it, plus ten falsification canaries in `tests/stage9.secret-scan.test.ts` invented so no
+rule can silently stop matching. The table of accepted findings is fail-closed in both directions: an
+unclassified credential-shaped string stops the gate, and an accepted entry whose file no longer
+produces that finding is reported as stale, so a removed canary cannot leave an expired allowance
+behind. Output is file, rule, line, digest and length — never the matched value.
 
 ## What this does not prove
 
@@ -188,19 +202,45 @@ edge cases, Markdown escaping, Action workflow permissions, and package-bundle p
 
 Specifically left open, each for a recorded reason rather than by assumption:
 
-- **No hosted CI outcome is claimed here.** Every number above comes from a command run locally; this
-  repository's Actions runs have repeatedly been starved of runners in this environment, and the one
-  run observed after this push is recorded in the Stage 8 report rather than here.
-- **Action pins are not resolved to tags.** Both workflows reference full commit SHAs with minimum
-  permissions, but confirming a SHA really is the tagged release needs a network lookup, so the
-  mapping is recorded as unverified.
-- **Dependency advisories are carried, not closed.** Against the tracked lockfile, `npm audit` reports
-  four advisories in build and test tooling; the three published packages declare zero runtime
-  dependencies, so none reaches a shipped artifact. Refreshing the lockfile needs its own
-  qualification run.
-- **Platform-specific measurements were skipped honestly.** Names that POSIX allows but Windows
-  refuses, and the real-Git oracle for a trailing-space name, need a Linux host; the browser suites
-  skip with a recorded reason where no engine is installed. This pass ran on Windows.
+- **The CI that has run is not the CI the published workflow describes.** No GitHub-hosted job for
+  this repository has ever been allocated a runner, so every lane in
+  [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — including the browser contract's
+  `ubuntu-latest` cell — is an unexecuted contract rather than a passing result. What has executed is
+  the temporary self-hosted qualification lane: Actions run `36562157439` (2026-09-29, commit
+  `b6e884260e84557807fd9fc2867783e3f8756bee`, branch `rescue/stage9-selfhosted-ci`) completed all
+  seven jobs green on repository-scoped self-hosted runners — source gates on Linux and Windows at
+  Node 24 and Node 22, the real-Chromium browser lane on Windows with Node 24, and both package lanes.
+  Those runners were unregistered after the run, so nothing re-executes until Stage 11 supplies an
+  environment.
+- **The Action pins resolve to tag names, and that is all the lookup shows.**
+  `git ls-remote --tags` against the two pinned actions maps the checkout commit
+  `3d3c42e5aac5ba805825da76410c181273ba90b1` to `refs/tags/v7` and `refs/tags/v7.0.1`, and the
+  setup-node commit `820762786026740c76f36085b0efc47a31fe5020` to `refs/tags/v7` and `refs/tags/v7.0.0`
+  (measured 2026-09-30). That confirms each SHA is the commit a release tag points at; it does not
+  attest that the tagged build is trustworthy, and verifying release provenance is a Stage 11 step.
+- **Dependency advisories are carried, not closed.** Measured 2026-09-30 against the tracked lockfile:
+  `npm audit --omit=dev --audit-level=high` reports 0 vulnerabilities and exits 0, because the only
+  package marked publishable is the CLI (`diffbeacon@0.1.0`), which declares no runtime dependencies
+  while `diffbeacon-core` and `diffbeacon-action` are `private: true`; `npm audit --audit-level=high`
+  reports 1 high, `brace-expansion` reached only through development lint tooling
+  (`eslint@9.39.5 → minimatch@3.1.5` resolving `1.1.18`, and
+  `typescript-eslint@8.70.1 → @typescript-eslint/typescript-estree@8.70.1 → minimatch@10.2.6`
+  resolving `5.0.9`) behind `GHSA-6j4f-fj2g-mc7p`, `GHSA-qhr7-859c-m2p7` and `GHSA-q2hr-2g5m-vwhr`, all
+  denial-of-service on brace expansion. Neither shipped bundle contains the name, so no published
+  artifact can reach it; it is a risk to a contributor's or a CI machine's tooling. Nothing was
+  repaired here — `npm audit fix`, `--force`, and a hand-edited lockfile would each need their own
+  qualification run. The condition moved by itself: this same lockfile printed
+  `found 0 vulnerabilities` on both audit steps of every lane at 11:30Z on 2026-09-29, and the three
+  advisories published at 21:33Z the same day, so the next run of either workflow fails its
+  development-tree audit step with no change in this repository. It is handed to Stage 11 as a
+  prerequisite in [`docs/releasing.md`](../releasing.md).
+- **Cross-platform evidence exists only where something actually ran.** A filename whose bytes are not
+  valid UTF-8 can only be created on a POSIX filesystem, so the real-Git half of
+  `tests/stage8.invalid-byte-paths.test.ts` is gated to that platform; it ran and passed on the
+  self-hosted Linux lanes of run `36562157439`, and on Windows it prints a recorded skip reason rather
+  than typing in the answer. The Windows-only npm bin-shim case in `tests/stage3c.release.test.ts` is
+  skipped on Linux on the same principle. Painting hostile names in a real browser was measured on
+  self-hosted Windows; the hosted Linux browser cell has never been measured anywhere.
 - **A fuzz corpus is not an absence proof.** The seeded 1,500 inputs guard the contract that was
   written down; they say nothing about inputs outside it.
 - **DiffBeacon does not decide whether a pull request is safe to merge**, and none of these controls

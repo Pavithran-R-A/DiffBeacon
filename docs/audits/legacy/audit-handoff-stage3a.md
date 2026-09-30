@@ -1,6 +1,19 @@
 # DiffBeacon Stage 3A Audit Handoff
 
-> **Historical record:** This document describes the completed Stage 3A state. Stage 3B supersedes its interim managed-storage artwork design, 18-test verification counts, and Stage 3A archive references. Use [`EXPORT_VERIFICATION.md`](EXPORT_VERIFICATION.md) and the Stage 3B final delivery report for the current release candidate.
+> **HISTORICAL RECORD — not current project status.** Stage 10 moved this file here by Git
+> rename from the repository root (`AUDIT_HANDOFF_STAGE3A.md`); its prose and measurements are
+> unchanged. It describes the completed Stage 3A state only. Stage 3B supersedes its interim
+> managed-storage artwork design, 18-test verification counts, and Stage 3A archive references,
+> and Stages 4-9 supersede the CLI, Action, browser, security, packaging, and CI wording below.
+> Nothing here is evidence about the current tree. For how the product works now, read
+> [`README.md`](../../../README.md), [`docs/architecture/`](../../architecture/), and the stage
+> reports in [`docs/audits/`](../).
+>
+> The records this handoff pointed at have themselves moved: `EXPORT_VERIFICATION.md` is now
+> [`export-verification-stage4.md`](export-verification-stage4.md) beside this file, and
+> `docs/audits/stage3a-before-fixes.md` is now
+> [`../stage3a-before-fixes.md`](../stage3a-before-fixes.md). The Stage 3B final delivery report
+> is [`../stage3-detector-system.md`](../stage3-detector-system.md).
 
 ## Stop state
 
@@ -10,7 +23,7 @@ DiffBeacon remains an observational tool. It maps changed files to review surfac
 
 ## Recovery and baseline
 
-The original source repository was recovered at `/home/ubuntu/diffbeacon` before changes. The frozen baseline is documented in [`docs/audits/stage3a-before-fixes.md`](docs/audits/stage3a-before-fixes.md), including the original commit, source tree, 4-file/15-test baseline, clean-but-shallow build/verify result, and reproduced parser, large-diff, packaging, and static-asset findings.
+The original source repository was recovered at `/home/ubuntu/diffbeacon` before changes. The frozen baseline is documented in [`../stage3a-before-fixes.md`](../stage3a-before-fixes.md), including the original commit, source tree, 4-file/15-test baseline, clean-but-shallow build/verify result, and reproduced parser, large-diff, packaging, and static-asset findings.
 
 ## Fix matrix
 
@@ -42,7 +55,7 @@ These boundaries are intentionally narrower than a security scanner, policy engi
 
 ## Verification summary
 
-The final exact commands, extracted-copy results, archive hash, file count, and browser evidence are recorded in [`EXPORT_VERIFICATION.md`](EXPORT_VERIFICATION.md). The required checks are source-first and must be run from a clean extracted copy as well as the working tree:
+The final exact commands, extracted-copy results, archive hash, file count, and browser evidence are recorded in [`export-verification-stage4.md`](export-verification-stage4.md). The required checks are source-first and must be run from a clean extracted copy as well as the working tree:
 
 ```text
 npm ci

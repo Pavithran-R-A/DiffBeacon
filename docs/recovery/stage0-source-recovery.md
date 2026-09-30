@@ -1,5 +1,18 @@
 # DiffBeacon Stage 0 — Source Rescue & Repository Normalization
 
+> **HISTORICAL FORENSIC RECORD — not current project status.** Stage 10 moved this file here by
+> Git rename from the repository root (`RECOVERY_STAGE0.md`); no measurement, hash, or conclusion
+> below has been altered. It documents the 2026-09-24 recovery decision against the bootstrap-only
+> history at `e0ff981`, and its `STATUS: PASS` line reports that recovery, not any later stage
+> gate. Root paths it names (`todo.md`, `ideas.md`, `AUDIT_HANDOFF*.md`, `EXPORT_VERIFICATION.md`,
+> `SOURCE_MANIFEST.txt`) are the paths of that tree; the documents were later relocated under
+> `docs/audits/`, `docs/recovery/` and `docs/research/` by Stage 10.
+>
+> For how the product and its gates stand now, read [`README.md`](../../README.md),
+> [`docs/architecture/`](../architecture/), [`docs/releasing.md`](../releasing.md), and the stage
+> reports in [`docs/audits/`](../audits/). See also [`README.md`](README.md) in this directory for
+> why the quarantined bootstrap payloads are preserved.
+
 STATUS: **PASS (verified recovery)** — see _Caveats_ for the two open items the auditor must rule on.
 
 Executed locally on 2026-09-24 against a fresh clone of `Pavithran-R-A/DiffBeacon`.

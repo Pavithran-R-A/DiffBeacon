@@ -78,7 +78,7 @@ The real v0.1.0 source tree was recovered, manifest-verified 87/87, and imported
 partially inflating the truncated `.bootstrap2` stream exposes 35 tar headers whose 26
 complete member payloads are byte-identical to the recovered tree, and whose
 `todo.md`/`SOURCE_MANIFEST.txt` sizes match the recovered `-v2` variant specifically.
-See `../../RECOVERY_STAGE0.md` for the full evidence.
+See [`stage0-source-recovery.md`](stage0-source-recovery.md) for the full evidence.
 
 ## Why they were quarantined rather than deleted
 

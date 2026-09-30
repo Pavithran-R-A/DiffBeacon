@@ -1,0 +1,139 @@
+# Release Checklist
+
+This is the Stage 11 operator's runbook. **Nothing in it has been executed, and nothing here
+authorises a release.** Stage 10 changed documentation only; it published no package, created no tag
+or release, made no repository public, and changed no repository setting. Every row below is a step to
+be taken by a human who has that authority, in this order, with the result recorded back into a new
+stage report under [`docs/audits/`](audits/).
+
+Read [`docs/limitations.md`](limitations.md) first: it states what the product does not do, and a
+release announcement must not exceed it.
+
+## 0. Prerequisites that are not yet satisfied
+
+Each of these is a measured current state, not a hypothetical risk. Do not start section 1 until every
+row is closed.
+
+| Prerequisite                      | State today                                                                                                                                                                                                                                                                                      | What closing it means                                                                                                                                                                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Development-tree dependency audit | `npm audit --audit-level=high` reports **1 high** against the tracked lockfile: `brace-expansion`, reached only through `eslint` and `typescript-eslint`. The release surface (`--omit=dev`) audits at 0. Both workflows carry a blocking development-tree audit step, so the next run fails it. | Refresh the lockfile, re-run the full gate and the four-cell clean-clone matrix, and record the new resolved graph. Do not use `npm audit fix --force`.                                                                                               |
+| Security reporting channel        | [`SECURITY.md`](../SECURITY.md) publishes no address and promises no response time. Whether private vulnerability reporting is enabled was **not checked and not changed** in Stage 10.                                                                                                          | Choose and verify one channel: a monitored address in `SECURITY.md`, or GitHub's private vulnerability reporting confirmed enabled in the repository's settings. Then re-read `SECURITY.md` so its claims match what is actually configured.          |
+| Conduct reporting channel         | [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md) states plainly that no intake exists yet.                                                                                                                                                                                                          | Publish the same or an equivalent monitored intake.                                                                                                                                                                                                   |
+| A CI environment that runs        | No GitHub-hosted job for this repository has ever been allocated a runner, so `.github/workflows/ci.yml` is an unexecuted contract. The only executed lane was the temporary **self-hosted** Stage 9 qualification run `36562157439`, whose runners were unregistered afterwards.                | Either enable hosted Actions for the repository and let `ci.yml` run on the commit you intend to release, or register runners again and run the parity lane. Record which, and where the hosted `ubuntu-latest` browser cell still stands unmeasured. |
+| Release-surface identity          | `npm view diffbeacon` returns `404`; the repository has zero tags, zero releases, no Marketplace listing, and is private.                                                                                                                                                                        | Confirm each of these flips exactly when you expect it to, immediately before and after the step that flips it.                                                                                                                                       |
+
+## 1. Pre-release qualification (no public side effects)
+
+1. Check out the intended release commit in a **clean clone** (`git clone`, then `npm ci`) — never a
+   working tree with host debris or a foreign lockfile.
+2. Run `npm run verify`. It is one ordered gate: source-completeness, format, lint, typecheck, tests,
+   build, artifact freshness, secret scan, manifest drift, CLI startup, package smoke, Action smoke.
+3. Confirm the committed Action bundle equals a fresh rebuild
+   (`npm run build:action` then `git diff --exit-code -- packages/action/dist/index.js`).
+4. Confirm `SOURCE_MANIFEST.txt` is current (`npm run manifest` changes nothing).
+5. Re-measure the audit surfaces and write the numbers down with the date and the commit:
+   `npm audit --omit=dev --audit-level=high`, then `npm audit --audit-level=high`.
+6. Run the clean-clone matrix on both operating systems at Node 22 and Node 24, and the real-Chromium
+   browser suite where an engine is installed. Record skipped cells with their reason instead of
+   dropping them.
+7. Pack without publishing (`npm pack --dry-run` from `packages/cli`) and confirm the tarball contains
+   exactly the intended files — the bundle, `README.md`, `package.json`, `LICENSE` — and nothing else.
+8. Have the release commit reviewed as the artifact: the bundle and the workflow pins are part of the
+   diff under review, not build-time surprises.
+
+Stop here if any step fails, and record why in a stage report rather than proceeding with a caveat.
+
+## 2. Make the repository public and settle its main branch
+
+1. Agree the visibility change and the default branch with the maintainers before doing either.
+2. Make the repository public, then re-check the settings that documentation depends on: issues
+   enabled or disabled as intended, branch protection on `main` if used, and the security/conduct
+   intake from section 0.
+3. Merge the qualified branch into `main` by ordinary review. Do not rewrite the branch, do not
+   force-push, and do not merge a commit that was not the one qualified in section 1.
+4. Confirm the release commit SHA on `main` equals the SHA qualified in section 1. If they differ, the
+   qualification no longer applies and section 1 must be re-run against the new SHA.
+5. Delete nothing yet — including the temporary Stage 9 branch and its workflow — until the release is
+   recorded; they are the evidence for what was measured.
+
+## 3. Publish the npm package
+
+1. Confirm the package you are publishing is `packages/cli` (`diffbeacon`), that its version matches
+   the intended release, and that the two private workspace packages stay private.
+2. Authenticate through whatever mechanism the organisation's registry policy requires — a scoped,
+   time-limited, single-package automation credential held only in the publishing environment. Never
+   paste, commit, echo, or log a token value, and never put one in this document or in a stage report.
+3. Publish with an explicit tag, e.g. `npm publish --tag latest`, from the clean clone built in
+   section 1. Do not publish from a tree that has run `npm audit fix`.
+4. Verify from outside the repository: `npm view diffbeacon version`, `npm view diffbeacon
+dist.tarball`, then install the published tarball into a throwaway directory, run its `--version`
+   and one real `review --stdin`, and confirm its output matches the source tests' expectation.
+5. Record the published version, the SHA it was built from, and the install check in the stage report.
+   If the version is wrong, `npm deprecate` it rather than republishing over it, and say so.
+
+## 4. Create the tag and the GitHub Release
+
+1. Tag the **exact** commit qualified in section 1 and released in section 3, with an annotated tag
+   (e.g. `v0.1.0`), and push that single tag — no wildcards, no force-push.
+2. Confirm the tag points at that SHA (`git ls-remote --tags`).
+3. Create the Release from that tag. Its body should carry what the product does, what it does **not**
+   do (link [`docs/limitations.md`](limitations.md)), the verified-install command, and nothing that
+   reads like a security guarantee.
+4. Do not attach build outputs the repository does not already commit; the Action's artifact is the
+   bundle in the tree, so a Release asset would be a second, unreviewed copy of it.
+
+## 5. Make the Action consumable
+
+1. Publish only after the tag and the public repository exist; consumers pin the **full commit SHA** of
+   the reviewed release, following [`docs/examples/diffbeacon-pull-request-review.yml`](examples/diffbeacon-pull-request-review.yml).
+2. Replace that example's `<REVIEWED_FULL_COMMIT_SHA>` placeholder with the real SHA in a reviewed
+   commit — the example is documentation, and the placeholder exists so no one can run it before a
+   reviewed release exists. The test that guards the example requires it to stay non-runnable until
+   then, so updating the example and updating the test happen in the same reviewed change.
+3. Decide explicitly whether a moving version tag (`@v0`, `@v0.1.0`) is offered, and if it is, how it is
+   re-pointed and who may re-point it. DiffBeacon's own documentation recommends immutable SHAs and must
+   not contradict the release it publishes.
+4. Confirm from a consumer repository, on a pull request, with `contents: read` and no PAT, that the
+   Action produces the Job Summary review and fails cleanly when the checkout lacks history.
+5. Do not add a `pull_request_target` workflow, a write permission, or a token-consuming step to prove
+   any of the above.
+
+## 6. Public documentation and the demo
+
+1. Re-read every current-status claim now that the state changed — README status table,
+   `CHANGELOG.md`, `SECURITY.md`, `packages/cli/README.md` install lines, and
+   `packages/action/README.md`. Any "not published", "no tag", or "does not resolve" sentence that the
+   release makes false has to be rewritten in the same change, with the measurement that justifies it.
+2. Update `npx diffbeacon` guidance once the registry resolves it, and remove the "unavailable"
+   warning from the CLI README only when a fresh install proves it.
+3. Pages: `.github/workflows/pages.yml` currently builds and uploads an artifact and contains no
+   deploy step. Decide whether to add one, and if you do, keep the demo static and local-only — the
+   browser path must not gain a backend, telemetry, or a repository connection to be "deployed".
+4. Remove or mark as historical any root file that would read as current status after the release,
+   using Git rename so the evidence survives; see [`docs/audits/legacy/`](audits/legacy/).
+
+## 7. Rollback and abort
+
+- **Before** the public steps, aborting costs nothing: stop, record what was measured, and leave the
+  tree where it is. Documentation-only changes need no rollback.
+- **After** an npm publish, the version is permanently consumed. `npm deprecate diffbeacon@<version>
+"<reason>"` is the corrective; do not re-publish the same version number over it, and do not
+  `npm unpublish` a version consumers may already have installed without deciding that publicly.
+- **After** a tag or Release, do not move or delete the tag. Point a new annotated tag at a corrected
+  commit, record the relationship between the two, and edit the Release notes to say what changed.
+- **After** the Action was consumed, treat the exposed SHA as public forever: announce the replacement
+  pin, and deprecate the Release rather than rewriting history.
+- If the secret scan, manifest gate, or a bundle-freshness check fails after any step, that is a
+  stop-and-record condition, not a warning to note afterwards.
+- Whatever the outcome, write what actually happened — including a failed or skipped step — into a new
+  report under [`docs/audits/`](audits/). An unexecuted checklist row must never be summarised as a
+  pass.
+
+## Ground rules for the operator
+
+- One stage, one boundary. A release step that changes repository settings, registry state, or public
+  visibility needs its own authorization; a passing test suite is not that authorization.
+- Record commands and their real output. Never restate a number from an earlier stage report as if it
+  were measured today; the audit condition in section 0 moved on its own, without a commit here.
+- Never commit a credential, registration token, OTP, or cookie to any file in this repository,
+  including this checklist and any stage report. `npm run secret-scan` is a gate, not a formality.

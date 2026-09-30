@@ -1,0 +1,49 @@
+diff --git a/package.json b/package.json
+index d749786..1289c4f 100644
+--- a/package.json
++++ b/package.json
+@@ -1,4 +1,4 @@
+ {
+-  "name": "sample",
++  "name": "sample-renamed",
+   "version": "1.0.0"
+ }
+diff --git a/src/auth/session.ts b/src/auth/session.ts
+index 16d3b86..f8de7ef 100644
+--- a/src/auth/session.ts
++++ b/src/auth/session.ts
+@@ -1,3 +1,5 @@
+ export function read(token: string) {
+-  return decode(token);
++  const session = decode(token);
++  if (!session) return null;
++  return session;
+ }
+diff --git a/src/runtime/host.ts b/src/runtime/host.ts
+index 81a5205..704c4bc 100644
+--- a/src/runtime/host.ts
++++ b/src/runtime/host.ts
+@@ -1,3 +1,10 @@
+-export function connect() {
+-  return open();
++export async function connect(retries: number) {
++  for (let attempt = 0; attempt < retries; attempt += 1) {
++    try {
++      return await open();
++    } catch {
++      continue;
++    }
++  }
++  return null;
+ }
+diff --git a/src/runtime/pool.ts b/src/runtime/pool.ts
+index 4f23494..c9df545 100644
+--- a/src/runtime/pool.ts
++++ b/src/runtime/pool.ts
+@@ -1,3 +1,5 @@
+ export const pool = {
+-  size: 4,
++  size: 8,
++  warm: true,
++  max: 16,
+ };

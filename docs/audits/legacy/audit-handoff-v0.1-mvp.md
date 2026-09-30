@@ -1,3 +1,17 @@
+> **HISTORICAL RECORD — not current project status.** This handoff was written before the
+> Stage 1-9 qualification passes existed. Every measurement in it is a reading of that earlier
+> tree: 7 test files and 32 tests, a 127-package install, a 981-byte Job Summary, a 3-file
+> tarball, the `/home/ubuntu/diffbeacon` sandbox, a `--binary` diff flag the collector no longer
+> uses, and the stop state `REMOTE CI EXECUTION PENDING`. Those sentences are kept verbatim as
+> evidence of what was true then and of what the next audit inherited. Several are now
+> superseded; none has been rewritten into today's numbers.
+>
+> For how the product works now, read [`README.md`](../../../README.md),
+> [`docs/architecture/overview.md`](../../architecture/overview.md),
+> [`docs/architecture/security.md`](../../architecture/security.md), and the stage reports in
+> [`docs/audits/`](../). This file lived at the repository root as `AUDIT_HANDOFF.md` until
+> Stage 10 moved it here by Git rename.
+
 # DiffBeacon Audit Handoff
 
 This handoff describes the unpublished v0.1 MVP state prepared for independent audit. It records commands actually run in the sandbox and distinguishes implemented behavior from claims that still require maintainer review.
