@@ -3,15 +3,17 @@
 STATUS: **PASS**
 
 STARTING SHA: `8415cfefa9bc23a512e0b9a5e298c267591ebcfe` (`8415cfe`), branch `rescue/stage0-source`
-ENDING QUALIFIED SHA: `fdf7fe85b8d2ba250c1830e582e107c5a5ce5fe8` (`fdf7fe8`) — the commit the clean-copy
-proof in PHASE 20 was run against. The commit that adds this report changes only
-`docs/audits/stage10-oss-documentation.md` (this file, which `scripts/source-manifest.mjs` excludes by
-prefix and `tests/stage10.docs-contract.test.ts` excludes from its current-document scan set),
-`docs/architecture/security.md`, `tests/stage10.docs-contract.test.ts` (§7 defect 2) and
-`SOURCE_MANIFEST.txt`; no `packages/**`, `client/**`, `.github/**`, `action.yml`, lockfile or
-`package.json` path differs from `fdf7fe8`. The clean-copy cell of §13 was re-run against that report
-commit before it was pushed, so the record and the proof are the same tree except for those four
-documentation and test-contract paths.
+ENDING QUALIFIED SHA: `243f35906071c33603be5f2f8c976fd25f4a3792` (`243f359`) — the commit that carries
+this report. It changes only `docs/audits/stage10-oss-documentation.md` (this file, which
+`scripts/source-manifest.mjs` excludes by prefix and `tests/stage10.docs-contract.test.ts` excludes
+from its current-document scan set), `docs/architecture/security.md`,
+`tests/stage10.docs-contract.test.ts` (§7 defect 2) and `SOURCE_MANIFEST.txt`; no `packages/**`,
+`client/**`, `.github/**`, `action.yml`, lockfile or `package.json` path differs from the preceding
+candidate `fdf7fe8`, which is the commit PHASE 20's first clean-copy cell was run against. §13 records
+the same cell re-run inside a clean clone of `243f359`. The measured lines that run added one
+successor commit touching this file alone: no gate reads it (outside the manifest, outside the
+contract scan set, outside every shipped artifact), so the proof and the pushed tip are the same tree
+except for this report.
 
 BRANCH: `rescue/stage0-source` (normal forward push only)
 `origin/main`: `e0ff98143bfe39c80c338518d006525a846a8739` — **not touched by Stage 10**
@@ -227,7 +229,7 @@ same one the source lanes of `ci.yml` set) and `LEFTHOOK=0`:
 | `npm run lint`                                                    | 0     | `eslint . --max-warnings=0`, clean                                                                                                     |
 | `npm run typecheck`                                               | 0     | `tsc --noEmit -p tsconfig.json`                                                                                                        |
 | `npm run test:source`                                             | 0     | **59 files, 968 passed, 2 skipped (970 cases)**                                                                                        |
-| `vitest run tests/stage10.docs-contract.test.ts --project source` | 0     | 1 file, 39/39 (40/40 at the report commit — §7)                                                                                        |
+| `vitest run tests/stage10.docs-contract.test.ts --project source` | 0     | 1 file, 39/39 (40/40 in a clean clone of `243f359` — §13)                                                                              |
 | `npm run build`                                                   | 0     | core `tsc`, CLI bundle, Action bundle, web `vite build`                                                                                |
 | `npm run secret-scan`                                             | 0     | `12 finding(s), 12 classified, 0 unclassified, 0 stale`                                                                                |
 | `npm run package-smoke`                                           | 0     | `bin=true; engines=>=22; tarballFiles=4; license=MIT; noRepositoryExit=3; usageExit=2`                                                 |
@@ -257,8 +259,11 @@ length mutation `2 failed | 38 passed`, worktree restored from the index afterwa
 Node 22 check, done inside the same clean copy with the portable `v22.23.3` (npm 10.9.9), labelled
 honestly as a host run on Windows rather than a runner run: docs-contract **39/39** (40/40 against the
 report commit's version of the test), full source suite
-**59 files, 968 passed / 2 skipped**, both exit 0, worktree pristine afterwards. Nothing here is a
-GitHub-hosted Node 22 run; no hosted runner has ever been allocated.
+**59 files, 968 passed / 2 skipped**, both exit 0, worktree pristine afterwards. Repeated on the
+`243f359` clone of §13 with the same portable runtime: docs-contract **40/40**, source suite
+**59 files, 969 passed / 2 skipped (971 cases)**, both exit 0, worktree pristine afterwards
+(`stage10/p22-node22-record.*`). Nothing here is a GitHub-hosted Node 22 run; no hosted runner has
+ever been allocated.
 
 ## 12. Dependency audit position
 
@@ -294,6 +299,24 @@ node = v24.21.0   npm = 11.19.0   git = 2.55.0.windows.5   platform = win32 x64 
 then the 16 gates of §11 run in it. **15 exit 0; the one exit 1 is the development-tree audit step,
 whose failure is itself the documented finding.** No self-hosted runner was re-registered for this, and
 no new Actions run was created to record a docs commit.
+
+The same driver (`stage10/p20-run-cell-record.sh`, logs `stage10/p20-cell-node24-record.*`) was then run
+against a fresh clone of `243f359` — the commit that carries this report — so that the record and the
+proof are the same object, not neighbours:
+
+```
+HEAD = 243f35906071c33603be5f2f8c976fd25f4a3792   tracked paths = 188   markdown = 39
+worktree status = clean   node = v24.21.0   npm = 11.19.0   git = 2.55.0.windows.5
+platform = win32 x64 10.0.26200
+```
+
+Result: **15 exit 0 and the same single by-design exit 1** (`npm ci` 214 packages; format/lint/typecheck
+clean; `test:source` 59 files, 969 passed / 2 skipped; docs-contract **40/40**; build, secret scan
+`12/12/0/0`, package-smoke and action-smoke as in §11; manifest a no-op; `npm run verify` and
+`npm run check` exit 0 at **65 files, 969 passed / 134 skipped (1 103 cases)**; `git diff --check`
+clean; worktree empty after every gate). The tracked-path count moved 187 → 188 for the reason §15 item
+6 records, and `docs/architecture/security.md` no longer states a number that this commit would
+invalidate.
 
 ## 14. Files changed / moved / deleted
 
