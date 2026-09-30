@@ -951,15 +951,15 @@ non-empty, both non-zero. Evidence: `stage9/logs/selfhosted-qualrun-steps-b6e884
 Seven lanes, chained with `needs:` because both runners are one machine — **123 steps executed, every one
 reported `success`**, nothing skipped, and no lane finished in seconds:
 
-| lane | job id | runner | steps | window (UTC) |
-|---|---|---|---|---|
-| Source self-hosted Linux / Node 24 | 109385343212 | diffbeacon-stage9-linux | 21/21 | 11:30:27→11:32:15 |
-| Source self-hosted Windows / Node 24 | 109385988279 | diffbeacon-stage9-win | 21/21 | 11:32:19→11:38:12 |
-| Source self-hosted Windows / Node 22 | 109388017224 | diffbeacon-stage9-win | 21/21 | 11:38:15→11:43:55 |
-| Source self-hosted Linux / Node 22 | 109389940563 | diffbeacon-stage9-linux | 21/21 | 11:43:58→11:45:55 |
-| Browser lane (self-hosted Windows / Node 24) | 109390626643 | diffbeacon-stage9-win | 13/13 | 11:45:58→11:53:08 |
-| Package lane (self-hosted Linux / Node 24) | 109393082482 | diffbeacon-stage9-linux | 13/13 | 11:53:12→11:53:54 |
-| Package lane (self-hosted Windows / Node 24) | 109393347527 | diffbeacon-stage9-win | 13/13 | 11:53:57→11:55:39 |
+| lane                                         | job id       | runner                  | steps | window (UTC)      |
+| -------------------------------------------- | ------------ | ----------------------- | ----- | ----------------- |
+| Source self-hosted Linux / Node 24           | 109385343212 | diffbeacon-stage9-linux | 21/21 | 11:30:27→11:32:15 |
+| Source self-hosted Windows / Node 24         | 109385988279 | diffbeacon-stage9-win   | 21/21 | 11:32:19→11:38:12 |
+| Source self-hosted Windows / Node 22         | 109388017224 | diffbeacon-stage9-win   | 21/21 | 11:38:15→11:43:55 |
+| Source self-hosted Linux / Node 22           | 109389940563 | diffbeacon-stage9-linux | 21/21 | 11:43:58→11:45:55 |
+| Browser lane (self-hosted Windows / Node 24) | 109390626643 | diffbeacon-stage9-win   | 13/13 | 11:45:58→11:53:08 |
+| Package lane (self-hosted Linux / Node 24)   | 109393082482 | diffbeacon-stage9-linux | 13/13 | 11:53:12→11:53:54 |
+| Package lane (self-hosted Windows / Node 24) | 109393347527 | diffbeacon-stage9-win   | 13/13 | 11:53:57→11:55:39 |
 
 Each source lane ran, in order: pinned checkout → pinned `setup-node` → workspace-reset assertion →
 runner/toolchain identity → Node-major assertion → `npm run secret-scan` → `npm ci` →
@@ -972,12 +972,12 @@ bundle-freshness `git diff --exit-code` → workspace-cleanliness assertion.
 Node majors come from `actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7`, never from the
 ambient install, and each lane asserts what it actually got (`node_major_ok=`):
 
-| cell | runner-reported toolchain | assertion |
-|---|---|---|
-| Linux / 24 | `v24.21.0`, npm `11.19.0`, git `2.53.0` | `node_major_ok=24` |
+| cell         | runner-reported toolchain                         | assertion          |
+| ------------ | ------------------------------------------------- | ------------------ |
+| Linux / 24   | `v24.21.0`, npm `11.19.0`, git `2.53.0`           | `node_major_ok=24` |
 | Windows / 24 | `v24.21.0`, npm `11.19.0`, git `2.55.0.windows.5` | `node_major_ok=24` |
-| Windows / 22 | `v22.23.3`, git `2.55.0.windows.5` | `node_major_ok=22` |
-| Linux / 22 | `v22.23.3`, git `2.53.0` | `node_major_ok=22` |
+| Windows / 22 | `v22.23.3`, git `2.55.0.windows.5`                | `node_major_ok=22` |
+| Linux / 22   | `v22.23.3`, git `2.53.0`                          | `node_major_ok=22` |
 
 Source-gate totals: `928 passed | 133 skipped (1061)` on both Linux cells and
 `927 passed | 134 skipped (1061)` on both Windows cells. The single differing case is
