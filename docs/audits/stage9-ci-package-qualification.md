@@ -1,15 +1,59 @@
 # DIFFBEACON STAGE 9 — CI AND PACKAGE QUALIFICATION REPORT
 
-STATUS: **BLOCKED — LOCAL SOURCE/PACKAGE QUALIFICATION COMPLETE; HOSTED CI EXTERNALLY BLOCKED**
+STATUS: **PASS — SELF-HOSTED CI QUALIFIED; GITHUB-HOSTED RUNNER ENVIRONMENT UNQUALIFIED DUE EXHAUSTED HOSTED ALLOWANCE**
 
-Stage 9's own hard gate is at least one real GitHub-hosted run that receives runners, performs a
-checkout, performs `npm ci`, and executes the intended CI gates. That gate is **not** satisfied. Re-read
-read-only in the Stage 9 report closure, the branch's complete hosted history is: **34 `CI` runs, all on
-`rescue/stage0-source`, every one `status=completed`, `conclusion=failure`, with zero jobs holding an
-assigned runner (`runner_name: ""`) and zero executed steps across all of their jobs (`steps: []`)**. No
-checkout, no `npm ci`, no audit, no gate and no browser case has ever run on hosted infrastructure for
-this repository's recovered source. `conclusion: failure` is the record of jobs that could not be
-allocated, **not** of a red build.
+This header is the corrected record, and the correction is dated: the first pass wrote
+`BLOCKED — LOCAL SOURCE/PACKAGE QUALIFICATION COMPLETE; HOSTED CI EXTERNALLY BLOCKED` here. Every measurement
+below that header was taken under that verdict and still stands — only the verdict framing has been aligned
+with what the authorized alternative produced (see `### FINAL RECORD CONSISTENCY CLOSURE` at the end).
+
+**How the gate moved, in order.** (1) The original Stage-9 contract set one hard gate: at least one real
+**GitHub-hosted** run that receives runners, performs a checkout, performs `npm ci`, and executes the intended
+CI gates. (2) It was never met, and never for a reason inside this repository: the account's hosted Actions
+allowance prevented runner allocation. (3) The user then **explicitly authorized replacing the unavailable
+GitHub-hosted-runner requirement with real CI on repository-scoped self-hosted runners** — explicitly not
+permission to skip CI — ordered self-hosted GitHub Actions first, external CI second, a tracked local
+orchestrator last. (4) Self-hosted GitHub Actions was selected and the same gate commands were moved into a
+separate workflow, `.github/workflows/ci-self-hosted-stage9.yml`, with `ci.yml` left intact. (5) GitHub
+Actions run **`36562157439`** at head **`b6e884260e84557807fd9fc2867783e3f8756bee`** executed that final
+Stage-9 CI contract successfully: **7 jobs, 7 success, 123 executed workflow steps**. (6) Stage 9 is therefore
+**PASS** under the authorized alternative. (7) The **GitHub-hosted runner environment** — GitHub's own
+`ubuntu-latest` / `windows-latest` images, including the hosted `Browser lane (ubuntu-latest / Node 24)` —
+remains **UNQUALIFIED**, and none of the historical hosted evidence below has been weakened to obtain that.
+
+Three terms are kept distinct throughout and must not be blended: **GitHub Actions** is the orchestration
+service that scheduled the run, stored the logs and recorded the job conclusions; a **self-hosted runner** is
+this project's own Windows machine and WSL2 Linux machine, which executed those jobs; a **GitHub-hosted
+runner** is a GitHub-provided `ubuntu-latest` / `windows-latest` environment, which this repository's `CI`
+workflow has never had.
+
+**The qualifying run, in brief.** `36562157439` — workflow display name `CI (self-hosted Stage 9)`, head
+`b6e884260e84557807fd9fc2867783e3f8756bee`, event `push` on `rescue/stage9-selfhosted-ci`,
+conclusion `success`: **7 of 7 jobs successful, 123 executed steps, 0 failed, 0 cancelled**.
+
+| Job display name in the run                    | Platform                          | Measured result                                               |
+| ---------------------------------------------- | --------------------------------- | ------------------------------------------------------------- |
+| `Source self-hosted Linux / Node 24`           | self-hosted Linux (WSL2), Node 24 | source gate chain success                                     |
+| `Source self-hosted Windows / Node 24`         | self-hosted Windows, Node 24      | source gate chain success                                     |
+| `Source self-hosted Windows / Node 22`         | self-hosted Windows, Node 22      | source gate chain success                                     |
+| `Source self-hosted Linux / Node 22`           | self-hosted Linux (WSL2), Node 22 | source gate chain success                                     |
+| `Browser lane (self-hosted Windows / Node 24)` | self-hosted Windows, Node 24      | 132 real-Chromium cases success on the located Windows engine |
+| `Package lane (self-hosted Linux / Node 24)`   | self-hosted Linux (WSL2), Node 24 | pack → tar listing → clean-consumer install success           |
+| `Package lane (self-hosted Windows / Node 24)` | self-hosted Windows, Node 24      | pack → tar listing → clean-consumer install success           |
+
+Every step line in that run reads `=> success`; the per-job runner names are `diffbeacon-stage9-win` and
+`diffbeacon-stage9-linux`, which is what "self-hosted" means here and is not a GitHub-hosted image. The
+Windows package lane in that run is the repaired one: it lists the tarball by bare name inside the pack
+directory, the form the earlier `tar -tzf <Windows-drive-path>` failure proved necessary. No hosted Ubuntu
+browser evidence exists or is claimed anywhere in this report — the browser CI fact above is Windows Chromium
+on this project's own machine.
+
+**The hosted history behind item (2), unchanged.** Re-read read-only in the Stage 9 report closure, the
+branch's complete hosted history is: **34 `CI` runs, all on `rescue/stage0-source`, every one
+`status=completed`, `conclusion=failure`, with zero jobs holding an assigned runner (`runner_name: ""`) and
+zero executed steps across all of their jobs (`steps: []`)**. No checkout, no `npm ci`, no audit, no gate and
+no browser case has ever run on GitHub-hosted infrastructure for this repository's recovered source.
+`conclusion: failure` is the record of jobs that could not be allocated, **not** of a red build.
 
 For the newest of those runs — `36530649846`, created by the Stage 9 push — all five jobs carry GitHub's
 own check-run annotation, retrieved directly in this closure: _"The job was not started because recent
@@ -35,28 +79,52 @@ the authoritative local pass is not uniformly green:
   failed authoritative row.
 - The failure is measured as host/harness-sensitive and retained as a limitation; this report does not
   claim it is a product defect, and does not claim it definitely is not.
-- The release CI's browser contract is the dedicated `Browser lane (ubuntu-latest / Node 24)` job, which
-  has never had a runner, so hosted browser execution remains unqualified either way.
+- The release CI's hosted browser contract is the dedicated `Browser lane (ubuntu-latest / Node 24)` job,
+  which has never had a runner, so **hosted** browser execution remains unqualified either way. Real browser
+  CI execution does exist now, on a different platform: the self-hosted
+  `Browser lane (self-hosted Windows / Node 24)` ran all 132 cases on located Windows Chromium in run
+  `36562157439` (see BROWSER under STAGE 9 ALTERNATIVE CI CLOSURE). That is Windows-Chromium evidence, never
+  to be presented as hosted-Ubuntu evidence.
 
-Everything else the stage asked for is measured and recorded below, and none of it is presented as a
-substitute for the missing hosted run.
+Everything else the stage asked for is measured and recorded below. The self-hosted GitHub Actions run is not
+presented as a GitHub-hosted run, and the local four-cell matrix remains the qualification authority for
+everything no runner covered — including the failed Windows Node-22 supplemental row above, which the
+self-hosted source lanes did not re-run and did not retroactively fix.
 
 STARTING SHA: `2509aba7422296e614afa705623d0ec720c7201c` (repository HEAD when Stage 9 began)
 
 QUALIFIED PRODUCT SHA: `5c3b08d33975d350148ccc83054fa23e851c779f` — commit `fix: qualify DiffBeacon CI and package`
 
-ENDING BRANCH SHA: not printed here — this document is the only write Stage 9 makes after the
-qualified product SHA, a commit cannot contain its own hash, and recording the resulting tip by
-committing again would start the docs chain the brief forbids (the Stage 8 precedent,
-`docs/audits/stage8-security-hardening.md`). Read it with `git rev-parse HEAD` on
-`rescue/stage0-source`. The falsifiable half, checked locally before the single push:
-`git diff --stat 5c3b08d33975d350148ccc83054fa23e851c779f..HEAD` lists only
-`docs/audits/stage9-ci-package-qualification.md` — no source file, workflow, manifest, lockfile or
-bundled artifact — so the pushed tip carries a product tree identical to the qualified SHA. If that
-diff ever lists more than this path, the qualification recorded here does not apply to the tip and
-must be re-run rather than cited.
+SELF-HOSTED CI-QUALIFIED SHA: `b6e884260e84557807fd9fc2867783e3f8756bee` — the head of the successful
+qualification run, and therefore the SHA the CI evidence below is attached to.
+
+QUALIFICATION RUN: GitHub Actions run `36562157439` — workflow `CI (self-hosted Stage 9)`, event `push`,
+status `completed`, conclusion `success`, **7 jobs / 7 success**, **123 executed workflow steps**, on two
+repository-scoped self-hosted runners.
+
+ENDING BRANCH SHA: not printed here — this document is written after the qualified SHAs, a commit cannot
+contain its own hash, and recording the resulting tip by committing again would start the docs chain the
+brief forbids (the Stage 8 precedent, `docs/audits/stage8-security-hardening.md`). Read it with
+`git rev-parse HEAD` on `rescue/stage0-source`. The falsifiable half was restated on 2026-09-30 because the
+original sentence went stale exactly as such clauses do: it compared the tip against `5c3b08d…` and claimed
+that diff lists only this file. **It no longer does** — `git diff --stat 5c3b08d..HEAD` now lists five paths
+(`.github/workflows/ci-self-hosted-stage9.yml`, `SOURCE_MANIFEST.txt`, this report,
+`tests/stage6.action-workflow-docs.test.ts`, `tests/stage9.self-hosted-parity.test.ts`), because the
+authorized alternative CI work legitimately added a workflow and its parity tests after the product SHA.
+The live, true form of the claim is anchored on the CI-qualified SHA instead:
+`git diff --name-only b6e8842..HEAD` lists **only** `SOURCE_MANIFEST.txt`, this report and
+`tests/stage9.self-hosted-parity.test.ts`, and the same diff restricted to every other path is empty — so the
+tip's product **and workflow** trees are byte-identical to what run `36562157439` executed. If that
+`b6e8842..HEAD` diff ever lists anything beyond those three paths, the qualification recorded here does not
+apply to the tip and must be re-run rather than cited.
 
 BRANCH: `rescue/stage0-source` (no merge, no pull request, no tag, no release, no registry write)
+
+TEMPORARY QUALIFICATION BRANCH: `rescue/stage9-selfhosted-ci`, retained at `b6e8842…`. It exists because the
+self-hosted workflow is triggered by `push:` to that dedicated branch — `workflow_dispatch` answers 404 for a
+workflow file that is absent from the default branch — and it is the branch that carried run `36562157439`.
+It is qualification history, not a working branch, and deleting a remote branch is outside a docs-only
+closure; prune it deliberately later, not here.
 
 ORIGIN MAIN SHA: `e0ff98143bfe39c80c338518d006525a846a8739` — unchanged by Stage 9; `main` was not merged into and was not written to.
 
@@ -439,7 +507,9 @@ The workflow is guarded before push in two ways. First, `tests/stage9.ci-contrac
 
 ## HOSTED RUN
 
-**No hosted run has ever executed the qualified workflow, and the hard gate is therefore unsatisfied.**
+**No GitHub-hosted run has ever executed the qualified workflow.** That is what this section measured, and it
+is still true: the gate the _original_ Stage-9 contract set was met later by a different, user-authorized path
+(`## STAGE 9 ALTERNATIVE CI CLOSURE`), so this sentence bounds the hosted environment, not the stage.
 
 What the remote actually held while Stage 9 was measured (`git ls-remote origin`):
 `refs/heads/rescue/stage0-source = 2509aba…` and `refs/heads/main = e0ff981…`. The qualified product
@@ -531,13 +601,17 @@ run jobs for this repository before, and it has never run a step of this reposit
 blocker observed throughout Stage 1–9 is an account-level condition on hosted infrastructure, not a
 property of this code.
 
-**Hard gate result:** Stage 9 requires at least one hosted run that receives runners, performs checkout,
-performs `npm ci` and executes the intended gates. It received zero runners, so Stage 9 is
+**Hard gate result, as this section measured it in the first pass:** Stage 9 then required at least one
+GitHub-hosted run that receives runners, performs checkout, performs `npm ci` and executes the intended gates.
+It received zero runners, so the verdict written here was
 **BLOCKED — LOCAL SOURCE/PACKAGE QUALIFICATION COMPLETE; HOSTED CI EXTERNALLY BLOCKED**, and the local
-four-cell matrix is the qualification authority for everything except that one claim. "SOURCE/PACKAGE" is
+four-cell matrix was the qualification authority for everything except that one claim. "SOURCE/PACKAGE" is
 the precise scope: the source, package, consumer, audit and secret-scan gates are qualified in all four
 cells, while the supplemental Windows Node-22 browser stress lane finished `2 failed | 130 passed (132)`
 in the authoritative pass and is retained as failed (see QUALIFICATION MATRIX and STAGE 9 DECISION).
+**That verdict is superseded for CI execution** by the user-authorized alternative and run
+`36562157439`; the hosted-environment half of it is not, and the scope wording above is still the accurate
+description of what the local cells did and did not qualify.
 
 **The post-push observation is now a fact, not a prediction**, and it is recorded in the next section
 rather than as a conditional here. Its full machine-readable record also lives **outside** the repository
@@ -549,17 +623,17 @@ carry the result of the CI run its own push created.
 One push was made for Stage 9 and exactly one hosted run was observed for it. Read-only afterwards; no
 re-trigger, no `workflow_dispatch`, no second push, no workflow edit.
 
-| field               | value                                                                                                                                                                                  |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| run                 | `36530649846`                                                                                                                                                                          |
-| workflow            | `CI` (`workflow_id` 366226781), event `push`                                                                                                                                           |
-| head                | `9de2f68e5e7001d5619e9811ede7fa8524f2172d` (the Stage 9 report commit; its tree carries product `5c3b08d…`)                                                                            |
-| jobs                | 5 — `Browser lane (ubuntu-latest / Node 24)`, `Source ubuntu-latest / Node 22`, `Source ubuntu-latest / Node 24`, `Source windows-latest / Node 22`, `Source windows-latest / Node 24` |
-| steps executed      | 0 (every job reports `"steps": []`)                                                                                                                                                    |
-| runner allocated    | none (`runner_name: ""`, `runner_group_name: ""`, `runner_id: 0` on all five)                                                                                                          |
-| created → completed | 2026-09-29T06:21:30Z → 06:21:32Z (four jobs) / 06:21:34Z (`Source windows-latest / Node 24`); run updated 06:21:35Z                                                                    |
-| log                 | `gh run view 36530649846 --log` answers `log not found: 109283352810` — and **still exits 0**, so its exit code is not evidence of anything                                            |
-| result              | EXTERNAL CI BLOCKED / hosted execution unqualified                                                                                                                                     |
+| field               | value                                                                                                                                                                                                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| run                 | `36530649846`                                                                                                                                                                                                                                                         |
+| workflow            | `CI` (`workflow_id` 366226781), event `push`                                                                                                                                                                                                                          |
+| head                | `9de2f68e5e7001d5619e9811ede7fa8524f2172d` (the Stage 9 report commit; its tree carries product `5c3b08d…`)                                                                                                                                                           |
+| jobs                | 5 — `Browser lane (ubuntu-latest / Node 24)`, `Source ubuntu-latest / Node 22`, `Source ubuntu-latest / Node 24`, `Source windows-latest / Node 22`, `Source windows-latest / Node 24`                                                                                |
+| steps executed      | 0 (every job reports `"steps": []`)                                                                                                                                                                                                                                   |
+| runner allocated    | none (`runner_name: ""`, `runner_group_name: ""`, `runner_id: 0` on all five)                                                                                                                                                                                         |
+| created → completed | 2026-09-29T06:21:30Z → 06:21:32Z (four jobs) / 06:21:34Z (`Source windows-latest / Node 24`); run updated 06:21:35Z                                                                                                                                                   |
+| log                 | `gh run view 36530649846 --log` answers `log not found: 109283352810` — and **still exits 0**, so its exit code is not evidence of anything                                                                                                                           |
+| result              | this run allocated zero runners, so hosted execution stayed unqualified. Recorded on 2026-09-29 as `EXTERNAL CI BLOCKED / hosted execution unqualified` — a per-run observation about hosted infrastructure, not the Stage 9 verdict (see ### STAGE 9 FINAL DECISION) |
 
 **What the run proves.** The five job names are the final Stage-9 workflow's own job names, not the old
 `quality` names — so the qualified workflow's topology has been accepted and materialised on hosted
@@ -728,9 +802,18 @@ Nothing in this section is PASS evidence. It is recorded because each one produc
 - **A post-pass "Node 22" reproducibility record that ran on Node 24 — my own tool, twice.** `stage9/logs/repro-final-run5-win-node22.txt` names the win-node22 clone but prints `node=v24.21.0 npm=11.19.0 which_node=/c/Program Files/nodejs/node` in its own first lines, because `tools/repro-final.sh` inherits the invoking shell's `PATH` and only reports identity, never pins or asserts it. The record is discarded for the Node-22 claim (it stands as a duplicate Windows Node-24 record); the authoritative Node-22 record is `repro-final-run5-win-node22-node22.txt`, produced with the portable engine's absolute directory first on `PATH` and `node -v` = v22.23.3 verified before invoking the tool. This is the same class of defect the PHASE B identity block exists to catch — it recurred in a different tool, which is evidence that "the tool prints the version" is not "the tool enforces the version".
 - **Browser-lane wall-clock numbers are qualification/runtime evidence only.** The measured lane durations on this host span 410 s (green, run4 win-node24) and 444 s (green, isolated re-run) through 654 s (green, run5 win-node24) and 759 s (green, pre-flight) to 992 s, 994 s and 1082 s (failed, same clone, same engine) for the same 132 cases, with 533.5 s, 595 s, 628 s, 713.5 s and 933 s recorded earlier for other states of the harness and cache. They describe this machine under the load present while they ran. They are not a product or browser SLA, and the CI timeout derived from them is operational headroom, not a promised runtime.
 
-## STAGE 9 DECISION
+## STAGE 9 DECISION — FIRST PASS, 2026-09-29 (HISTORICAL)
 
-**STAGE 9 DECISION: BLOCKED — LOCAL SOURCE/PACKAGE QUALIFICATION COMPLETE; HOSTED CI EXTERNALLY BLOCKED**
+This section is the verdict as it was written by the first pass, on 2026-09-29, when the only CI this
+repository could reach was GitHub-hosted. It is kept verbatim in its measurements and is **not** the current
+Stage-9 decision: the user subsequently authorized an alternative CI execution path, run `36562157439`
+satisfied that path, and the one current decision is
+[### STAGE 9 FINAL DECISION](#stage-9-final-decision) near the end of this report. What still stands here is
+about the **GitHub-hosted runner environment**, which this run did not qualify; what is superseded is the
+claim about _Stage 9_ itself.
+
+> **STAGE 9 DECISION (2026-09-29): BLOCKED — LOCAL SOURCE/PACKAGE QUALIFICATION COMPLETE; HOSTED CI
+> EXTERNALLY BLOCKED**
 
 Complete and measured: the release surface is one publishable package with the license text it always
 claimed to grant, canonical repository metadata, a zero-dependency tree, and a shebanged bundle that
@@ -741,19 +824,23 @@ deterministic, proven with a canary, and runs before `npm ci`; the CI contract i
 structurally parsed, and mutation-tested by a committed guard; and the four-cell clean-clone matrix was
 driven by exactly one serial pass at one SHA, with its single failed gate recorded as failed.
 
-Blocked, and by what: the stage's hard gate — one real GitHub-hosted run that receives runners, checks
-out, runs `npm ci` and executes the gates — has never been met by this repository's `CI` workflow. All 34
-hosted `CI` runs the branch has produced allocated zero runners and executed zero steps, and the single
-run created by the Stage 9 push is one of them: GitHub parsed the final Stage-9 workflow into its five
-intended jobs and then assigned no runner, so nothing inside those jobs has ever been exercised. That is
-an account/billing condition on hosted infrastructure, not a code condition. It is recorded, not worked
-around: no source change, no workflow edit, no farmed re-trigger, and no substitution of a local or
-container runner for a hosted one. Green local cells are not evidence about runners, which is precisely
-why Stage 9 is not called PASS here.
+Blocked then, and by what: the hard gate as this pass had it — one real GitHub-hosted run that receives
+runners, checks out, runs `npm ci` and executes the gates — has never been met by this repository's `CI`
+workflow. All 34 hosted `CI` runs the branch has produced allocated zero runners and executed zero steps, and
+the single run created by the Stage 9 push is one of them: GitHub parsed the final Stage-9 workflow into its
+five intended jobs and then assigned no runner, so nothing inside those jobs has ever been exercised. That is
+an account/billing condition on hosted infrastructure, not a code condition, and this pass recorded rather
+than worked around it: no source change, no workflow edit, no farmed re-trigger, and no substitution of a
+local or container runner for a hosted one. Green local cells are not evidence about runners, which is
+precisely why this pass did not call Stage 9 PASS. **The alternative that later closed the stage is neither of
+those substitutions**: it was a user-authorized, real GitHub Actions run on repository-scoped self-hosted
+runners, measured job by job and step by step, and it qualifies CI execution without saying anything in favour
+of the hosted images.
 
-What would close it is no longer "a push and one run that starts" — the push has happened, and the run it
-created is measured in STAGE 9 POST-PUSH HOSTED OBSERVATION. What remains is a future hosted run of the
-final Stage-9 workflow that does all six of these:
+What remained after this pass, restated below, is not "what closes Stage 9" — that is answered by the
+authorized alternative and the final decision. It is **what would re-qualify the GitHub-hosted runner
+environment**, which is still unqualified: a future hosted run of the final Stage-9 workflow that does all six
+of these:
 
 1. receives real GitHub-hosted runners for all five jobs;
 2. executes the checkout step in each job;
@@ -763,11 +850,14 @@ final Stage-9 workflow that does all six of these:
 5. executes the dedicated `Browser lane (ubuntu-latest / Node 24)` job, including its 132 Chromium cases;
 6. has every required job pass.
 
-**Merely starting a runner is not enough, and this report will not treat it as enough.** A run that
-allocates runners and then fails a gate is a real CI failure to be repaired, and a run whose jobs pass is
-the first evidence that would let Stage 9 be reconsidered for PASS — at which point the run ID and its job
-results are appended to the record outside this file, not inside it. Until then the decision stands as
-written, and the next stage inherits the limitation honestly rather than a cleaner-looking version of it.
+**Merely starting a runner is not enough, and this report does not treat it as enough** — for the hosted
+environment or for any other lane. A run that allocates runners and then fails a gate is a real CI failure to
+be repaired, and a run whose required jobs pass is the evidence that lets the stage be reconsidered. The
+authorized alternative run met that standard for CI execution and is measured as
+`7 jobs / 7 success / 123 executed steps` in STAGE 9 ALTERNATIVE CI CLOSURE; the hosted half of these six
+conditions has still never been met by any run, and the history above is not rewritten to suggest otherwise.
+The limitation transfers to the next stage honestly: Stage 9 closed under an authorized alternative
+CI platform, with GitHub-hosted Windows and Ubuntu images recorded as UNQUALIFIED.
 
 One local row is worth restating so it is not lost in the hosted-CI story, and so the headline above is
 not read as "everything local is green": `win-node22`'s browser lane finished
@@ -778,9 +868,13 @@ DISCARDED / NON-AUTHORITATIVE MEASUREMENTS), so it is measured as **host/harness
 a limitation**; this report does not claim it is a product defect, and does not claim it definitely is not.
 The source/package/consumer gates under Node 22 did pass, and the isolated Node-22 browser re-runs that
 succeeded are diagnosis only — they are not substituted for the failed authoritative row. The release CI's
-browser contract is the dedicated `Browser lane (ubuntu-latest / Node 24)` job, which has never had a
-runner, so hosted browser execution remains unqualified either way, and a restored runner would not settle
-the Windows row because the hosted browser job does not run on Windows.
+browser contract in `ci.yml` is the dedicated `Browser lane (ubuntu-latest / Node 24)` job, which has never
+had a GitHub-hosted runner, so **hosted** browser execution remains unqualified either way, and a restored
+hosted allowance would not settle the Windows row because the hosted browser job does not run on Windows.
+Browser CI execution as such is separately qualified on the platform that was authorized: the self-hosted
+`Browser lane (self-hosted Windows / Node 24)` ran all 132 cases green in run `36562157439`, which is
+Windows-Chromium evidence, not hosted-Ubuntu evidence, and does not re-label the failed local
+Windows Node-22 supplemental row above.
 
 ## REPORT CLOSURE — CORRECTED HOSTED-CI AND LOCAL-QUALIFICATION WORDING
 
@@ -790,6 +884,12 @@ no bundle rebuild, and **no requalification**. The expensive local work is not r
 correction: the four-cell matrix was not re-run, the 132-case browser lane was not re-run, PackSmoke, the
 consumer matrix, `npm pack` reproducibility and `npm audit` were not re-run. Every measurement quoted below
 and above is the one already recorded in this report at product SHA `5c3b08d…`.
+
+Two of the five corrections below (C and D) rewrite wording _as it stood on 2026-09-29_, and their chosen
+headings are themselves now historical: the stage verdict they scoped is the first-pass decision, superseded
+for CI execution as described at the top of this report. Item D's scoped wording — local source/package
+qualification complete, hosted CI blocked — remains an accurate description of **the hosted runner
+environment**, which is what the header's PASS statement keeps explicitly unqualified.
 
 Five claims were wrong or too broad, and each was checked against GitHub or against this report's own
 logs before being rewritten:
@@ -812,7 +912,9 @@ logs before being rewritten:
   STAGE 9 DECISION now lists the six things a future hosted run must do — receive runners for all five
   jobs, execute checkout, execute `npm ci`, execute the source/package gates, execute the dedicated browser
   lane, and have every required job pass — and states explicitly that merely starting a runner is not
-  enough to reconsider Stage 9 for PASS.
+  enough to reconsider Stage 9 for PASS. \[As of 2026-09-30 those six conditions bound the **GitHub-hosted
+  environment** only: Stage 9 itself was reconsidered and closed on the evidence of a self-hosted GitHub
+  Actions run that met the same gate contract, not on the evidence of a hosted run that merely started.\]
 - **D — the headline was too broad for the authoritative local pass.** `BLOCKED — LOCAL QUALIFICATION
 COMPLETE, HOSTED CI EXTERNALLY BLOCKED` read as though everything local were green, which the matrix
   contradicts. The verdict is now scoped to
@@ -835,18 +937,28 @@ COMPLETE, HOSTED CI EXTERNALLY BLOCKED` read as though everything local were gre
 Deliberately **not** done in this closure: the docs-only commit that carries these corrections will itself
 create another hosted `CI` run, and that run is not cited, observed or recorded here. Citing it would
 require editing this file again, which would create the next run, and so on — the chain the brief forbids.
-The authoritative Stage-9 product workflow observation stays run `36530649846`, because the tree it was
-created from already contains the qualified product and the final Stage-9 workflow. A further docs-only
+The authoritative Stage-9 **hosted** product-workflow observation stays run `36530649846`, because the tree it
+was created from already contains the qualified product and the final Stage-9 workflow — it is the hosted
+limitation's evidence, and it is not the stage's CI-execution evidence (that is the self-hosted run
+`36562157439`, measured in STAGE 9 ALTERNATIVE CI CLOSURE). A further docs-only
 run would be the same zero-runner observation of the same product, and would change no conclusion.
 
-## NEXT
+## NEXT — AS WRITTEN BY THE FIRST PASS (HISTORICAL)
 
-Stage 10 (OSS documentation closure) and Stage 11 (release) are **not** started, and Stage 9 does not advance past its boundary: no merge to `main`, no npm publish, no GitHub Release, no tag, no repository visibility change, no Pages deployment. The first thing Stage 10 should consume is the honest boundary recorded here: the package surface is qualified and reproducible locally, the CI contract is committed and mutation-tested, and the single missing element is a real hosted run that receives runners and executes the gates — an account/billing condition, not a code condition.
+The current hand-off is `### NEXT` at the end of this report; this paragraph is the 2026-09-29 boundary
+statement and is kept because its "not started / no merge, no publish, no tag, no visibility change" half is
+still exactly what happened.
+
+Stage 10 (OSS documentation closure) and Stage 11 (release) are **not** started, and Stage 9 does not advance past its boundary: no merge to `main`, no npm publish, no GitHub Release, no tag, no repository visibility change, no Pages deployment. The first thing Stage 10 should consume is the honest boundary recorded here: the package surface is qualified and reproducible locally, the CI contract is committed and mutation-tested, and — as this pass measured it — the single missing element was a real GitHub-hosted run that receives runners and executes the gates, an account/billing condition rather than a code condition. **That element is still missing, and it is no longer the stage's blocker:** the user-authorized alternative CI (STAGE 9 ALTERNATIVE CI CLOSURE) supplied real automated CI execution on repository-scoped self-hosted runners, so the accurate boundary for Stage 10 is "CI execution qualified on the authorized self-hosted platform; GitHub-hosted Windows and Ubuntu runner images unqualified".
 
 ## STAGE 9 ALTERNATIVE CI CLOSURE
 
-This section closes the alternative-CI work authorized after the hosted lane was found blocked. It is
-appended; nothing above it is rewritten, and every hosted measurement above remains as first recorded.
+This section closes the alternative-CI work authorized after the hosted lane was found blocked. It was
+appended when written, and every hosted measurement above it remains as first recorded — the later
+final-record pass (FINAL RECORD CONSISTENCY CLOSURE) only re-labelled which of those above-section verdicts
+is historical; no measurement was changed, softened or deleted. Read the header STATUS and
+`### STAGE 9 FINAL DECISION` as the current decision; read STAGE 9 DECISION and the first-pass NEXT as the
+2026-09-29 record they are.
 
 ### USER-AUTHORIZED CHANGE
 
@@ -856,7 +968,9 @@ self-hosted GitHub Actions first, external CI second, a tracked local orchestrat
 work added to the repository are exactly:
 
 - `.github/workflows/ci-self-hosted-stage9.yml` — new, separate lane set; `ci.yml` untouched.
-- `tests/stage9.self-hosted-parity.test.ts` — new, 14 committed parity cases.
+- `tests/stage9.self-hosted-parity.test.ts` — new; 14 parity cases at the commit this section describes, 16 on
+  the current tip (the two extra cases pin the Windows/Linux package-lane tar invocation forms — see
+  WINDOWS PACKAGE LANE RETEST).
 - `tests/stage6.action-workflow-docs.test.ts` — one widened assertion (the workflow inventory now names the
   workflow this repository actually runs; the documented `pull_request` fixture still does not).
 - `SOURCE_MANIFEST.txt` — regenerated after staging; content-hash lines for the two new paths.
@@ -1242,7 +1356,64 @@ One metadata deviation, disclosed rather than rewritten: `328d57f` was authored 
 require a history rewrite and a force-push, which this stage forbids, so the two identities are left as they
 are and recorded here.
 
+### FINAL RECORD CONSISTENCY CLOSURE
+
+2026-09-30, documentation-only. The defect this pass repairs is internal to the report: the header still
+carried the first pass's `BLOCKED — …` verdict and the opening hard-gate paragraph still asserted that the
+stage's missing element was a GitHub-hosted run, while `### STAGE 9 FINAL DECISION` said
+`PASS — SELF-HOSTED CI QUALIFIED; …`. A reader meeting the top of the file first would have concluded Stage 9
+was unfinished. The repair is wording and ordering only:
+
+- the header STATUS now carries the single current decision, with a dated note that the first pass wrote
+  `BLOCKED` there;
+- a 7-step chronology now sits above the hosted history, so the sequence (hosted contract → hosted allowance
+  exhausted → explicit user authorization for an alternative → repository-scoped self-hosted GitHub Actions →
+  run `36562157439` green → PASS under the authorized alternative → GitHub-hosted images still UNQUALIFIED) is
+  readable before any individual section;
+- the three terms (GitHub Actions / self-hosted runner / GitHub-hosted runner) are defined once, near the top,
+  and the qualifying run is summarized lane by lane;
+- the historical sections (STAGE 9 DECISION, REPORT CLOSURE items C and D, the first-pass NEXT) are now
+  labelled as the 2026-09-29 record they are, each pointing at `### STAGE 9 FINAL DECISION` as the current one.
+
+**Nothing was re-measured, re-run or re-qualified here.** No product file, no test file, no workflow, no
+lockfile, no bundle and no `SOURCE_MANIFEST.txt` line changed — `docs/audits/**` is manifest-excluded. No
+GitHub Actions run was triggered and no runner was registered by this pass. **The report now states exactly one
+current Stage-9 decision**; every other verdict string in it is labelled with the date and scope it was written
+under. The hosted evidence is untouched: 34 hosted `CI` runs with zero assigned runners and zero executed
+steps, the per-run billing annotation, the post-push run `36530649846`, and the re-measured zero-runner
+signature at the later pushes all remain as measured, and none of them is presented as a red build.
+
+**The post-run test-only record, kept distinct from the run.** Run `36562157439` executed the workflow tree at
+`b6e8842…`, which already contained the Windows package-lane repair. After that green run, this branch gained
+two contract assertions in `tests/stage9.self-hosted-parity.test.ts` (14 → 16 cases) pinning the Windows and
+Linux `tar -tzf` invocation forms, one regenerated `SOURCE_MANIFEST.txt` hash line, and documentation. Those
+tests were run locally (929 passed / 134 skipped of 1063) and mutation-proved (15/15 weakenings of the workflow
+produce the named failing assertion, baseline 16/16, workflow restored byte-identical). **The workflow was not
+re-run for them**, so run `36562157439` did not execute the two assertions that did not exist at its head, and
+this report does not imply that it did. The CI-qualified fact remains the lane behaviour observed in that run;
+the assertions are a committed local guard against regressing it.
+
+**Remaining limitation, stated at the top and here:** the current tip has no self-hosted run of its own. What
+makes that survivable rather than hand-waving is the measured identity between the trees: the workflow path is
+byte-identical between `b6e8842…` and the tip, and the full `b6e8842..HEAD` delta is limited to
+`SOURCE_MANIFEST.txt`, this report and `tests/stage9.self-hosted-parity.test.ts`. The qualified CI lane
+definitions are therefore the tip's definitions; the tip's _test_ count is one step ahead of the run's, and is
+labelled as such.
+
+**Runner teardown, bounded to what was measured.** `GET /repos/…/actions/runners` returning
+`total_count: 0` is **this agent's own post-teardown observation**, taken after `config.cmd remove --unattended`
+was run against both registrations. It is not evidence that anyone else witnessed deregistration, and
+ChatGPT has not independently verified runner removal or the GitHub-side state as of this pass. No runner was
+re-registered to obtain a fresher number for this document.
+
+**Temporary qualification branch, retained.** `rescue/stage9-selfhosted-ci` remains on the remote at
+`b6e884260e84557807fd9fc2867783e3f8756bee`, the head of the qualifying run. It exists because
+`workflow_dispatch` is not available to a workflow that is absent from the default branch, so the qualification
+run had to be triggered by a push to a dedicated branch. It is recorded as temporary qualification history, not
+as a product line of development, and it is **not deleted** — deleting a remote branch is outside a docs-only
+closure, and the branch is the addressable context for run `36562157439`'s logs.
+
 ### NEXT
 
 Stage 10 — OSS DOCUMENTATION. Stage 9 stops at its boundary: no merge to `main`, no tag, no GitHub Release, no
-npm publish, no visibility change, no Pages deployment.
+npm publish, no visibility change, no Pages deployment. **Stage 10 was not begun during Stage 9.**
