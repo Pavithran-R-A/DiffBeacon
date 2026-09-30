@@ -53,10 +53,13 @@ minutes per file rather than seconds; budget for it instead of raising its timeo
 ## What CI will and will not do for you
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the intended contract and targets
-GitHub-hosted runners — **which this repository's account has never been allocated**, so a push or
-pull request may show no runs at all. Do not read an absent run as a pass, and do not add a
-workaround that executes pull-request code from a fork to get one. The only CI that has actually
-executed here was a temporary, explicitly authorized self-hosted qualification lane (run
+GitHub-hosted runners — **which the current recovered-source workflow has never been allocated**, so a
+push or pull request may show no runs at all. (Hosted runners did execute this repository's
+bootstrap-era archive-import workflows, recorded in
+[`docs/audits/stage1-rebaseline.md`](docs/audits/stage1-rebaseline.md); that history qualifies nothing
+about the recovered source.) Do not read an absent run as a pass, and do not add a workaround that
+executes pull-request code from a fork to get one. The only CI that has actually executed against this
+workflow was a temporary, explicitly authorized self-hosted qualification lane (run
 `36562157439`, recorded in
 [`docs/audits/stage9-ci-package-qualification.md`](docs/audits/stage9-ci-package-qualification.md));
 those runners are unregistered. Local gates are therefore the real contract for a contribution.

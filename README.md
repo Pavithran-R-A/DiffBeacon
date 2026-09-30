@@ -12,13 +12,13 @@ DiffBeacon v0.1.0 is built, tested, and **not published**. Verified on 2026-09-3
 registry, this repository's remote, and its Actions API — [`docs/releasing.md`](docs/releasing.md)
 owns the checklist that changes any row below.
 
-| Question                                   | Answer now                                                                                                                                                                                                                          |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Published on npm?                          | No. `npm view diffbeacon` returns `404`; the CLI tarball exists only from `npm pack`, so `npx diffbeacon …` does not resolve.                                                                                                       |
-| Public repository, tag, or GitHub Release? | No. The repository is private, has zero tags and zero releases, so there is no immutable `uses:` reference a consumer could pin.                                                                                                    |
-| Deployed browser demo?                     | No. `client/` builds a self-contained static site, and `.github/workflows/pages.yml` only uploads a build artifact — it has no deploy step.                                                                                         |
-| Has CI ever actually run these gates?      | Yes, on repository-scoped **self-hosted** runners: GitHub Actions run `36562157439` executed the source lanes (Linux and Windows, Node 24 and Node 22), the real-Chromium browser lane (Windows / Node 24), and both package lanes. |
-| Are GitHub-hosted runner images qualified? | No. No GitHub-hosted job for this repository has ever been allocated a runner, so `.github/workflows/ci.yml` is an unexecuted contract, and the browser contract's `ubuntu-latest` cell is unmeasured.                              |
+| Question                                   | Answer now                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Published on npm?                          | No. `npm view diffbeacon` returns `404`; the CLI tarball exists only from `npm pack`, so `npx diffbeacon …` does not resolve.                                                                                                                                                                                                                                                                                         |
+| Public repository, tag, or GitHub Release? | No. The repository is private, has zero tags and zero releases, so there is no immutable `uses:` reference a consumer could pin.                                                                                                                                                                                                                                                                                      |
+| Deployed browser demo?                     | No. `client/` builds a self-contained static site, and `.github/workflows/pages.yml` only uploads a build artifact — it has no deploy step.                                                                                                                                                                                                                                                                           |
+| Has CI ever actually run these gates?      | Yes, on repository-scoped **self-hosted** runners: GitHub Actions run `36562157439` executed the source lanes (Linux and Windows, Node 24 and Node 22), the real-Chromium browser lane (Windows / Node 24), and both package lanes.                                                                                                                                                                                   |
+| Are GitHub-hosted runner images qualified? | No. GitHub-hosted runner images for the current CI remain unqualified: the recovered-source workflow used for release qualification has never been allocated a hosted runner, so `.github/workflows/ci.yml` is an unexecuted contract, and the browser contract's `ubuntu-latest` cell is unmeasured. Bootstrap-era hosted runs are the earlier, separate story told in [`docs/limitations.md`](docs/limitations.md). |
 
 ## What it does
 
@@ -166,12 +166,16 @@ jobs:
 
 The lanes in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) run the CLI and Action quality
 gates against trusted source only; no workflow in this repository consumes the Action on a pull
-request, and no consumer repository has run it. Where CI has genuinely executed, it ran on
+request, and no consumer repository has run it. Where those lanes have genuinely executed, they ran on
 repository-scoped **self-hosted** runners — Actions run `36562157439`, whose lane-by-lane result is
 recorded in [`docs/audits/stage9-ci-package-qualification.md`](docs/audits/stage9-ci-package-qualification.md).
-GitHub-hosted runner images (`ubuntu-latest`, `windows-latest`) have never been allocated a job for
-this repository, so that half of the contract is unexecuted rather than passing, and no hosted
-consumer run of the Action has been qualified anywhere.
+GitHub-hosted runner images for the current CI remain unqualified. Hosted execution is not absent from
+this repository's history: the bootstrap-era workflows did receive GitHub-hosted runners and executed
+setup and checkout steps on them before failing during archive extraction (Actions runs
+`32859849733`, `31819615124` and `31818807881`). Those runs executed a different workflow on different
+commits and qualify nothing in the recovered source. The recovered-source CI workflow used for release
+qualification has never been allocated a GitHub-hosted runner, so that half of the contract is
+unexecuted rather than passing, and no hosted consumer run of the Action has been qualified anywhere.
 
 ## Browser demo
 

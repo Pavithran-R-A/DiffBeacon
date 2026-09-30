@@ -35,6 +35,35 @@ const CURRENT_DOCS = [
 
 const HISTORICAL_DIRECTORIES = ['docs/audits', 'docs/recovery', 'docs/research'];
 
+/** Whitespace-flattened document text, so a wrapped sentence matches as one sentence. */
+const flatRead = (file: string) => read(file).replaceAll(/\s+/g, ' ');
+
+/**
+ * Wording that makes an all-history claim about GitHub-hosted runners for this repository. The
+ * bootstrap-era workflows (`docs/audits/stage1-rebaseline.md`, `docs/recovery/README.md`) did
+ * receive hosted runners and execute steps, so each of these is false, not merely imprecise.
+ * Kept as patterns rather than quoted prose: a verbatim copy of the claim would put it back into a
+ * tracked file. A negative scoped to the current workflow is true and is not matched here.
+ */
+const HOSTED_HISTORY_ABSOLUTES: RegExp[] = [
+  /no github-hosted job for this repository has ever been allocated/i,
+  /no hosted job for this repository has ever been allocated/i,
+  /github-hosted runner images[^.]{0,60}(?:have|has) never been allocated a job for this repository/i,
+  /this repository's account has never been allocated/i,
+  /github-hosted runners have (?:still )?never been allocated a step of this repository/i,
+];
+
+/** The bootstrap half of the distinction: hosted runners did execute this repository's steps. */
+const BOOTSTRAP_HOSTED_EXECUTION =
+  /bootstrap-era.{0,120}hosted runners.{0,120}(execut|receiv|ran)/i;
+
+/** The current half: the recovered-source CI workflow has not itself been allocated hosted runners. */
+const CURRENT_HOSTED_UNQUALIFIED =
+  /(?:current|recovered-source)[^.]{0,80}(?:has not|has never)[^.]{0,80}hosted/i;
+
+/** The unqualified-image claim a release decision depends on, stated for the current CI. */
+const CURRENT_IMAGES_UNQUALIFIED = /github-hosted runner images[^.]{0,140}unqualified/i;
+
 /** Markdown link targets outside fenced code blocks and inline code; external/in-page dropped. */
 function relativeLinkTargets(markdown: string): string[] {
   const targets: string[] = [];
@@ -135,7 +164,6 @@ describe('current-facing prose does not carry stale project status', () => {
     const readme = read('README.md');
     expect(readme).toMatch(/not published/);
     expect(readme).toMatch(/36562157439/);
-    expect(readme).toMatch(/GitHub-hosted .*never been allocated/);
     expect(readme).toContain('docs/releasing.md');
   });
 
@@ -143,6 +171,44 @@ describe('current-facing prose does not carry stale project status', () => {
     expect(read('docs/detectors/initial-detectors.md')).toMatch(
       /checked against both by[\s\n]*`tests\/stage10\.docs-contract\.test\.ts`/,
     );
+  });
+});
+
+// Stage 10 closure: the repository's hosted history spans two eras, and current-facing prose used to
+// collapse them into one all-history negative. Three bootstrap-era runs (Actions 32859849733,
+// 31819615124 and 31818807881) were allocated hosted runners and executed setup and checkout steps
+// before failing on archive extraction, while the recovered-source `ci.yml` that release
+// qualification depends on has never been allocated one. Both facts are true; the contract below
+// requires the second without licensing the first, and does not ask every document to retell the story.
+
+describe('GitHub-hosted history is stated per era, not denied outright', () => {
+  it.each(CURRENT_DOCS)('%s makes no all-history claim about hosted runners', (file) => {
+    const text = flatRead(file);
+    for (const absolute of HOSTED_HISTORY_ABSOLUTES) {
+      expect(text, `${file} keeps an all-history hosted negative (${absolute.source})`).not.toMatch(
+        absolute,
+      );
+    }
+  });
+
+  it('has a current document that separates the bootstrap era from current qualification', () => {
+    const separated = CURRENT_DOCS.filter((file) => {
+      const text = flatRead(file);
+      return BOOTSTRAP_HOSTED_EXECUTION.test(text) && CURRENT_HOSTED_UNQUALIFIED.test(text);
+    });
+    expect(
+      separated.length,
+      'no current document distinguishes the two hosted eras',
+    ).toBeGreaterThan(0);
+  });
+
+  it('keeps the README and limitations stating the current hosted images unqualified', () => {
+    for (const file of ['README.md', 'docs/limitations.md']) {
+      expect(
+        flatRead(file),
+        `${file} no longer states the current GitHub-hosted images unqualified`,
+      ).toMatch(CURRENT_IMAGES_UNQUALIFIED);
+    }
   });
 });
 

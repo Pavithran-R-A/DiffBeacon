@@ -83,10 +83,16 @@ matters, and a surface listed earlier is not a surface that must be reviewed fir
 Documentation cannot certify its own evidence. The limits below are real and are tracked rather than
 hand-waved:
 
-- **GitHub-hosted runner images are unqualified.** No hosted job for this repository has ever been
-  allocated a runner, so `.github/workflows/ci.yml` is an unexecuted contract, and the browser
-  contract's hosted `ubuntu-latest` cell has never been measured anywhere. What has executed is
-  recorded in the Stage 9 report and summarised in the README status table.
+- **GitHub-hosted runner images for the current CI are unqualified.** The recovered-source CI workflow
+  used for release qualification has never been allocated a GitHub-hosted runner, so
+  `.github/workflows/ci.yml` is an unexecuted contract and the browser contract's hosted
+  `ubuntu-latest` cell has never been measured anywhere. The claim is scoped to that workflow, not to
+  every era of this repository: the bootstrap-era workflows did receive GitHub-hosted runners and
+  executed setup and checkout steps on them before failing during archive extraction (Actions runs
+  `32859849733`, `31819615124` and `31818807881`, recorded in `docs/audits/stage1-rebaseline.md`).
+  Those runs executed a different workflow on different commits, so they are historical evidence and
+  not product or release qualification. What has executed against the current workflow is recorded in
+  the Stage 9 report and summarised in the README status table.
 - **Platform-specific behaviour is measured only where the file can exist.** A name whose bytes are
   not valid UTF-8 can only be created on a POSIX filesystem, so that real-Git case runs on Linux and
   reports a recorded skip reason elsewhere; the Windows-only npm bin-shim case works the other way

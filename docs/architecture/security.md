@@ -203,10 +203,15 @@ edge cases, Markdown escaping, Action workflow permissions, and package-bundle p
 
 Specifically left open, each for a recorded reason rather than by assumption:
 
-- **The CI that has run is not the CI the published workflow describes.** No GitHub-hosted job for
-  this repository has ever been allocated a runner, so every lane in
-  [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — including the browser contract's
-  `ubuntu-latest` cell — is an unexecuted contract rather than a passing result. What has executed is
+- **The CI that has run is not the CI the published workflow describes.** The recovered-source CI
+  workflow used for release qualification has never been allocated a GitHub-hosted runner, so every
+  lane in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — including the browser
+  contract's `ubuntu-latest` cell — is an unexecuted contract rather than a passing result. Hosted
+  execution is not absent from this repository's history: the bootstrap-era workflows did receive
+  GitHub-hosted runners and executed setup and checkout steps before failing during archive extraction
+  (Actions runs `32859849733`, `31819615124` and `31818807881`). Those runs executed a different
+  workflow on different commits, so they are evidence of historical execution and of no product or
+  release qualification. What has executed against the recovered source is
   the temporary self-hosted qualification lane: Actions run `36562157439` (2026-09-29, commit
   `b6e884260e84557807fd9fc2867783e3f8756bee`, branch `rescue/stage9-selfhosted-ci`) completed all
   seven jobs green on repository-scoped self-hosted runners — source gates on Linux and Windows at
