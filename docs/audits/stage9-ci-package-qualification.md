@@ -1196,9 +1196,11 @@ Re-registering them means ~654 MB plus 1.3 GB of downloads and a serialized ~25-
 for a commit range that touches no workflow, no gate command and no product file, against a seven-lane green
 result (`36562157439`) whose lane definitions are byte-identical to the tip's. The trade is stated here rather
 than decided quietly; the authoritative CI execution remains `36562157439`, and the two new assertions are a
-local fact, labelled as one in LIMITATIONS 8. Pushes in this pass created hosted `CI` runs with the same
-zero-runner/zero-step signature already described (`36566762001`, `36567312209`, `36678492692`); they are
-disclosed, not cited.
+local fact, labelled as one in LIMITATIONS 8. Every push of this pass also created one hosted `CI` run —
+`36566762001`, `36567312209`, `36678492692`, `36679610556`, `36679693065`, plus one for the commit that adds
+this list — and `stage9/logs/hosted-zero-runner-signature-01de2ad.txt` measures the fifth of those: five jobs,
+all `failure`, `steps=0`, empty `runner_name`, dead in 2–3 s. Disclosed for completeness, never cited as
+evidence.
 
 **A DEFECT THIS PASS FOUND IN ITS OWN EARLIER WORK.** The closure commits `29ac268` and `de9f0b6` were pushed
 without satisfying the repository's own prettier gate: `npm run format:check` reported
@@ -1228,16 +1230,17 @@ CI execution only; the hosted environment's status is unchanged and is not renam
 ### COMMITS LANDING THIS PASS
 
 `bb18751` (the two parity cases plus the one moved manifest hash), `c6a850e` (prettier repair described above),
-and a final docs-only commit carrying this section — `docs/audits/**` is manifest-excluded, so it needed no
-manifest regeneration and rebuilt to the same bundle digest. All three are normal fast-forwards on
+and then documentation-only commits (`328d57f`, `01de2ad`, and the one closing this pass) that carry the record
+above — `docs/audits/**` is manifest-excluded, so they need no manifest regeneration, and the last of them
+rebuilds to the same bundle digest. All are normal fast-forwards on
 `rescue/stage0-source`; `origin/main` is still `e0ff98143bfe39c80c338518d006525a846a8739`, and there was no
 merge, PR, tag, release, npm publish, visibility change or Pages deployment.
 
-One metadata deviation, disclosed rather than rewritten: this last docs commit was authored as
-`pavithranra@users.noreply.github.com`, while every earlier commit on the branch (including `bb18751` and
-`c6a850e`) uses `pavithran.ra@users.noreply.github.com`. Correcting it after the push would require a history
-rewrite and a force-push, which this stage forbids, so the two identities are left as they are and recorded
-here.
+One metadata deviation, disclosed rather than rewritten: `328d57f` was authored as
+`pavithranra@users.noreply.github.com`, while every earlier commit on the branch — including `bb18751`,
+`c6a850e` and `01de2ad` — uses `pavithran.ra@users.noreply.github.com`. Correcting it after the push would
+require a history rewrite and a force-push, which this stage forbids, so the two identities are left as they
+are and recorded here.
 
 ### NEXT
 
