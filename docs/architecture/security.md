@@ -183,8 +183,9 @@ input always yields the same report, and JSON round-trips unchanged.
 A credential scan is a gate, not a report. `npm run secret-scan` reads every path `git ls-files`
 reports, skips binary files and anything over its own size bound, and matches eight rules: a private
 key, a GitHub fine-grained token, a GitHub token, an npm token, an AWS access-key id, a Slack token, a
-credential-bearing URL, and a generic secret assignment. Measured on 2026-09-30 against this tree it
-read 182 tracked paths and reported 12 findings, all classified: an `AKIA`-shaped marker in
+credential-bearing URL, and a generic secret assignment. Measured on 2026-09-30 in a clean clone of
+the tree this document ships in, it read 187 tracked paths and reported 12 findings, all classified:
+an `AKIA`-shaped marker in
 `tests/stage7.browser-security.test.ts` and a placeholder npmrc in
 `tests/stage6.action-security-boundary.test.ts`, each present so its own test can prove the program
 never uses it, plus ten falsification canaries in `tests/stage9.secret-scan.test.ts` invented so no
