@@ -35,7 +35,7 @@ const CURRENT_DOCS = [
 
 const HISTORICAL_DIRECTORIES = ['docs/audits', 'docs/recovery', 'docs/research'];
 
-/** Markdown link targets outside fenced code blocks; external and in-page targets are dropped. */
+/** Markdown link targets outside fenced code blocks and inline code; external/in-page dropped. */
 function relativeLinkTargets(markdown: string): string[] {
   const targets: string[] = [];
   let inFence = false;
@@ -45,7 +45,9 @@ function relativeLinkTargets(markdown: string): string[] {
       continue;
     }
     if (inFence) continue;
-    for (const match of line.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
+    for (const match of line
+      .replaceAll(/(`+)(?:.+?)\1/g, '')
+      .matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
       const target = match[1] ?? '';
       if (/^(https?:|mailto:|#)/.test(target)) continue;
       const file = target.split('#')[0] ?? '';
@@ -201,6 +203,14 @@ describe('historical evidence stays separated from current documentation', () =>
 });
 
 describe('documentation links resolve', () => {
+  it('does not read a path inside inline code as a link', () => {
+    // Reports quote hostile filenames such as `[link](example.invalid).ts` as data. They are
+    // inline-code spans, not links, and must not be resolved against the filesystem.
+    expect(
+      relativeLinkTargets('names: ``back`tick.ts``, `[link](example.invalid).ts` done'),
+    ).toEqual([]);
+  });
+
   it.each(CURRENT_DOCS)('%s links to files that exist', (file) => {
     const directory = path.posix.dirname(file);
     for (const target of relativeLinkTargets(read(file))) {
