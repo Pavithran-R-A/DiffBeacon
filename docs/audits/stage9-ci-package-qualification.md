@@ -1225,6 +1225,20 @@ proof — was executed by real GitHub Actions jobs on repository-scoped self-hos
 `BLOCKED — LOCAL SOURCE/PACKAGE QUALIFICATION COMPLETE; HOSTED CI EXTERNALLY BLOCKED` verdict is superseded for
 CI execution only; the hosted environment's status is unchanged and is not renamed to look qualified.
 
+### COMMITS LANDING THIS PASS
+
+`bb18751` (the two parity cases plus the one moved manifest hash), `c6a850e` (prettier repair described above),
+and a final docs-only commit carrying this section — `docs/audits/**` is manifest-excluded, so it needed no
+manifest regeneration and rebuilt to the same bundle digest. All three are normal fast-forwards on
+`rescue/stage0-source`; `origin/main` is still `e0ff98143bfe39c80c338518d006525a846a8739`, and there was no
+merge, PR, tag, release, npm publish, visibility change or Pages deployment.
+
+One metadata deviation, disclosed rather than rewritten: this last docs commit was authored as
+`pavithranra@users.noreply.github.com`, while every earlier commit on the branch (including `bb18751` and
+`c6a850e`) uses `pavithran.ra@users.noreply.github.com`. Correcting it after the push would require a history
+rewrite and a force-push, which this stage forbids, so the two identities are left as they are and recorded
+here.
+
 ### NEXT
 
 Stage 10 — OSS DOCUMENTATION. Stage 9 stops at its boundary: no merge to `main`, no tag, no GitHub Release, no
