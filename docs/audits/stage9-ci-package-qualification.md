@@ -1045,7 +1045,7 @@ pullRequestTargetRejected=true`. The self-hosted lane itself has no `pull_reques
 
 ### WORKFLOW PARITY
 
-`tests/stage9.self-hosted-parity.test.ts` (14 cases, in the normal `source` project) asserts the self-hosted
+`tests/stage9.self-hosted-parity.test.ts` (16 cases, in the normal `source` project) asserts the self-hosted
 path cannot become a weaker CI path: it must run every command the hosted lanes run, use only self-hosted
 `diffbeacon-stage9` labels, leave `ci.yml`'s hosted contract intact, cover both OSes and both Node majors, pin
 `setup-node` to the same immutable SHA, use only 40-hex pins already present in `ci.yml`, stay at
@@ -1054,15 +1054,27 @@ path cannot become a weaker CI path: it must run every command the hosted lanes 
 them, require pack / list / consumer / shim in both package lanes, bound every lane with a timeout, prove
 cleanliness per lane, and require a `$LASTEXITCODE` guard for every npm call in a PowerShell lane.
 
-Mutation-tested, not assumed (`stage9/tools/selfhosted-mutation-check.sh` →
-`stage9/logs/selfhosted-parity-negative-controls.txt`): 11 deliberate weakenings each failed with `rc=1` and
-named the expected assertion (drop `action-smoke`; hosted `runs-on`; remove `node_major_ok`; strip exit
-guards; break `npm run test:browser`; `contents: write`; introduce `npm publish`; set
-`DIFFBEACON_REQUIRE_BROWSER: '0'`; downgrade `--untracked-files`; `setup-node@v4` in one lane; blank one
-`timeout-minutes`), the unmutated baseline passed `14 passed (14)`, and the workflow was verified byte-identical
-to its backup afterwards. Not covered, and stated so: no committed assertion distinguishes the fixed
-relative-path `tar -tzf` from the broken absolute-path form — that fix is qualified by the CI run and by local
-reproduction, not by the parity test.
+Two of those cases exist only because of the Windows package-lane failure on run `36556147020`, and they close
+the gap this section used to disclose: `tar -tzf` must be handed a bare file name (`.Name`), never an absolute
+path built from `$FullName`, `$RUNNER_TEMP` or `$pack`; the listing must be bracketed by `Push-Location $pack` /
+`Pop-Location`; the status must be captured into `$tarExit` _before_ `Pop-Location` overwrites
+`$LASTEXITCODE`; and the lane must refuse to continue unless exactly one tarball is present. The Linux lane's
+own absolute-path form is pinned in the same commit, in the opposite direction, so a future "harmonisation" of
+the two lanes cannot quietly delete the Linux coverage.
+
+Mutation-tested, not assumed. One script now drives all fifteen weakenings
+(`stage9/tools/selfhosted-mutation-check.sh` →
+`stage9/logs/selfhosted-parity-negative-controls-15.txt`, superseding the earlier eleven-case
+`selfhosted-parity-negative-controls.txt` and the four-case `tarpath-contract-negative-controls.txt` that were
+run separately): drop `action-smoke`; hosted `runs-on`; remove `node_major_ok`; strip exit guards; break
+`npm run test:browser`; `contents: write`; introduce `npm publish`; set `DIFFBEACON_REQUIRE_BROWSER: '0'`;
+downgrade `--untracked-files`; `setup-node@v4` in one lane; blank one `timeout-minutes`; hand `tar` an absolute
+path; remove `Push-Location`; read the exit code after `Pop-Location`; harmonise the Linux lane to the Windows
+form. Every one of the fifteen returned `rc=1` naming the assertion meant to catch it — the four archive-path
+weakenings each named `keeps the Windows package lane from handing a drive-letter path to tar`, and the Linux
+one named `keeps the Linux package lane listing by its own absolute path` — the unmutated baseline passed
+`16 passed (16)` with `rc=0`, and the workflow was verified byte-identical to its backup afterwards
+(`RESTORED IDENTICAL`).
 
 ### LIMITATIONS
 
@@ -1089,6 +1101,11 @@ reproduction, not by the parity test.
 7. **Dispatch discipline.** The push trigger means `b6e8842` also created two more hosted `CI` runs, cited above
    only for their zero-runner signature. `docs/audits/**` is manifest-excluded, so this section needs no
    `SOURCE_MANIFEST.txt` regeneration and no bundle rebuild.
+8. **The two archive-path assertions have never been executed by a runner.** They were added after the
+   qualification run, and no `diffbeacon-stage9` runner is registered any more (see RUNNER CLEANUP), so the tip
+   SHA has no CI execution of its own. What CI did qualify is the step those assertions describe, at
+   `b6e8842`, and `.github/workflows/**` is byte-identical between that SHA and the tip — but a test that has
+   only ever run locally is a local fact, and it is recorded as one.
 
 ### RUNNER CLEANUP
 
@@ -1123,6 +1140,73 @@ Measured after the qualification run, not assumed from a wrapper's exit code:
 5. New runs created by this cleanup documentation. Because `ci.yml` triggers on `push`, the closure push also
    created hosted `CI` runs with the same zero-runner/zero-step signature described under HOSTED STATUS. They
    are disclosed, not cited as evidence, and no conclusion in this report depends on them.
+
+### WINDOWS PACKAGE LANE RETEST (2026-09-30, test-only pass)
+
+A following brief asked for the single Windows package-lane failure on run `36556147020` to be repaired, its
+lane to be made regression-proof, and the run to be re-qualified. PHASE 1 identity work found the repair
+already committed and already CI-qualified. The lane failed because `tar -tzf` was handed
+`C:\Users\…\diffbeacon-0.1.0.tgz`; on a Windows runner `tar` resolves to Git-for-Windows GNU tar, which reads
+the `C:` as an rsh host, and `b6e8842` changed the step to list by bare name from inside the pack directory.
+**This pass changed no product file, no workflow, no gate command, no dependency and no bundle**:
+`git diff --exit-code b6e8842..HEAD -- .github/workflows` exits 0, and `git diff --stat b6e8842..HEAD` lists
+only `SOURCE_MANIFEST.txt` (1 line), this report, and `tests/stage9.self-hosted-parity.test.ts`.
+
+What genuinely was missing is the regression proof the brief asked for, and that is what this pass added
+(`bb18751`, two cases, written red first against deliberately weakened copies of the step and now recorded
+under WORKFLOW PARITY above).
+
+**LOCAL PROOF, BOTH DIRECTIONS.** `stage9/tools/tar-path-proof.sh` →
+`stage9/logs/tarpath-proof-3forms.txt` isolates the failing variable: one tarball produced by the workflow's own
+`npm pack`, one `tar` binary (`/usr/bin/tar`, `tar (GNU tar) 1.35`, the same build family the runner resolved),
+three argument forms, into a directory whose absolute path carries a drive letter and a space.
+
+| Argument form                                        | Exit | Output                                                                                  |
+| ---------------------------------------------------- | ---- | --------------------------------------------------------------------------------------- |
+| POSIX path `/c/Users/Pavithran R A/…`                | 0    | the four package entries                                                                |
+| Windows path `C:\Users\Pavithran R A\…` (pre-fix)    | 2    | `Cannot connect to C: resolve failed`, `Child returned status 128`                      |
+| Bare name inside the pack directory (committed form) | 0    | `package/LICENSE`, `package/dist/index.js`, `package/package.json`, `package/README.md` |
+
+The first row is why a bash-only reproduction must not be trusted here: bash hands `tar` a POSIX path, which
+succeeds, so the defect is invisible unless the _Windows-style_ string is passed. The second row reproduces the
+CI diagnostic verbatim. The third is the committed form.
+
+The committed Windows steps were then re-run end to end against the current tree
+(`stage9/tools/win-package-lane-emulation.ps1` → `stage9/logs/tarpath-local-proof-de9f0b6.txt`, absolute temp
+root containing a space): `tar=C:\Program Files\Git\usr\bin\tar.exe`, the four entries listed, the exact tarball
+installed into an empty consumer (`added 1 package`), `diffbeacon --version` → `0.1.0` and `diffbeacon --help`
+→ `DiffBeacon 0.1.0`, `EMULATION_EXIT=0`. Disclosed: that emulation runs in this working tree, which then
+carried an uncommitted test edit plus the host's pnpm debris, so its last step printed `DEBRIS_PRESENT`; the CI
+lane's cleanliness assertion runs in a fresh clone and is qualified there, not by this emulation.
+
+**GATES ON THE TEST-ONLY TREE** (`stage9/logs/tarpath-source-gates.txt`): `format:check` 0, `lint` 0,
+`typecheck` 0, and `DIFFBEACON_SKIP_BROWSER=1 npm run check` 0 with `Test Files 58 passed | 6 skipped (64)` /
+`Tests 929 passed | 134 skipped (1063)`; the +2 over the previous 927 is exactly the two new cases. Bundle
+freshness was re-measured at the tip (`stage9/logs/bundle-fresh-c6a850e.txt`): `npm run build:action` then
+`git diff --exit-code -- packages/action/dist/index.js` → 0, rebuilt digest
+`45660da735388dee35fc581e94490d2aacc295b2382f8bea23ab12dff2350049`, identical to the committed and CI-recorded
+value. `SOURCE_MANIFEST.txt` was regenerated after staging the test file: exactly one hash moved,
+`86fe46c6…` → `5af86792…`, 157 entries. The browser suite was not re-run locally, because no file it loads
+changed.
+
+**NO CI RE-EXECUTION AT THE TIP, AND WHY.** This brief said "keep the existing Windows and Linux self-hosted
+runners online"; the previous brief's PHASE 18 unregistered both runners and deleted both installations, so
+there was no runner to keep online, and this pass did not silently reinterpret that instruction as satisfied.
+Re-registering them means ~654 MB plus 1.3 GB of downloads and a serialized ~25-minute run on this shared host
+for a commit range that touches no workflow, no gate command and no product file, against a seven-lane green
+result (`36562157439`) whose lane definitions are byte-identical to the tip's. The trade is stated here rather
+than decided quietly; the authoritative CI execution remains `36562157439`, and the two new assertions are a
+local fact, labelled as one in LIMITATIONS 8. Pushes in this pass created hosted `CI` runs with the same
+zero-runner/zero-step signature already described (`36566762001`, `36567312209`, `36678492692`); they are
+disclosed, not cited.
+
+**A DEFECT THIS PASS FOUND IN ITS OWN EARLIER WORK.** The closure commits `29ac268` and `de9f0b6` were pushed
+without satisfying the repository's own prettier gate: `npm run format:check` reported
+`[warn] docs/audits/stage9-ci-package-qualification.md`, because prettier normalises Markdown table column
+widths and those commits hand-wrote tables. `c6a850e` is that formatting-only repair; its 14-line diff was
+checked against the pre-change copy (`stage9/report-before-prettier.md`) and every changed line is a table row,
+with no wording, number or claim altered. Recorded because it is the kind of miss the Stage-9 discipline exists
+to catch: a docs commit is still a commit to a repository whose `check` gate covers docs.
 
 ### GITHUB-HOSTED: UNQUALIFIED
 
