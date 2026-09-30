@@ -151,6 +151,44 @@ describe('Stage 9 self-hosted CI parity', () => {
     }
   });
 
+  it('keeps the Windows package lane from handing a drive-letter path to tar', () => {
+    // Measured on run 36556147020: a Windows runner with Git for Windows resolves `tar` to GNU tar, which
+    // reads the `C:` of an absolute Windows path as an rsh host (`Cannot connect to C: resolve failed`,
+    // child status 128). The lane therefore lists the tarball by bare name from inside the pack directory,
+    // and it must keep doing so — this assertion is what stops the step regressing to the failed form.
+    const windows = selfHostedJobs.find((job) => job.name === 'package-windows-node24');
+    expect(windows, 'the Windows package lane must exist').toBeDefined();
+    const body = windows?.body ?? '';
+
+    const tarArgs = [...body.matchAll(/tar -tzf\s+(\S+)/g)].map((match) => match[1]);
+    expect(tarArgs.length).toBe(1);
+    const tarArg = tarArgs[0] ?? '';
+    expect(tarArg, `tar must be handed a bare file name, got \`${tarArg}\``).toContain('.Name');
+    for (const absolute of ['FullName', 'RUNNER_TEMP', '$pack'])
+      expect(tarArg, `tar argument must not be an absolute path (${absolute})`).not.toContain(
+        absolute,
+      );
+
+    expect(body).toMatch(/Push-Location\s+\$pack/);
+    expect(body).toMatch(/Pop-Location/);
+    expect(body).toContain('tar -tzf $tarballs[0].Name');
+    // PowerShell leaves $LASTEXITCODE from the last native command, so reading it after Pop-Location would
+    // report the location change rather than tar's status.
+    expect(body).toMatch(/\$tarExit = \$LASTEXITCODE\s+Pop-Location/);
+    expect(body).toMatch(/if \(\$tarExit -ne 0\) \{ exit \$tarExit \}/);
+    expect(body).toMatch(/expected exactly one tarball/);
+  });
+
+  it('keeps the Linux package lane listing by its own absolute path', () => {
+    // The Linux lane never met the GNU-tar drive-letter defect; pinning its form here keeps the Windows
+    // repair from being "harmonised" across both lanes and silently dropping Linux coverage.
+    const linux = selfHostedJobs.find((job) => job.name === 'package-linux-node24');
+    expect(linux, 'the Linux package lane must exist').toBeDefined();
+    const body = linux?.body ?? '';
+    expect(body).toContain('tar -tzf "${RUNNER_TEMP}"/stage9-pack/diffbeacon-*.tgz');
+    expect(body).not.toMatch(/Push-Location/);
+  });
+
   it('bounds every lane with a timeout', () => {
     const timeouts = [...selfHosted.matchAll(/timeout-minutes: (\d+)/g)].map((match) =>
       Number(match[1]),
