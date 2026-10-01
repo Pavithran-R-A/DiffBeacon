@@ -403,12 +403,19 @@ remains blocked on the §15 prerequisites plus the §12 advisory, all of which a
 
 NEXT RECOMMENDED: **Stage 11 — Release.** Do **not** begin Stage 11 from this report.
 
+**Superseded on one point by the closure section at the end of this file.** The verdict above is the
+documentation verdict. The hosted-history closure added a separate qualification requirement — one green
+low-contention clean-copy source lane on the final candidate — and that lane is RED, so **Stage 10 as a
+stage is BLOCKED** and the recommendation above is not available until it is cleared.
+
 ## STAGE 10 CLOSURE — GITHUB-HOSTED HISTORY TRUTHFULNESS
 
 Closure run of 2026-10-01 on branch `rescue/stage0-source`, beginning at `8c6a7e6` (the Stage 10 tip
 that carried the false claim; Stage 9's record is its parent `8415cfe`). Scope: one false factual claim
-about GitHub-hosted runner history, the record counts in this file, and the proof that the corrected tree
-still satisfies every non-browser gate. No product, CI, workflow, dependency or browser file changed.
+about GitHub-hosted runner history, the record counts in this file, and an attempt to prove the corrected
+tree still satisfies every non-browser gate in one low-contention clean copy. The documentation work is
+complete and measured; that last proof is where this closure **stopped**, and the decision below is
+BLOCKED rather than PASS. No product, CI, workflow, dependency or browser file changed.
 
 **AUDITOR RULING: REPAIR REQUIRED.** The reviewer measured this repository's Actions history and found
 that current-facing documentation asserted an all-history negative that Git and the Actions API
@@ -540,8 +547,12 @@ measured inside the clean copy (`git ls-files -- docs/audits docs/recovery docs/
 (`git diff --name-only -M`), and the historical Markdown bucket at that tree is **22** (18 under
 `docs/audits`, 2 under `docs/recovery`, 2 under `docs/research`). The closure adds commits on top of it,
 so the complete Stage 10 history is **not** "4 commits": with the hosted-history record commit the range
-`8415cfe..9d7f06a` measures **5 commits / 23 unique paths / +1436 −84**, and the final range over every
-closure commit is measured in the last paragraph of this section, not inferred in prose. Insertions and
+`8415cfe..9d7f06a` measures **5 commits / 23 unique paths / +1436 −84**, and at the report candidate the
+range `8415cfe..078d25c` measures **6 commits / 23 unique paths / +1686 −84** (`git rev-list --count`,
+`git diff --name-only -M`, `git diff --shortstat -M`). The commit that records the blocked PHASE 7 result
+changes only this file, which is already inside that range, so the final Stage 10 range is **7 commits
+over the same 23 unique paths** — checked after that commit with `git diff --name-only 078d25c..HEAD`,
+which must list this report alone. Insertions and
 deletions are not additive across renames, so the path count is a range's `git diff --name-only` total,
 never a sum of per-commit file counts.
 
@@ -559,17 +570,21 @@ executed in this closure. The `source` project excludes them by configuration (`
 repository's own `DIFFBEACON_SKIP_BROWSER=1` — the flag `ci.yml` sets on its source jobs — which makes
 each Chromium case report a recorded skip reason instead of launching an engine. Chromium was not started.
 
-**SOURCE SUITE — two host measurements, neither of them the qualification.** The last clean host source
-lane against the corrected tree was **59 test files passed, 984 passed | 2 skipped (986 cases)** in
-107.50s (`stage10c/test-source-closure.txt`, run 23:32, i.e. against the repaired working tree before the
-record commit at 00:03). The latest host re-run after the later report edits was **5 failed | 54 passed
-files, 5 failed | 970 passed | 11 skipped (986 cases)** in 203.43s
-(`stage10c/source-lane-before-record-commit.txt`, run 01:40). The later run is classified as shared-host
-contention / environment sensitivity, not as a documentation or product defect: the failing cases are
-fixed timing budgets exceeded by Git-spawning tests under parallel load, the same cases pass in
-isolation, and the classification is recorded in `stage10c/cell-failure-classification.txt`. Neither
-number qualifies this closure — the clean-copy low-contention run on the final candidate commit, recorded
-in the CLEAN COPY paragraphs below, does. The wider aggregate lanes (`npm test`, which adds the browser
+**SOURCE SUITE — three measurements, and the qualifying one is RED.** (1) The last clean host source lane
+against the corrected tree was **59 test files passed, 984 passed | 2 skipped (986 cases)** in 107.50s
+(`stage10c/test-source-closure.txt`, run 23:32 — measured against the repaired working tree, before the
+record commit at 00:03). (2) The latest host re-run after the later report edits was **5 failed | 54
+passed files, 5 failed | 970 passed | 11 skipped (986 cases)** in 203.43s
+(`stage10c/source-lane-before-record-commit.txt`, run 01:40). (3) The PHASE 7 low-contention clean copy on
+the final candidate `078d25c` was **5 failed | 54 passed files, 6 failed | 969 passed | 11 skipped (986
+cases)** in 211.73s (`stage10c/p7-cell-node24-final.test-source.txt`, started 12:28). Measurement (1) is
+not evidence that "the source lane is green" for this closure — it is a dated host number on an
+unclean-tree state; (3) is the measurement the closure was chartered to produce, and it is **RED**. Every
+one of the seven reported failures in (3) is a budget timeout and none is an assertion failure
+(`stage10c/p7-blocked-source-lane-capture.txt` names each case, its budget, its measured time and its
+error). (2) was classified as shared-host contention in `stage10c/cell-failure-classification.txt`; (3)
+is classified below, with the host-load and disk-free state captured at the time of the run. The wider
+aggregate lanes (`npm test`, which adds the browser
 project) were **environmentally blocked** on this shared host during the closure and were classified
 rather than weakened: repeated full runs produced 1-failed and 10-failed file sets with 22 of 23 counted
 failures being timing budgets exceeded by Git-spawning cases, and the identical cases passed in isolation
@@ -595,7 +610,8 @@ and **4 exit 1**, which are not four independent product defects: `test-source` 
 classification above), `audit-full` (the intentional, already-recorded dev-tree advisory), and `verify`
 and `check`, aggregate scripts that re-run the source tests and therefore fail downstream of
 `test-source`. This cell is **not** reported as fully green, and it is not the qualifying measurement;
-the final-candidate cell below is. Node 22 on the same tree: portable `v22.23.3` with npm 10.9.9, docs
+the final-candidate cell below is the qualifying one, and it too is RED. Node 22 on the same tree: portable
+`v22.23.3` with npm 10.9.9, docs
 contract **55/55** exit 0, source lane under `--no-file-parallelism`
 `1 failed | 983 passed | 2 skipped (986)` — the same single budget timeout as Node 24's serialized lane
 (`1 failed | 58 passed (59)` files, `983 passed | 2 skipped`), so the two runtimes agree case-for-case.
@@ -603,18 +619,56 @@ Still a host run on Windows, not a GitHub-hosted runner run. Cell worktree prist
 runner registration, no new remote CI run, and no commit was created merely to record the predictable
 hosted failure under an exhausted hosted allowance.
 
+**FINAL-CANDIDATE CLEAN COPY (PHASE 7) — source lane RED, closure BLOCKED.**
+`stage10c/cell-node24-final`, a fresh disposable `file:///` clone checked out at the report candidate
+`078d25c87452dcd8200c517c039a00746ff95710`, identity read from inside it (`HEAD 078d25c…`, detached head,
+pristine worktree, 188 tracked paths, 39 Markdown paths, 22 historical Markdown, Node `v24.21.0`, npm
+`11.19.0`, git `2.55.0.windows.5`, `win32 x64 10.0.26200` — `p7-cell-node24-final.identity.txt`), gates
+run serially by `stage10c/p7-run-cell-final.sh` with `DIFFBEACON_SKIP_BROWSER=1` and `LEFTHOOK=0`, one
+Vitest process at a time and no Chromium. Result (`p7-cell-node24-final.gates.txt`): **13 gates exit 0**
+— `npm-ci` (214 packages, 23 s), `format-check`, `lint`, `typecheck`, `docs-contract` **55/55**, `build`,
+`secret-scan` (`12/12/0/0`), `package-smoke`, `action-smoke`, `manifest-regen` (158 files),
+`manifest-noop`, `audit-omit-dev` (0 vulnerabilities), `git-diff-check` — and **4 exit 1**: `test-source`,
+`audit-full` (the by-design dev-tree advisory), and `verify` + `check`, which re-run the source tests and
+so fail downstream of `test-source` rather than independently.
+
+The source lane is the reason this closure cannot be a PASS: **5 failed | 54 passed files, 6 failed | 969
+passed | 11 skipped (986 cases)**, 211.73 s wall against 1827.30 s of aggregate test time. All seven
+reported failures (six cases plus one `beforeAll` hook) are budget timeouts, none an assertion failure:
+`stage5.cli-adversarial-refs` hook 10000 ms budget; `cli.integration` "path with spaces" 21073 ms and
+"binary paths with spaces and Unicode" 20392 ms against 20000 ms; `stage3b.real-git` 28906 ms and 40297
+ms against 20000 ms; `stage5.git-determinism` 75239 ms against 60000 ms; `stage8.filesystem-boundary`
+hostile-name case 6087 ms against 5000 ms. Diagnostic re-runs on the same tree, serialized: the five
+failing files together give `1 failed | 4 passed` files / `1 failed | 48 passed` tests
+(`p7-failing-files-isolated.txt`), so the four Git-spawning files and five of the six cases pass without
+parallel load; the hostile-name case still fails at 5609 ms and again at 5774 ms running its file alone
+(`p7-hostile-name-alone.txt`), and it performs only `existsSync` on the reported names — no Git. Host
+state at capture: 16 logical CPUs, 41.5 % processor time (1 s sample), 387 processes, 35 browser
+processes and 8 idle `node` processes from other sessions, 7.78 GB free of 15.6 GB RAM, and **C: with
+4.6 GB free of 476 GB (100 % used)** — the same volume the test fixtures and the clone live on, which had
+6.5 GB free before this cell's `npm ci`. Full capture in `stage10c/p7-blocked-source-lane-capture.txt`.
+
+What was **not** done, on purpose: no timeout, test, fixture, worker count or Vitest configuration was
+changed to obtain a green number; no dependency, workflow, product or browser file was touched; the
+PHASE 8 Node 22 targeted proof was not run, because the brief stops the pipeline at the first red
+qualifying gate rather than re-measuring a red lane on a second runtime. The cell worktree was pristine
+after the gates, no runner was registered and no remote CI run was dispatched. **This candidate is
+therefore not qualified, and nothing from this closure has been pushed.**
+
 **WORKING TREE.** `git status --porcelain` shows only the recurring untracked `pnpm-lock.yaml` /
 `pnpm-workspace.yaml` debris, which was neither staged nor deleted; nothing else differs from HEAD after
 the closure commits.
 
-**STAGE 10 FINAL DECISION: PASS as a documentation candidate, with one defect class now closed and one
-honest gap left open.** The hosted-CI history is stated per era in every current document, the false
-all-history negative is gone, and its return is prevented by a test that was proven to bite. What this
-closure does **not** claim: that hosted CI works for this repository (unexecuted contract), that the
-hosted `ubuntu-latest` browser cell is measured (it is not), or that the aggregate harness is
-regression-measured on this host (the browser-inclusive lanes were environmentally blocked and
-classified; the docs contract is green on the candidate tree, and the source lane counts for this stage
-only through the low-contention clean copy on the final candidate). Publication remains blocked on
-`docs/releasing.md`, whose prerequisites now include the dev-only advisory and a real hosted CI run.
+**STAGE 10 FINAL DECISION: BLOCKED.** The documentation objective is met and measured: the hosted-CI
+history is stated per era in every current document, the false all-history negative is gone, its return
+is prevented by a test proven to bite (docs contract **55/55**, five separate green runs plus an in-cell
+run), the manifest is a 158-entry no-op, and 13 of 17 clean-copy gates are exit 0 on the final candidate.
+The qualification objective is **not** met: PHASE 7 requires the source suite to complete green in the
+low-contention clean copy, and it did not — 6 cases and 1 hook exceeded their budgets, and one of them now
+exceeds its budget even when its file runs alone, which contention does not explain. Stage 10 stays open
+at that one gate. Publication remains blocked on `docs/releasing.md`, whose prerequisites include the
+dev-only advisory and a real hosted CI run; neither is implicated by the blocked lane.
 
-**NEXT: Stage 11 — Release.** Do **NOT** begin Stage 11.
+**NEXT: clear the PHASE 7 source lane on a quieter or less-full host (or investigate the hostile-name
+case's `existsSync` budget as its own stage), then re-qualify `078d25c` or its successor.** Do **NOT**
+begin Stage 11.
