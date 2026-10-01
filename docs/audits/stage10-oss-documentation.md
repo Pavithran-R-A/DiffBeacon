@@ -535,7 +535,14 @@ hashes in `hashes-before.txt` / `hashes-after.txt`). The original 15-label harne
 against the 55-case file: 14 labels appear in its summary stream and the 15th (`root-note`) is proven by
 its own per-label log, `stage10/mutation-log.txt.root-note`, because the harness redirects that case's
 stdout into the file it then deletes; the tree was restored byte-identical afterwards
-(`stage10c/mutation-proof-full-rerun.txt`).
+(`stage10c/mutation-proof-full-rerun.txt`). Both harnesses were run a third time, on the final report tree
+at `6711125`, so the guards are proven against the text as it now stands rather than against an earlier
+draft: `stage10c/p12-mutation-stdout.txt` gives the 7 hosted-history labels as 7 `TEETH OK` with the five
+mutated files hashing identical to `git show HEAD:<file>` afterwards
+(`stage10c/hashes-before.txt`), and `stage10c/p12-mutation-general-summary.txt` plus the fifteen fresh
+per-label logs `stage10c/p12-mutation-log.txt.<label>` give 14 `TEETH OK` in the summary stream and the
+`root-note` case failing its named assertion in its own log — the same stdout-swallowing behaviour, kept
+visible rather than smoothed over. `git diff --exit-code` after both runs: clean.
 
 **HISTORICAL DOC COUNT: 22** Markdown files under `docs/audits`, `docs/recovery` and `docs/research`,
 measured inside the clean copy (`git ls-files -- docs/audits docs/recovery docs/research | grep -c
@@ -552,7 +559,9 @@ range `8415cfe..078d25c` measures **6 commits / 23 unique paths / +1686 −84** 
 `git diff --name-only -M`, `git diff --shortstat -M`). The commit that records the blocked PHASE 7 result
 changes only this file, which is already inside that range, so the final Stage 10 range is **7 commits
 over the same 23 unique paths** — checked after that commit with `git diff --name-only 078d25c..HEAD`,
-which must list this report alone. Insertions and
+which must list this report alone. The commit that records the PHASE 8 Node 22 measurement behaves the
+same way: it touches this file only, which is why the range statement is a measured commit count rather
+than a fixed one — any further report-only commit moves the count, never the 23-path set. Insertions and
 deletions are not additive across renames, so the path count is a range's `git diff --name-only` total,
 never a sum of per-commit file counts.
 
@@ -649,11 +658,28 @@ processes and 8 idle `node` processes from other sessions, 7.78 GB free of 15.6 
 6.5 GB free before this cell's `npm ci`. Full capture in `stage10c/p7-blocked-source-lane-capture.txt`.
 
 What was **not** done, on purpose: no timeout, test, fixture, worker count or Vitest configuration was
-changed to obtain a green number; no dependency, workflow, product or browser file was touched; the
-PHASE 8 Node 22 targeted proof was not run, because the brief stops the pipeline at the first red
-qualifying gate rather than re-measuring a red lane on a second runtime. The cell worktree was pristine
-after the gates, no runner was registered and no remote CI run was dispatched. **This candidate is
-therefore not qualified, and nothing from this closure has been pushed.**
+changed to obtain a green number, and no dependency, workflow, product or browser file was touched. The
+cell worktree was pristine after the gates, no runner was registered and no remote CI run was dispatched.
+**This candidate is therefore not qualified, and nothing from this closure has been pushed.**
+
+**PHASE 8 — NODE 22 INSIDE THE FINAL-CANDIDATE CLEAN COPY — docs contract green, source lane RED.** The
+portable runtime was still available, so the same clean copy `stage10c/cell-node24-final` (checked out at
+`078d25c`, worktree pristine before and after) was re-measured with `node -v = v22.23.3`, npm `10.9.9`, git
+`2.55.0.windows.5`, read from inside that cell rather than inferred — `p8-node22-final.identity.txt`. The
+host Node 24 was not used as a substitute. `stage10c/p8-node22-final.sh` ran the docs contract and the
+source lane with browser skipped: docs contract **`55 passed (55)` exit 0 in 1.12 s**
+(`p8-node22-final.docs-contract.txt`), source lane **8 failed | 51 passed files, 11 failed | 964 passed |
+11 skipped (986 cases)** in 261.95 s exit 1 (`p8-node22-final.test-source.txt`), and the same lane
+serialized as a CLI diagnostic only: **1 failed | 58 passed files, 1 failed | 983 passed | 2 skipped (986
+cases)** in 475.63 s exit 1 (`p8-node22-final.test-source-serialized.txt`). The single serialized failure
+is the same case Node 24 produced — `stage8.filesystem-boundary` "reports each hostile name as text that is
+not a live path", 5593 ms against its 5000 ms budget — and running that file alone on Node 22 gives 5859 ms
+(`p8-node22-hostile-alone.txt`) against 5774 ms on Node 24 (`p7-hostile-name-alone.txt`). The over-budget
+case is therefore a property of this host and this volume, not of the runtime: Node 22 and Node 24 agree
+case-for-case, and the identical serialized shape appears on the record-commit cell too. This is **not**
+evidence that the lane passes nowhere: the self-hosted Stage 9 run `36562157439` completed these same
+source gates green on different machines. It is evidence that this closure's qualifying gate cannot be
+measured green on this host as it currently stands.
 
 **WORKING TREE.** `git status --porcelain` shows only the recurring untracked `pnpm-lock.yaml` /
 `pnpm-workspace.yaml` debris, which was neither staged nor deleted; nothing else differs from HEAD after
@@ -661,13 +687,16 @@ the closure commits.
 
 **STAGE 10 FINAL DECISION: BLOCKED.** The documentation objective is met and measured: the hosted-CI
 history is stated per era in every current document, the false all-history negative is gone, its return
-is prevented by a test proven to bite (docs contract **55/55**, five separate green runs plus an in-cell
-run), the manifest is a 158-entry no-op, and 13 of 17 clean-copy gates are exit 0 on the final candidate.
+is prevented by a test proven to bite (docs contract **55/55** — re-run green on this final report tree at
+`6711125` in `stage10c/docs-contract-p12-final.txt`, inside both clean-copy cells, and on portable Node 22
+in the final candidate), both mutation harnesses re-run green against the current text, the manifest is a
+158-entry no-op, and 13 of 17 clean-copy gates are exit 0 on the final candidate.
 The qualification objective is **not** met: PHASE 7 requires the source suite to complete green in the
 low-contention clean copy, and it did not — 6 cases and 1 hook exceeded their budgets, and one of them now
-exceeds its budget even when its file runs alone, which contention does not explain. Stage 10 stays open
-at that one gate. Publication remains blocked on `docs/releasing.md`, whose prerequisites include the
-dev-only advisory and a real hosted CI run; neither is implicated by the blocked lane.
+exceeds its budget even when its file runs alone, which contention does not explain; PHASE 8 shows the same
+shape on Node 22, so the blocker is this host and this near-full volume rather than the runtime. Stage 10
+stays open at that one gate. Publication remains blocked on `docs/releasing.md`, whose prerequisites include
+the dev-only advisory and a real hosted CI run; neither is implicated by the blocked lane.
 
 **NEXT: clear the PHASE 7 source lane on a quieter or less-full host (or investigate the hostile-name
 case's `existsSync` budget as its own stage), then re-qualify `078d25c` or its successor.** Do **NOT**
