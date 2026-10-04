@@ -7,6 +7,17 @@ const pages = readFileSync('.github/workflows/pages.yml', 'utf8');
 const usesLines = (text: string) =>
   [...text.matchAll(/^\s*(?:-\s*)?uses:\s*(.+)$/gm)].map((match) => match[1]?.trim() ?? '');
 
+/** Permission grants are dedented `scope: read|write` lines; anything naming a token is also caught. */
+const grantLines = (text: string) =>
+  text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        /^[a-z][a-z-]*(?:-[a-z-]+)*: (?:read|write)$/.test(line) ||
+        (/token/i.test(line) && !line.startsWith('#')),
+    );
+
 describe('Stage 9 CI contract', () => {
   it('pins every action to an immutable commit with the upstream tag named', () => {
     const references = [...usesLines(workflow), ...usesLines(pages)];
@@ -14,27 +25,55 @@ describe('Stage 9 CI contract', () => {
     for (const reference of references) expect(reference).toMatch(/^[^@\s]+@[0-9a-f]{40} # v\d+$/);
   });
 
-  it('keeps every job at read-only contents permission', () => {
-    // One workflow-level `permissions: contents: read` is what GitHub applies to every job, so the
-    // guard reads grant lines rather than nesting: any token scope, any `write`, or a grant added by
-    // a future job has to be the same read-only line this one is.
-    const grants = [...workflow.split('\n'), ...pages.split('\n')]
-      .map((line) => line.trim())
-      .filter((line) => /^[a-z][a-z-]*(?:-[a-z-]+)*: read$/.test(line) || /token/i.test(line));
-    expect(grants.length).toBeGreaterThanOrEqual(1);
-    for (const grant of grants) expect(grant).toBe('contents: read');
-    for (const text of [workflow, pages]) {
-      expect(text).not.toMatch(/write/);
-      expect(text).not.toMatch(/id-token/);
-      expect(text).not.toMatch(/secrets\.|GITHUB_TOKEN/);
-    }
+  it('keeps ci.yml read-only and holds pages.yml to the least privilege Pages needs', () => {
+    // ci.yml analyses source only. One workflow-level `permissions: contents: read` is what GitHub
+    // applies to every job, so the guard reads grant lines rather than nesting: any token scope, any
+    // `write`, or a grant added by a future job has to be the same read-only line this one is.
+    const ciGrants = grantLines(workflow);
+    expect(ciGrants.length).toBeGreaterThanOrEqual(1);
+    for (const grant of ciGrants) expect(grant).toBe('contents: read');
+    expect(workflow).not.toMatch(/write/);
+    expect(workflow).not.toMatch(/id-token/);
+    expect(workflow).not.toMatch(/secrets\.|GITHUB_TOKEN/);
+
+    // GitHub's custom Pages model requires exactly three grants on the deploying job: read the
+    // source, write only the Pages site, and mint the OIDC token the official deploy action uses.
+    // The set is asserted as a set, so widening it — or dropping `contents: read` — fails here
+    // instead of passing a one-directional "no write" scan.
+    expect([...grantLines(pages)].sort()).toEqual([
+      'contents: read',
+      'id-token: write',
+      'pages: write',
+    ]);
+    expect(pages).toMatch(/^ {4}environment:\n {6}name: github-pages/m);
+    expect(pages).not.toMatch(/secrets\.|GITHUB_TOKEN/);
+    expect(pages).not.toMatch(/deployments:|pull-requests:|security-events:|admin:/);
   });
 
-  it('runs nothing that could mutate the registry, the branch, or the site', () => {
+  it('deploys the demo through the official Pages actions instead of stopping at an artifact', () => {
+    for (const step of [
+      'actions/checkout@',
+      'actions/setup-node@',
+      'npm ci',
+      'npm run build:web',
+      'actions/configure-pages@',
+      'actions/upload-pages-artifact@',
+      'actions/deploy-pages@',
+    ])
+      expect(pages, `pages.yml must run ${step}`).toContain(step);
+    // The URL a consumer is sent to must come from GitHub's deploy step, not from prose.
+    expect(pages).toMatch(/steps\.deployment\.outputs\.page_url/);
+  });
+
+  it('runs nothing that could mutate the registry, the branch, or the site from ci.yml', () => {
     expect(workflow).not.toMatch(/pull_request_target/);
     expect(workflow).not.toMatch(/npm publish/);
     expect(workflow).not.toMatch(/--force|force-with-lease/);
     expect(workflow).not.toMatch(/actions\/deploy-pages|upload-pages-artifact/);
+    for (const text of [workflow, pages]) {
+      expect(text).not.toMatch(/npm publish/);
+      expect(text).not.toMatch(/--force|force-with-lease/);
+    }
   });
 
   it('gates the Stage 9 surfaces explicitly', () => {

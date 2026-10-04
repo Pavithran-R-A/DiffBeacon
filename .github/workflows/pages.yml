@@ -1,10 +1,17 @@
-name: Pages build preparation
+name: Deploy browser demo to GitHub Pages
 
+# Dispatched by hand so the commit that goes live is always a commit someone chose; the deployed URL
+# is reported by GitHub's own deploy step rather than asserted in prose.
 on:
   workflow_dispatch:
 
+# Exactly three grants: read the source being published, write only the Pages site, and mint the
+# OIDC credential the official deploy action presents for the `github-pages` environment.
+# tests/stage9.ci-contract.test.ts asserts this set as a set, so widening it fails there.
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 jobs:
   build:
@@ -21,7 +28,26 @@ jobs:
         run: npm ci
       - name: Build the repository-path web bundle
         run: BASE_PATH="/${{ github.event.repository.name }}/" npm run build:web
-      - name: Upload Pages artifact for an explicit future deployment
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+      - name: Upload the built site
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy the artifact to Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+      - name: Report the deployed URL
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          echo "deployed_page_url=$PAGE_URL"
+          echo "### Deployed at $PAGE_URL" >> "$GITHUB_STEP_SUMMARY"
