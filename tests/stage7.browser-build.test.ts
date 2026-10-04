@@ -50,6 +50,11 @@ function filesIn(directory: string): string[] {
   return found;
 }
 
+/** Compares paths the way the build wrote them, so separator style cannot hide a leak. */
+function toPosix(value: string): string {
+  return value.replaceAll('\\', '/');
+}
+
 /* ---------------------------------------------------------------------------
  * HARNESS TIMEOUTS — NOT PRODUCT BUDGETS
  *
@@ -446,12 +451,36 @@ describeBrowser('the built artifact contains nothing it should not', () => {
 
   it('leaks no local machine path and no credential-shaped string', async () => {
     const home = process.env.USERPROFILE ?? process.env.HOME ?? '';
+    // Vite writes POSIX separators into the artifact even on Windows, where USERPROFILE uses
+    // backslashes, so a literal compare would let the same leak pass here and fail on Linux.
+    const needles = [home, repository].filter((needle) => needle !== '').map(toPosix);
     for (const file of files) {
-      const content = readFileSync(file, 'utf8');
-      if (home !== '') expect(content.includes(home), path.basename(file)).toBe(false);
-      expect(content.includes(repository), path.basename(file)).toBe(false);
+      const content = toPosix(readFileSync(file, 'utf8'));
+      for (const needle of needles) {
+        expect(content.includes(needle), `${path.basename(file)}: ${needle}`).toBe(false);
+      }
       expect(/AKIA[0-9A-Z]{16}/.test(content), path.basename(file)).toBe(false);
       expect(/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(content), path.basename(file)).toBe(false);
+    }
+  });
+
+  it('ships a production build whose sourcemaps point inside the project', async () => {
+    for (const file of files) {
+      const content = readFileSync(file, 'utf8');
+      if (file.endsWith('.js')) {
+        for (const marker of ['jsxDEV', 'jsx-dev-runtime', 'react.development.js']) {
+          expect(content.includes(marker), `${path.basename(file)}: ${marker}`).toBe(false);
+        }
+      }
+      if (file.endsWith('.map')) {
+        const map = JSON.parse(content) as { sources?: unknown };
+        expect(Array.isArray(map.sources), path.basename(file)).toBe(true);
+        for (const source of map.sources as string[]) {
+          expect(path.posix.isAbsolute(source), `${path.basename(file)}: ${source}`).toBe(false);
+          expect(/^[A-Za-z]:\//.test(source), `${path.basename(file)}: ${source}`).toBe(false);
+          expect(source.startsWith('../'), `${path.basename(file)}: ${source}`).toBe(false);
+        }
+      }
     }
   });
 

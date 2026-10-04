@@ -218,6 +218,9 @@ function withLock<T>(lockFile: string, work: () => T): T {
 
 function buildFingerprint(): string {
   const hash = createHash('sha256');
+  // Two checkouts of the same commit have identical content but must never share a cached
+  // artifact: the build embeds paths derived from its own location.
+  hash.update(repository);
   const walk = (directory: string) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const file = path.join(directory, entry.name);
@@ -257,7 +260,9 @@ export function buildWeb(base: '/' | '/DiffBeacon/'): string {
       {
         cwd: repository,
         encoding: 'utf8',
-        env: { ...process.env, BASE_PATH: base },
+        // Vitest sets NODE_ENV=test and Vite only defaults it when unset, so an inherited
+        // environment here would build the demo in development mode instead of production.
+        env: { ...process.env, BASE_PATH: base, NODE_ENV: 'production' },
         windowsHide: true,
         maxBuffer: 8 * 1024 * 1024,
       },
