@@ -8,12 +8,13 @@ STARTING SHA: `1bd99c12a9d7d75183be0ba442fc2d7023ef1c69` (`1bd99c1`), the tip of
 
 COMMITS CREATED BY THIS STAGE (each pushed, each verified against the remote):
 
-| Commit      | Message                                                                          | What it changes                                                                                                                                                                                                                                                          |
-| ----------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `9c38ed0`   | `chore(deps): clear release-blocking development audit`                          | `package-lock.json` (two `brace-expansion` resolutions) and `SOURCE_MANIFEST.txt`                                                                                                                                                                                        |
-| `889f52b`   | `fix(browser): ship a production demo artifact with project-relative sourcemaps` | `vite.config.ts`, `tests/stage7.browser-harness.ts`, `tests/stage7.browser-build.test.ts`, `SOURCE_MANIFEST.txt` (3 file digests)                                                                                                                                        |
-| `860b43c`   | `docs: record v0.1.0 release qualification`                                      | the current documents listed in §9, `tests/stage10.docs-contract.test.ts`, the Stage 9 workflow header comment, `SOURCE_MANIFEST.txt`, this report                                                                                                                       |
-| this commit | `docs: record v0.1.0 release qualification`                                      | this report only: §6's hosted run of `860b43c`, §7's clean-clone measurement of it, §9's re-measurement showing this edit moves no gate input, and §10's note about the pair this file cannot hold. No gate input changes, which is why the two commits share a message. |
+| Commit      | Message                                                                          | What it changes                                                                                                                                                                                                                                                                  |
+| ----------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `9c38ed0`   | `chore(deps): clear release-blocking development audit`                          | `package-lock.json` (two `brace-expansion` resolutions) and `SOURCE_MANIFEST.txt`                                                                                                                                                                                                |
+| `889f52b`   | `fix(browser): ship a production demo artifact with project-relative sourcemaps` | `vite.config.ts`, `tests/stage7.browser-harness.ts`, `tests/stage7.browser-build.test.ts`, `SOURCE_MANIFEST.txt` (3 file digests)                                                                                                                                                |
+| `860b43c`   | `docs: record v0.1.0 release qualification`                                      | the current documents listed in §9, `tests/stage10.docs-contract.test.ts`, the Stage 9 workflow header comment, `SOURCE_MANIFEST.txt`, this report                                                                                                                               |
+| `06dbf11`   | `docs: record v0.1.0 release qualification`                                      | this report only: §6's hosted run of `860b43c`, §7's clean-clone measurement of it, §9's re-measurement showing that edit moves no gate input, and §10's note about the pair a file cannot hold for itself. No gate input changes, which is why the two commits share a message. |
+| this commit | `docs: record v0.1.0 release qualification`                                      | this report again, and still no gate input: §6's hosted run of `06dbf11` (37200030848), §9's and §10's measurements of it, and this row.                                                                                                                                         |
 
 BRANCH: `release/v0.1.0`, created in PHASE B from the current tip of
 `origin/rescue/stage0-source` — not from `main`. Normal forward pushes only; no force-push
@@ -191,13 +192,14 @@ least-privilege `contents: read` with no `pull_request_target`, no `id-token: wr
 measured run history for the workflow as it ships
 (`phaseH-run-history.txt`, `phaseH-jobs-detail.txt`, `phaseF-run-list-after-A.txt`):
 
-| Run           | Branch                 | Commit    | Created (UTC)        | Conclusion                  | What failed                                                                                                           |
-| ------------- | ---------------------- | --------- | -------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `36971746510` | `rescue/stage0-source` | `1bd99c1` | 2026-10-02T06:03:37Z | failure                     | four source cells at "Dependency audit (development tree)"; browser lane at "Browser suites (real Chromium required)" |
-| `37188759053` | `release/v0.1.0`       | `1bd99c1` | 2026-10-04T08:23:22Z | failure                     | same two steps, same reason                                                                                           |
-| `37190394247` | `release/v0.1.0`       | `9c38ed0` | 2026-10-04T08:53:46Z | failure                     | four source cells **success**; browser lane red at `tests/stage7.browser-build.test.ts:451` (§4)                      |
-| `37191968216` | `release/v0.1.0`       | `889f52b` | 2026-10-04T09:22:56Z | **success — all five jobs** | —                                                                                                                     |
-| `37196432560` | `release/v0.1.0`       | `860b43c` | 2026-10-04T10:46:02Z | **success — all five jobs** | —; this is the run of the pushed record commit itself, so the candidate SHA has its own hosted measurement            |
+| Run           | Branch                 | Commit    | Created (UTC)        | Conclusion                  | What failed                                                                                                                                             |
+| ------------- | ---------------------- | --------- | -------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `36971746510` | `rescue/stage0-source` | `1bd99c1` | 2026-10-02T06:03:37Z | failure                     | four source cells at "Dependency audit (development tree)"; browser lane at "Browser suites (real Chromium required)"                                   |
+| `37188759053` | `release/v0.1.0`       | `1bd99c1` | 2026-10-04T08:23:22Z | failure                     | same two steps, same reason                                                                                                                             |
+| `37190394247` | `release/v0.1.0`       | `9c38ed0` | 2026-10-04T08:53:46Z | failure                     | four source cells **success**; browser lane red at `tests/stage7.browser-build.test.ts:451` (§4)                                                        |
+| `37191968216` | `release/v0.1.0`       | `889f52b` | 2026-10-04T09:22:56Z | **success — all five jobs** | —                                                                                                                                                       |
+| `37196432560` | `release/v0.1.0`       | `860b43c` | 2026-10-04T10:46:02Z | **success — all five jobs** | —; this is the run of the pushed record commit itself, so the candidate SHA has its own hosted measurement                                              |
+| `37200030848` | `release/v0.1.0`       | `06dbf11` | 2026-10-04T11:49:36Z | **success — all five jobs** | —; the audit-only follow-up commit, whose five lanes reproduce `37196432560`'s totals exactly, which is what a change that moves no gate input produces |
 
 ### Run `37191968216` — the browser fix
 
@@ -250,6 +252,33 @@ Runner images: `ubuntu-24.04` Version `20260927.320.1` and `windows-2025-vs2026`
 Linux, 984 → 997 on Windows) and the run total is 1132 rather than 1119: that is exactly the 13
 per-document stale-claim cases §9 added to `tests/stage10.docs-contract.test.ts`, so the hosted
 count and the local count agree on the candidate's own bytes.
+
+### Run `37200030848` — the audit-only follow-up commit `06dbf11`
+
+<https://github.com/Pavithran-R-A/DiffBeacon/actions/runs/37200030848>, event push,
+`release/v0.1.0`, head SHA `06dbf11da61a7bf602dd0185f1c9548a00a0cd8b`, created 2026-10-04T11:49:36Z,
+completed 2026-10-04T11:53:17Z, conclusion **success** (`gh run watch --exit-status` exited 0 —
+`phaseH7-run-37200030848-watch.txt`, job records `phaseH7-run-37200030848-watch-jobs.txt`, per-lane
+summary lines `phaseH7-lane-totals.txt` and `phaseH7-runlog-<job ID>.txt`):
+
+- **Source ubuntu-latest / Node 22** (job `111429650231`) —
+  `Test Files 59 passed | 6 skipped (65)`, `Tests 998 passed | 134 skipped (1132)`, both audits at
+  `found 0 vulnerabilities`, secret scan at 12 classified findings,
+  `stage8.invalid-byte-paths.test.ts (10 tests)` with no skip, `package-smoke` and `action-smoke`
+  green, `DiffBeacon source-first verification passed.`
+- **Source ubuntu-latest / Node 24** (job `111429650225`) — the same `998 | 134 (1132)`, verification
+  passed.
+- **Source windows-latest / Node 22** (job `111429650167`) and **Node 24** (job `111429650244`) —
+  `Tests 997 passed | 135 skipped (1132)` each, verification passed, the Windows skip printing its
+  recorded UTF-8-filename reason.
+- **Browser lane ubuntu-latest / Node 24** (job `111429650129`) —
+  `Test Files 6 passed (6)`, `Tests 133 passed (133)`, engine
+  `/usr/bin/google-chrome; version=154.0.8037.57` in all six files.
+
+Runner images: `ubuntu-24.04` `20260927.320.1` and `windows-2025-vs2026` `20260925.250.1` — the same
+images and the same per-lane totals as `37196432560`. That equality is the point of this run:
+`06dbf11` changed only this file, and the hosted gate on it reproduces the candidate's own five lane
+totals exactly, from a clean checkout with no host debris in it.
 
 The three red runs are recorded rather than quietly dropped: two failed at the development-tree
 audit step that PHASE D closed, and one failed at the browser assertion that §4 repaired. This
@@ -448,8 +477,61 @@ documentation contract exclude. That affected set was re-run once more after tho
 secret scan at the same 12 classified findings, `SOURCE_MANIFEST.txt` unchanged at 158 files with
 `MANIFEST_DIFF_EXIT=0` and the same digest, the four document-binding files at
 `Test Files 4 passed (4)` / `Tests 116 passed (116)`, and `git status --short` still this single path.
-The hosted run of this commit, whose verification §10 describes, executes
-the same ordered gate on the pushed tree from a clean checkout.
+The hosted run of that commit executed the same ordered gate on the
+pushed tree from a clean checkout: run `37200030848` concluded **success** in all five jobs with the
+totals §6 records, which is the remote half of the same claim (§6, §10).
+
+The rest of §9 describes this commit's own measurement, on the bytes it finished with. `npm audit
+--omit=dev` and `npm audit` both printed `found 0 vulnerabilities` and exited 0 (`RELEASE_AUDIT_EXIT=0`,
+`FULL_AUDIT_EXIT=0`), then the full ordered gate ran as one driver (`phaseH8-full-gate.txt`,
+2026-10-04T12:10:21Z to 12:16:59Z): `npm run verify` exit 0 through `All matched files use Prettier code
+style!`, lint, typecheck, `Test Files 65 passed (65)` / `Tests 1130 passed | 2 skipped (1132)`, build,
+artifact freshness, `secret scan: 12 finding(s), 12 classified, 0 unclassified, 0 stale`, manifest
+drift, CLI startup, `package-smoke: 0.1.0; … tarballFiles=4; license=MIT; runtimeDependencies=0;
+artifactSecretFindings=0`, `action-smoke: … pullRequestTargetRejected=true` and
+`DiffBeacon source-first verification passed.`; `npm run check` exit 0 to 12:25:03Z. Both began with
+`DEBRIS_ABSENT=pnpm-lock.yaml` and `DEBRIS_ABSENT=pnpm-workspace.yaml` and ended with `git status
+--short` listing only this file, which is the same tree §1 records as having failed at
+`assertNoObsoleteSurface` while the debris was present.
+
+The same driver then re-measured the shipped artifact on this tree (`phaseH8b-pack-identity.txt`,
+12:25:18Z to 12:25:38Z). `packages/action/dist/index.js` is
+`45660da735388dee35fc581e94490d2aacc295b2382f8bea23ab12dff2350049`, equal to the digest §7 measured
+inside the clean clone of the pushed candidate; the untracked CLI bundle is
+`0ceb2e1e2ff3c8b77a793d654e1b66be3eaf5a685f6d8afcd1824b85524a4275`, the same value the Stage 8
+clean-clone matrix recorded in `docs/audits/stage8-security-hardening.md`; `npm pack --dry-run` from
+`packages/cli` lists the same four entries and `package size: 16.8 kB` at shasum
+`7c59923703cd08137fad03463e383ee4078486bb`; and the packed tarball's sha256 is
+`3a7870e4be2cd983263c129a0dbc1a8ed93ef141889b7bd4925c43937f1c359f` — byte-for-byte §7's tarball, which
+is what two commits that touch only `docs/audits/` must produce. Installing
+that tarball in a directory outside the repository returned `added 1 package` and `found 0
+vulnerabilities` (`CONSUMER_INSTALL_EXIT=0`) with `diffbeacon`, `diffbeacon.cmd` and `diffbeacon.ps1` in
+`node_modules/.bin`, both the POSIX and the `.cmd` shim printing exactly `0.1.0`, and a real
+`review --stdin --format markdown` over a two-file diff exiting 0 with 2179 bytes on stdout and 0 bytes
+on stderr. One line of that first pass was a defect **in the measuring command, not in the product**: it
+read `j.surfaces`, a key the `schemaVersion "1"` JSON contract does not have, so it printed nothing. The
+recheck in the same file reads the documented shape and the installed package answers it —
+`REVIEW_SF_SURFACES=["auth-access","database-schema","runtime"]`, `reviewOrder` positions 1 and 2 at
+`FOCUS` before position 3 `runtime` at `CHECK`, `schemaVersion "1"`, and
+`summary={"changedFiles":2,"additions":3,"deletions":2,…,"diagnostics":1}`. This tree is a working tree
+rather than a fresh `npm ci` clone, so these are identity comparisons against §7's clean-clone values,
+not a second clone qualification; §7 stays the authority for the clean-clone cells.
+
+The affected gates were run three times on the content of this section — `phaseH8c-final-gates.txt`
+(2026-10-04T12:27:52Z to 12:28:15Z), `phaseH8d-final-gates.txt` (12:32:20Z to 12:32:44Z) and
+`phaseH8e-precommit-gates.txt` (12:33:59Z to 12:34:22Z), each re-run following one more wording correction
+here — and each time to the same result: `DEBRIS_ABSENT` for both pnpm paths, `npm run format:check` exit
+0, `npm run secret-scan` at `12 finding(s), 12 classified, 0 unclassified, 0 stale`, `npm run manifest`
+printing `SOURCE_MANIFEST.txt: 158 files` with `MANIFEST_DIFF_EXIT=0` and digest
+`06915c81408e2c484b5ed57b588bad60d220271bffae1ab46530fc5ea5351489`, and the four document-binding files
+at `Test Files 4 passed (4)` / `Tests 116 passed (116)`, while `git diff --name-only 06dbf11` lists
+exactly `docs/audits/stage11-release-qualification.md`. No sentence naming one of those runs can measure
+itself: the run made after each edit is what covers the bytes that edit produced. So after committing,
+these same gates run once more on the **committed** tree, with the log kept outside the repository in this
+stage's evidence directory and reported in the stage's final output; the GitHub Actions run of the pushed
+commit then re-executes the full ordered gate on exactly those pushed bytes from a clean checkout. That is
+the same bounded rule §10 records for every earlier commit here — a commit carries the external proof of
+the commits before it, never of itself.
 
 ## 10. Push verification
 
@@ -459,17 +541,24 @@ the same ordered gate on the pushed tree from a clean checkout.
 | `chore(deps)` commit    | `9c38ed0…`           | `9c38ed0e52255e9eee52186cfb3451f60e289e5d`       | yes   |
 | `fix(browser)` commit   | `889f52b…`           | `889f52b6e53095fea978fafbe50017ff71e543db`       | yes   |
 | `860b43c` (report A)    | `860b43c…`           | `860b43c15b9e34688e4a4cb02b40b8a60dba434b`       | yes   |
+| `06dbf11` (report B)    | `06dbf11…`           | `06dbf11da61a7bf602dd0185f1c9548a00a0cd8b`       | yes   |
 
 The `860b43c` push printed `889f52b..860b43c  release/v0.1.0 -> release/v0.1.0` with exit 0
 (`phaseH-push-A.txt`), and the same value came back from `git ls-remote origin
-refs/heads/release/v0.1.0`.
+refs/heads/release/v0.1.0`. The `06dbf11` push printed `860b43c..06dbf11  release/v0.1.0 ->
+release/v0.1.0` with exit 0 (`phaseH6-push.txt`, 2026-10-04T11:49:25Z to 11:49:29Z); that same file
+records `git rev-parse HEAD` = `06dbf11da61a7bf602dd0185f1c9548a00a0cd8b`, the `ls-remote` line for
+`refs/heads/release/v0.1.0` at the identical value, `ahead/behind` = `0 0`, `main` still at
+`e0ff98143bfe39c80c338518d006525a846a8739`, `MAIN_IS_ANCESTOR_EXIT=0`, the two `rescue/*` branches and
+`tmp/stage9-selfhosted-smoke` at the same SHAs as before the push, and `0` tags.
 
-The row this report cannot write is its own. A commit's hash is produced by the commit, so the
-follow-up documentation commit that adds §6's `37196432560` rows and §7 cannot contain its own
-`rev-parse`/`ls-remote` pair; that pair is measured after the push, in `git rev-parse HEAD` and
-`git ls-remote origin refs/heads/release/v0.1.0`, and reported to the release operator as the
-branch tip together with the hosted run it triggers. Every push in this stage has followed the same
-check, which is why the four rows above are all the pairs the file is able to hold.
+A commit cannot contain proof of its own hash, so each report commit carries the full
+`rev-parse`/`ls-remote` pairs for every commit before it and none for itself; the pair for the newest
+commit is measured after its push and reported to the release operator together with the hosted run it
+triggers. That is why this table now holds five rows: the rows up to `06dbf11` were written by the
+commit after them, and the row for that commit is `git rev-parse HEAD` compared with `git ls-remote
+origin refs/heads/release/v0.1.0` at push time, which §6's run of `37200030848` confirms is the commit
+the hosted gate executed. Every push in this stage has followed the same check.
 
 No push in this stage used `--force`, no branch or tag was deleted, and `main` was never written to.
 
