@@ -8,11 +8,13 @@ there is exactly one section: the unreleased `0.1.0` candidate. Capability detai
 ## 0.1.0 — Unreleased
 
 Declared in `packages/cli/package.json`, **not published**. Measured again on 2026-10-04: `npm view
-diffbeacon` returns `404`; the repository has zero tags, zero GitHub Releases, no Marketplace
-listing, no Pages deployment, and is still private. [`docs/releasing.md`](docs/releasing.md) is the
-checklist an explicit maintainer authorization would follow, and
-[`docs/audits/stage11-release-qualification.md`](docs/audits/stage11-release-qualification.md) is the
-record of the qualification runs behind this section.
+diffbeacon` returns `404`, there are zero tags, zero GitHub Releases and no Marketplace listing, while
+the source repository is public and the browser demo is deployed to GitHub Pages.
+[`docs/releasing.md`](docs/releasing.md) is the checklist an explicit maintainer authorization would
+follow, [`docs/audits/stage11-release-qualification.md`](docs/audits/stage11-release-qualification.md)
+is the record of the qualification runs behind this section, and
+[`docs/audits/stage12-public-source-pages.md`](docs/audits/stage12-public-source-pages.md) records the
+public-source and Pages measurements.
 
 ### Added
 
@@ -46,6 +48,14 @@ record of the qualification runs behind this section.
   on GitHub-hosted runners — Actions run `37191968216` at commit
   `889f52b6e53095fea978fafbe50017ff71e543db` on 2026-10-04, all five jobs: the four source cells and
   the real-Chromium browser lane.
+- **Public source and live demo** — the repository is public with `main` as its default branch, GitHub
+  private vulnerability reporting is enabled for it, and `.github/workflows/pages.yml` deploys the
+  static demo through `actions/configure-pages`, `actions/upload-pages-artifact` and
+  `actions/deploy-pages`, each pinned to a resolved immutable commit SHA. Measured 2026-10-04: Pages
+  run `37217200407` concluded `success` and GitHub reports the site at
+  `https://pavithran-r-a.github.io/DiffBeacon/`, where a pasted diff still analyzes with zero outbound
+  requests. The npm package, the `v0.1.0` tag, the GitHub Release and the Marketplace listing are
+  untouched by this.
 
 ### Not included, on purpose
 
