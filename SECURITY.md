@@ -12,21 +12,25 @@ this section will name the versions that receive security work.
 
 ## Reporting a vulnerability
 
-Do not open a public issue for a suspected security vulnerability.
+**Please do not disclose a suspected vulnerability in a public issue, discussion, pull request, or
+commit.** Public space is not a security intake for this project.
 
-**No private reporting channel is configured or verified yet.** There is no published security
-address, and the issue tracker is not a security intake. Stage 11 looked, read-only, on 2026-10-04:
-`GET /repos/Pavithran-R-A/DiffBeacon/private_vulnerability_reports` answered `404 Not Found`, which
-GitHub also returns when the viewer lacks access, so the lookup does not settle whether GitHub's
-private vulnerability reporting is enabled — and nothing in this repository changed that setting.
-Treating any of those as available would be an invented promise. Configuring a real intake (private
-vulnerability reporting or a monitored contact, plus a stated response target) is a **release
-prerequisite** recorded in [`docs/releasing.md`](docs/releasing.md).
+Report it privately instead, through GitHub's private vulnerability reporting, which is enabled for
+this repository. Verified on 2026-10-04, after the repository became public:
+`GET /repos/Pavithran-R-A/DiffBeacon/private-vulnerability-reporting` answers `{"enabled":true}`,
+and the public [security page](https://github.com/Pavithran-R-A/DiffBeacon/security) renders the
+report form. Use it directly:
+[Report a vulnerability](https://github.com/Pavithran-R-A/DiffBeacon/security/advisories/new). The
+report is visible only to you and the repository's maintainers; it becomes public only if and when
+an advisory is published from it.
 
-Until that exists, the honest statement is: DiffBeacon cannot acknowledge receipt, cannot promise a
-response time, and offers no SLA of any kind. If you already have a direct channel to a maintainer,
-use it; include the commit SHA you analyzed, the command or workflow you ran, and the smallest
-reproducer you can share. Do not include secrets or data you are not authorized to disclose.
+DiffBeacon publishes no security email address, and this file is not going to invent one.
+
+We cannot acknowledge receipt and we set no response target: there is **no SLA of any kind** for
+this project. If you already have a direct channel to a maintainer, you may use it as well; either
+way, please include the commit SHA you analyzed, the command or workflow you ran, and the smallest
+reproducer you are authorized to share. Do not include secrets or data you are not authorized to
+disclose.
 
 ## Invariants
 
