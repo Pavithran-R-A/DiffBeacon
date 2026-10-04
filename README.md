@@ -8,17 +8,17 @@ DiffBeacon helps a maintainer understand a pull request before reading every cha
 
 ## Status
 
-DiffBeacon v0.1.0 is built, tested, and **not published**. Verified on 2026-09-30 against the npm
+DiffBeacon v0.1.0 is built, tested, and **not published**. Verified on 2026-10-04 against the npm
 registry, this repository's remote, and its Actions API — [`docs/releasing.md`](docs/releasing.md)
 owns the checklist that changes any row below.
 
-| Question                                   | Answer now                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Published on npm?                          | No. `npm view diffbeacon` returns `404`; the CLI tarball exists only from `npm pack`, so `npx diffbeacon …` does not resolve.                                                                                                                                                                                                                                                                                         |
-| Public repository, tag, or GitHub Release? | No. The repository is private, has zero tags and zero releases, so there is no immutable `uses:` reference a consumer could pin.                                                                                                                                                                                                                                                                                      |
-| Deployed browser demo?                     | No. `client/` builds a self-contained static site, and `.github/workflows/pages.yml` only uploads a build artifact — it has no deploy step.                                                                                                                                                                                                                                                                           |
-| Has CI ever actually run these gates?      | Yes, on repository-scoped **self-hosted** runners: GitHub Actions run `36562157439` executed the source lanes (Linux and Windows, Node 24 and Node 22), the real-Chromium browser lane (Windows / Node 24), and both package lanes.                                                                                                                                                                                   |
-| Are GitHub-hosted runner images qualified? | No. GitHub-hosted runner images for the current CI remain unqualified: the recovered-source workflow used for release qualification has never been allocated a hosted runner, so `.github/workflows/ci.yml` is an unexecuted contract, and the browser contract's `ubuntu-latest` cell is unmeasured. Bootstrap-era hosted runs are the earlier, separate story told in [`docs/limitations.md`](docs/limitations.md). |
+| Question                                   | Answer now                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Published on npm?                          | No. `npm view diffbeacon` returns `404`; the CLI tarball exists only from `npm pack`, so `npx diffbeacon …` does not resolve.                                                                                                                                                                                                                                                                                                                                                                            |
+| Public repository, tag, or GitHub Release? | No. The repository is private, has zero tags and zero releases, so there is no immutable `uses:` reference a consumer could pin.                                                                                                                                                                                                                                                                                                                                                                         |
+| Deployed browser demo?                     | No. `client/` builds a self-contained static site, and `.github/workflows/pages.yml` only uploads a build artifact — it has no deploy step.                                                                                                                                                                                                                                                                                                                                                              |
+| Has CI ever actually run these gates?      | Yes, in both environments this repository has been given. The current `.github/workflows/ci.yml` completed on GitHub-hosted runners on 2026-10-04: Actions run [`37191968216`](https://github.com/Pavithran-R-A/DiffBeacon/actions/runs/37191968216) passed all five lanes at commit `889f52b6e53095fea978fafbe50017ff71e543db`. An earlier, explicitly authorized lane ran the same gates on repository-scoped **self-hosted** runners: Actions run `36562157439`.                                      |
+| Are GitHub-hosted runner images qualified? | For what ran, yes. Run `37191968216` executed every lane of the current workflow on hosted `ubuntu-latest` and `windows-latest` at Node 24 and Node 22 — four source cells and the real-Chromium browser cell — and all five concluded success. That browser cell reached success on a hosted runner for the first time in this repository's history. Still outside that evidence: no consumer repository has run the Action, and no GitHub-hosted run of a release tag exists, because there is no tag. |
 
 ## What it does
 
@@ -166,16 +166,24 @@ jobs:
 
 The lanes in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) run the CLI and Action quality
 gates against trusted source only; no workflow in this repository consumes the Action on a pull
-request, and no consumer repository has run it. Where those lanes have genuinely executed, they ran on
-repository-scoped **self-hosted** runners — Actions run `36562157439`, whose lane-by-lane result is
-recorded in [`docs/audits/stage9-ci-package-qualification.md`](docs/audits/stage9-ci-package-qualification.md).
-GitHub-hosted runner images for the current CI remain unqualified. Hosted execution is not absent from
-this repository's history: the bootstrap-era workflows did receive GitHub-hosted runners and executed
-setup and checkout steps on them before failing during archive extraction (Actions runs
-`32859849733`, `31819615124` and `31818807881`). Those runs executed a different workflow on different
-commits and qualify nothing in the recovered source. The recovered-source CI workflow used for release
-qualification has never been allocated a GitHub-hosted runner, so that half of the contract is
-unexecuted rather than passing, and no hosted consumer run of the Action has been qualified anywhere.
+request, and no consumer repository has run it. Those lanes have executed in both environments this
+repository has been given. On GitHub-hosted runners, Actions run
+[`37191968216`](https://github.com/Pavithran-R-A/DiffBeacon/actions/runs/37191968216) (2026-10-04,
+commit `889f52b6e53095fea978fafbe50017ff71e543db`) passed all five jobs: source gates on
+`ubuntu-latest` and `windows-latest` at Node 24 and Node 22, plus the real-Chromium browser lane on
+`ubuntu-latest` — the first time that lane concluded success on a hosted runner here. Earlier hosted
+runs of the same workflow (Actions `36971746510`, `37188759053`, `37190394247`) each failed at a
+recorded step and qualify nothing; the green run's job-level results are in
+[`docs/audits/stage11-release-qualification.md`](docs/audits/stage11-release-qualification.md).
+Repository-scoped **self-hosted** runners also executed the gates (Actions run `36562157439`, whose
+lane-by-lane result is recorded in
+[`docs/audits/stage9-ci-package-qualification.md`](docs/audits/stage9-ci-package-qualification.md));
+those runners were unregistered afterwards. Hosted execution is not new to this repository: the
+bootstrap-era workflows did receive GitHub-hosted runners and executed setup and checkout steps on
+them before failing during archive extraction (Actions runs `32859849733`, `31819615124` and
+`31818807881`), but those ran a different workflow on different commits and are historical evidence,
+not product or release qualification. What has never been qualified anywhere is consumption: no
+repository other than this one has run the Action, and there is no release to consume yet.
 
 ## Browser demo
 

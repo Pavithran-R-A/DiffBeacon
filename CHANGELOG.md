@@ -7,10 +7,12 @@ there is exactly one section: the unreleased `0.1.0` candidate. Capability detai
 
 ## 0.1.0 — Unreleased
 
-Declared in `packages/cli/package.json`, **not published**. Measured again on 2026-09-30: `npm view
+Declared in `packages/cli/package.json`, **not published**. Measured again on 2026-10-04: `npm view
 diffbeacon` returns `404`; the repository has zero tags, zero GitHub Releases, no Marketplace
 listing, no Pages deployment, and is still private. [`docs/releasing.md`](docs/releasing.md) is the
-checklist an explicit maintainer authorization would follow.
+checklist an explicit maintainer authorization would follow, and
+[`docs/audits/stage11-release-qualification.md`](docs/audits/stage11-release-qualification.md) is the
+record of the qualification runs behind this section.
 
 ### Added
 
@@ -31,14 +33,19 @@ checklist an explicit maintainer authorization would follow.
   Job Summary as its only output, no inputs or outputs, `contents: read` only, no token; never
   executes, installs, or tests the reviewed repository.
 - **Browser demo** — static React + Vite page analyzing a pasted diff locally, with an 8 MiB pre-analysis
-  guard and no upload, backend, storage, analytics, or runtime LLM.
+  guard and no upload, backend, storage, analytics, or runtime LLM. The build is pinned to production
+  mode and rewrites sourcemap names against the project root, so the artifact contains no
+  development-mode React and no path to the machine that built it.
 - **Security hardening** — untrusted-input model, terminal and Markdown display-control
   neutralization, Git argv and ambient-environment boundary, workspace isolation for the Action, a
   seeded deterministic fuzz corpus, and a credential scan of the tracked tree.
 - **Package and CI qualification** — `npm pack`/tarball inspection, clean-consumer install of the
   real bin shim on Windows and Linux, reproducible Action bundle rebuild, `SOURCE_MANIFEST.txt` drift
-  gate, four-cell clean-clone matrix (Windows and Linux × Node 22 and 24), and one executed
-  self-hosted GitHub Actions qualification run (`36562157439`).
+  gate, four-cell clean-clone matrix (Windows and Linux × Node 22 and 24), one executed
+  self-hosted GitHub Actions qualification run (`36562157439`), and the same workflow then running green
+  on GitHub-hosted runners — Actions run `37191968216` at commit
+  `889f52b6e53095fea978fafbe50017ff71e543db` on 2026-10-04, all five jobs: the four source cells and
+  the real-Chromium browser lane.
 
 ### Not included, on purpose
 

@@ -83,24 +83,36 @@ matters, and a surface listed earlier is not a surface that must be reviewed fir
 Documentation cannot certify its own evidence. The limits below are real and are tracked rather than
 hand-waved:
 
-- **GitHub-hosted runner images for the current CI are unqualified.** The recovered-source CI workflow
-  used for release qualification has never been allocated a GitHub-hosted runner, so
-  `.github/workflows/ci.yml` is an unexecuted contract and the browser contract's hosted
-  `ubuntu-latest` cell has never been measured anywhere. The claim is scoped to that workflow, not to
-  every era of this repository: the bootstrap-era workflows did receive GitHub-hosted runners and
-  executed setup and checkout steps on them before failing during archive extraction (Actions runs
-  `32859849733`, `31819615124` and `31818807881`, recorded in `docs/audits/stage1-rebaseline.md`).
-  Those runs executed a different workflow on different commits, so they are historical evidence and
-  not product or release qualification. What has executed against the current workflow is recorded in
-  the Stage 9 report and summarised in the README status table.
+- **GitHub-hosted coverage is only as wide as the run that passed.** The current CI workflow ran on
+  GitHub-hosted runners on 2026-10-04: Actions run
+  [`37191968216`](https://github.com/Pavithran-R-A/DiffBeacon/actions/runs/37191968216) at commit
+  `889f52b6e53095fea978fafbe50017ff71e543db` concluded success in all five jobs — the source gates on
+  `ubuntu-latest` and `windows-latest` at Node 24 and Node 22, and the real-Chromium browser lane,
+  which reached a hosted success for the first time in this repository's history. Three earlier hosted
+  runs of the same workflow (`36971746510`, `37188759053`, `37190394247`) each failed at a recorded
+  step, so the green run qualifies the lanes it executed at the commit it ran at — not this workflow
+  at any future commit, and not consumption of the Action by another repository, which has still never
+  been measured anywhere. The claim is also scoped by era: the bootstrap-era workflows did receive
+  GitHub-hosted runners and executed setup and checkout steps on them before failing during archive
+  extraction (Actions runs `32859849733`, `31819615124` and `31818807881`, recorded in
+  `docs/audits/stage1-rebaseline.md`); those are historical evidence, not product or release
+  qualification. What has executed against the current workflow is recorded in
+  [`docs/audits/stage11-release-qualification.md`](audits/stage11-release-qualification.md) and
+  summarised in the README status table.
 - **Platform-specific behaviour is measured only where the file can exist.** A name whose bytes are
   not valid UTF-8 can only be created on a POSIX filesystem, so that real-Git case runs on Linux and
   reports a recorded skip reason elsewhere; the Windows-only npm bin-shim case works the other way
-  round.
-- **Dependency advisories move on their own.** The release surface audits clean; the development tree
-  currently audits at one high advisory in lint tooling that reaches no shipped artifact. Both
-  readings, their date, and the CI consequence are carried in
-  [`docs/architecture/security.md`](architecture/security.md) and handed to
-  [`docs/releasing.md`](releasing.md).
+  round. Both halves have now been seen on hosted runners: in Actions run `37191968216` the
+  `ubuntu-latest` lanes ran `tests/stage8.invalid-byte-paths.test.ts` to completion (10 tests) and
+  skipped the Windows bin-shim case, while the `windows-latest` lanes printed its recorded skip
+  reason — 985 passed / 134 skipped on Linux against 984 passed / 135 skipped on Windows, out of 1119
+  tests in each.
+- **Dependency advisories move on their own.** Measured 2026-10-04 in a clean `npm ci` clone of commit
+  `889f52b6e53095fea978fafbe50017ff71e543db`: `npm audit --omit=dev --audit-level=high` and
+  `npm audit --audit-level=high` both print `found 0 vulnerabilities` and exit 0. That is a reading of
+  a moment, not a property of the lockfile — the same tracked graph printed `1 high` on the
+  development tree on 2026-09-30 and cleared only after a lockfile refresh, and either number can move
+  again with no commit here. The two audit commands are a blocking step in CI and in
+  [`docs/releasing.md`](releasing.md), so a move fails the gate rather than the prose.
 - **A fuzz corpus is not an absence proof.** The seeded inputs guard the contract that was written
   down; they say nothing about inputs outside it.

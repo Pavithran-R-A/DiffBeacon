@@ -14,12 +14,14 @@ this section will name the versions that receive security work.
 
 Do not open a public issue for a suspected security vulnerability.
 
-**No private reporting channel is configured or verified yet.** This repository has not enabled —
-and Stage 10 did not check or change — GitHub's private vulnerability reporting setting, there is no
-published security address, and the issue tracker is not a security intake. Treating any of those as
-available would be an invented promise. Configuring a real intake (private vulnerability reporting
-or a monitored contact, plus a stated response target) is a **release prerequisite** recorded in
-[`docs/releasing.md`](docs/releasing.md).
+**No private reporting channel is configured or verified yet.** There is no published security
+address, and the issue tracker is not a security intake. Stage 11 looked, read-only, on 2026-10-04:
+`GET /repos/Pavithran-R-A/DiffBeacon/private_vulnerability_reports` answered `404 Not Found`, which
+GitHub also returns when the viewer lacks access, so the lookup does not settle whether GitHub's
+private vulnerability reporting is enabled — and nothing in this repository changed that setting.
+Treating any of those as available would be an invented promise. Configuring a real intake (private
+vulnerability reporting or a monitored contact, plus a stated response target) is a **release
+prerequisite** recorded in [`docs/releasing.md`](docs/releasing.md).
 
 Until that exists, the honest statement is: DiffBeacon cannot acknowledge receipt, cannot promise a
 response time, and offers no SLA of any kind. If you already have a direct channel to a maintainer,

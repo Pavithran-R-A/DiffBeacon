@@ -57,12 +57,27 @@ const HOSTED_HISTORY_ABSOLUTES: RegExp[] = [
 const BOOTSTRAP_HOSTED_EXECUTION =
   /bootstrap-era.{0,120}hosted runners.{0,120}(execut|receiv|ran)/i;
 
-/** The current half: the recovered-source CI workflow has not itself been allocated hosted runners. */
-const CURRENT_HOSTED_UNQUALIFIED =
-  /(?:current|recovered-source)[^.]{0,80}(?:has not|has never)[^.]{0,80}hosted/i;
+/** The current half, measured 2026-10-04: the current CI itself ran on hosted runners. */
+const CURRENT_HOSTED_EXECUTION = /37191968216/;
 
-/** The unqualified-image claim a release decision depends on, stated for the current CI. */
-const CURRENT_IMAGES_UNQUALIFIED = /github-hosted runner images[^.]{0,140}unqualified/i;
+/**
+ * Claims that were true when Stage 10 closed and are now falsified by measurement, each with the
+ * evidence that moved: Actions run `37191968216` allocated GitHub-hosted runners to the
+ * recovered-source `ci.yml` at commit `889f52b6e53095fea978fafbe50017ff71e543db` and passed every
+ * lane, including the browser contract's `ubuntu-latest` cell, and the tracked lockfile audits at
+ * `found 0 vulnerabilities` on both the release surface and the development tree in a clean
+ * `npm ci` clone of the same commit. Kept as patterns rather than quoted prose, so repairing a
+ * document cannot put the false claim back into a tracked file by copying the guard.
+ */
+const STALE_CURRENT_STATE_CLAIMS: RegExp[] = [
+  /(?:has|had) never been allocated/i,
+  /github-hosted runner images[^.]{0,140}unqualified/i,
+  /\.github\/workflows\/ci\.yml`? is an unexecuted contract/i,
+  /ubuntu-latest[^.]{0,40}(?:cell|lane)[^.]{0,80}(?:unmeasured|never|unqualified)/i,
+  /hosted Linux browser cell[^.]{0,80}(?:never|unmeasured|unqualified)/i,
+  /(?:development[- ]tree|development)[^.]{0,40}(?:audit|audits)[^.]{0,80}(?:1 high|one high)/i,
+  /`npm audit --audit-level=high`? reports[^.]{0,20}(?:1 high|one high)/i,
+];
 
 /** Markdown link targets outside fenced code blocks and inline code; external/in-page dropped. */
 function relativeLinkTargets(markdown: string): string[] {
@@ -174,12 +189,13 @@ describe('current-facing prose does not carry stale project status', () => {
   });
 });
 
-// Stage 10 closure: the repository's hosted history spans two eras, and current-facing prose used to
-// collapse them into one all-history negative. Three bootstrap-era runs (Actions 32859849733,
+// The repository's hosted history spans two eras. Three bootstrap-era runs (Actions 32859849733,
 // 31819615124 and 31818807881) were allocated hosted runners and executed setup and checkout steps
-// before failing on archive extraction, while the recovered-source `ci.yml` that release
-// qualification depends on has never been allocated one. Both facts are true; the contract below
-// requires the second without licensing the first, and does not ask every document to retell the story.
+// before failing on archive extraction; the recovered-source `ci.yml` was allocated hosted runners
+// on 2026-10-04 and passed every lane (run 37191968216). So no current document may deny hosted
+// execution outright, and none may keep the older, narrower negative that the current workflow had
+// never been allocated one. The contract below forbids both, and does not ask every document to
+// retell the story.
 
 describe('GitHub-hosted history is stated per era, not denied outright', () => {
   it.each(CURRENT_DOCS)('%s makes no all-history claim about hosted runners', (file) => {
@@ -191,10 +207,19 @@ describe('GitHub-hosted history is stated per era, not denied outright', () => {
     }
   });
 
+  it.each(CURRENT_DOCS)('%s carries no claim the Stage 11 measurements falsified', (file) => {
+    const text = flatRead(file);
+    for (const stale of STALE_CURRENT_STATE_CLAIMS) {
+      expect(text, `${file} keeps a claim falsified at 889f52b (${stale.source})`).not.toMatch(
+        stale,
+      );
+    }
+  });
+
   it('has a current document that separates the bootstrap era from current qualification', () => {
     const separated = CURRENT_DOCS.filter((file) => {
       const text = flatRead(file);
-      return BOOTSTRAP_HOSTED_EXECUTION.test(text) && CURRENT_HOSTED_UNQUALIFIED.test(text);
+      return BOOTSTRAP_HOSTED_EXECUTION.test(text) && CURRENT_HOSTED_EXECUTION.test(text);
     });
     expect(
       separated.length,
@@ -202,12 +227,12 @@ describe('GitHub-hosted history is stated per era, not denied outright', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('keeps the README and limitations stating the current hosted images unqualified', () => {
+  it('keeps the README and limitations recording the hosted run of the current CI', () => {
     for (const file of ['README.md', 'docs/limitations.md']) {
       expect(
         flatRead(file),
-        `${file} no longer states the current GitHub-hosted images unqualified`,
-      ).toMatch(CURRENT_IMAGES_UNQUALIFIED);
+        `${file} no longer records the current CI running on GitHub-hosted runners`,
+      ).toMatch(CURRENT_HOSTED_EXECUTION);
     }
   });
 });

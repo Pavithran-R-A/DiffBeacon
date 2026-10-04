@@ -6,6 +6,16 @@ name: CI (self-hosted Stage 9)
 # `diffbeacon-stage9` label. It does not replace `ci.yml`: the hosted contract stays exactly as
 # written, and GitHub-hosted runner qualification for this repository remains unqualified.
 #
+# Correction, measured 2026-10-04. The two premises in the paragraph above were true when Stage 9
+# was authorized and are recorded here as that history; neither is the current state. Hosted jobs
+# are allocated runners again: `.github/workflows/ci.yml` ran on GitHub-hosted runners, and Actions
+# run 37191968216 at commit 889f52b6e53095fea978fafbe50017ff71e543db concluded success for all five
+# lanes, including the real-Chromium browser lane. Hosted runner qualification is therefore no
+# longer unqualified for what that run executed — see
+# docs/audits/stage11-release-qualification.md for its exact width and limits. This lane still does
+# not replace `ci.yml`, and the branch trigger and absence of pull-request events below stay as
+# written: this machine must never execute untrusted fork code.
+#
 # Trigger: a push restricted to `rescue/stage9-selfhosted-ci`, plus `workflow_dispatch`. The
 # dispatch event alone was measured to be unusable here: `POST
 # /repos/{owner}/{repo}/actions/workflows/{file}/dispatches` answers 404 unless the workflow file

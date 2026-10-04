@@ -97,5 +97,9 @@ Behavior is covered by `tests/stage6.action-event.test.ts` (the event contract),
 `tests/stage6.action-metadata.test.ts` (`action.yml` and the shipped bundle), and
 `tests/stage6.action-workflow-docs.test.ts` (this documentation). `node
 scripts/action-smoke.mjs` launches the bundle path that `action.yml` names, from a working
-directory outside the reviewed repository. All of it runs locally on Windows and Linux; no
-hosted GitHub runner has qualified this Action, and none is claimed here.
+directory outside the reviewed repository. All of it runs locally on Windows and Linux, and the same
+lanes have passed in this repository's CI on GitHub-hosted runners (Actions run
+[`37191968216`](https://github.com/Pavithran-R-A/DiffBeacon/actions/runs/37191968216) at commit
+`889f52b6e53095fea978fafbe50017ff71e543db`, 2026-10-04). What has never been qualified anywhere is
+consumption: no repository other than this one has run the Action, and there is no release commit for
+one to pin.

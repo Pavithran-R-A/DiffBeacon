@@ -203,50 +203,62 @@ edge cases, Markdown escaping, Action workflow permissions, and package-bundle p
 
 Specifically left open, each for a recorded reason rather than by assumption:
 
-- **The CI that has run is not the CI the published workflow describes.** The recovered-source CI
-  workflow used for release qualification has never been allocated a GitHub-hosted runner, so every
-  lane in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — including the browser
-  contract's `ubuntu-latest` cell — is an unexecuted contract rather than a passing result. Hosted
-  execution is not absent from this repository's history: the bootstrap-era workflows did receive
-  GitHub-hosted runners and executed setup and checkout steps before failing during archive extraction
-  (Actions runs `32859849733`, `31819615124` and `31818807881`). Those runs executed a different
-  workflow on different commits, so they are evidence of historical execution and of no product or
-  release qualification. What has executed against the recovered source is
-  the temporary self-hosted qualification lane: Actions run `36562157439` (2026-09-29, commit
-  `b6e884260e84557807fd9fc2867783e3f8756bee`, branch `rescue/stage9-selfhosted-ci`) completed all
-  seven jobs green on repository-scoped self-hosted runners — source gates on Linux and Windows at
-  Node 24 and Node 22, the real-Chromium browser lane on Windows with Node 24, and both package lanes.
-  Those runners were unregistered after the run, so nothing re-executes until Stage 11 supplies an
-  environment.
+- **Hosted CI coverage is exactly as wide as the run that passed.** On 2026-10-04 Actions run
+  [`37191968216`](https://github.com/Pavithran-R-A/DiffBeacon/actions/runs/37191968216) allocated
+  GitHub-hosted runners to the recovered-source CI workflow at commit
+  `889f52b6e53095fea978fafbe50017ff71e543db` and concluded success in all five jobs: source gates on
+  `ubuntu-latest` and `windows-latest` at Node 24 and Node 22 (each running `npm run verify`, 985
+  passed / 134 skipped on Linux and 984 passed / 135 skipped on Windows, out of 1119) and the
+  real-Chromium browser lane on `ubuntu-latest` (6 files, 133 tests, Google Chrome 154.0.8037.57),
+  which had reached success only on self-hosted Windows before that run. Three earlier hosted runs of
+  the same workflow failed at recorded steps — `36971746510` (2026-10-02, `1bd99c12`) and `37188759053`
+  (2026-10-04, `1bd99c12`) at the development-tree audit step plus the browser step, and `37190394247`
+  (2026-10-04, `9c38ed0e`) at the browser step alone. None of that certifies a later commit: the
+  contract is re-executed per push, and what was measured is the queue and image behaviour at those
+  commits. Hosted execution is also not absent from this repository's older history — the
+  bootstrap-era workflows did receive GitHub-hosted runners and executed setup and checkout steps
+  before failing during archive extraction (Actions runs `32859849733`, `31819615124` and
+  `31818807881`) — but those ran a different workflow on different commits, so they are evidence of
+  historical execution and of no product or release qualification. What else has executed against the
+  recovered source is the temporary self-hosted qualification lane: Actions run `36562157439`
+  (2026-09-29, commit `b6e884260e84557807fd9fc2867783e3f8756bee`, branch
+  `rescue/stage9-selfhosted-ci`) completed all seven jobs green on repository-scoped self-hosted
+  runners — source gates on Linux and Windows at Node 24 and Node 22, the real-Chromium browser lane
+  on Windows with Node 24, and both package lanes. Those runners were unregistered after the run.
 - **The Action pins resolve to tag names, and that is all the lookup shows.**
   `git ls-remote --tags` against the two pinned actions maps the checkout commit
   `3d3c42e5aac5ba805825da76410c181273ba90b1` to `refs/tags/v7` and `refs/tags/v7.0.1`, and the
   setup-node commit `820762786026740c76f36085b0efc47a31fe5020` to `refs/tags/v7` and `refs/tags/v7.0.0`
   (measured 2026-09-30). That confirms each SHA is the commit a release tag points at; it does not
   attest that the tagged build is trustworthy, and verifying release provenance is a Stage 11 step.
-- **Dependency advisories are carried, not closed.** Measured 2026-09-30 against the tracked lockfile:
-  `npm audit --omit=dev --audit-level=high` reports 0 vulnerabilities and exits 0, because the only
-  package marked publishable is the CLI (`diffbeacon@0.1.0`), which declares no runtime dependencies
-  while `diffbeacon-core` and `diffbeacon-action` are `private: true`; `npm audit --audit-level=high`
-  reports 1 high, `brace-expansion` reached only through development lint tooling
-  (`eslint@9.39.5 → minimatch@3.1.5` resolving `1.1.18`, and
-  `typescript-eslint@8.70.1 → @typescript-eslint/typescript-estree@8.70.1 → minimatch@10.2.6`
-  resolving `5.0.9`) behind `GHSA-6j4f-fj2g-mc7p`, `GHSA-qhr7-859c-m2p7` and `GHSA-q2hr-2g5m-vwhr`, all
-  denial-of-service on brace expansion. Neither shipped bundle contains the name, so no published
-  artifact can reach it; it is a risk to a contributor's or a CI machine's tooling. Nothing was
-  repaired here — `npm audit fix`, `--force`, and a hand-edited lockfile would each need their own
-  qualification run. The condition moved by itself: this same lockfile printed
-  `found 0 vulnerabilities` on both audit steps of every lane at 11:30Z on 2026-09-29, and the three
-  advisories published at 21:33Z the same day, so the next run of either workflow fails its
-  development-tree audit step with no change in this repository. It is handed to Stage 11 as a
-  prerequisite in [`docs/releasing.md`](../releasing.md).
+- **Dependency advisories move on their own, so the gate is the audit step, not this sentence.**
+  Measured 2026-10-04 in a clean `npm ci` clone of `889f52b6e53095fea978fafbe50017ff71e543db`: both
+  `npm audit --omit=dev --audit-level=high` and `npm audit --audit-level=high` print
+  `found 0 vulnerabilities` and exit 0. The release surface audits clean because the only package
+  marked publishable is the CLI (`diffbeacon@0.1.0`), which declares no runtime dependencies, while
+  `diffbeacon-core` and `diffbeacon-action` are `private: true`. The development tree did carry one
+  high advisory when it was measured on 2026-09-30: `brace-expansion` reached only through
+  development lint tooling (`eslint@9.39.5 → minimatch@3.1.5` resolving `1.1.18`, and
+  `typescript-eslint@8.67.0 → @typescript-eslint/typescript-estree → minimatch@10.2.6` resolving
+  `5.0.9`) behind `GHSA-6j4f-fj2g-mc7p`, `GHSA-qhr7-859c-m2p7` and `GHSA-q2hr-2g5m-vwhr`, all
+  denial-of-service on brace expansion — a risk to a contributor's or a CI machine's tooling, never
+  inside a shipped bundle. That condition was closed on 2026-10-04 by commit
+  `9c38ed0e52255e9eee52186cfb3451f60e289e5d`, which ran `npm update brace-expansion` so the two
+  installs moved to the patched `1.1.21` and `5.0.12` with no `package.json` change, no
+  `npm audit fix --force`, and no threshold change. The same tracked graph had printed
+  `found 0 vulnerabilities` on both audit steps of every lane at 11:30Z on 2026-09-29 while the three
+  advisories published at 21:33Z the same day, so the number can move again with no commit here —
+  which is why both commands are blocking steps in CI and in
+  [`docs/releasing.md`](../releasing.md) rather than conclusions to rest on.
 - **Cross-platform evidence exists only where something actually ran.** A filename whose bytes are not
   valid UTF-8 can only be created on a POSIX filesystem, so the real-Git half of
-  `tests/stage8.invalid-byte-paths.test.ts` is gated to that platform; it ran and passed on the
-  self-hosted Linux lanes of run `36562157439`, and on Windows it prints a recorded skip reason rather
-  than typing in the answer. The Windows-only npm bin-shim case in `tests/stage3c.release.test.ts` is
-  skipped on Linux on the same principle. Painting hostile names in a real browser was measured on
-  self-hosted Windows; the hosted Linux browser cell has never been measured anywhere.
+  `tests/stage8.invalid-byte-paths.test.ts` is gated to that platform; it ran and passed on the Linux
+  lanes of the self-hosted run `36562157439` and again on the hosted `ubuntu-latest` lanes of run
+  `37191968216` (10 tests), while its Windows lanes print a recorded skip reason rather than typing in
+  the answer. The Windows-only npm bin-shim case in `tests/stage3c.release.test.ts` is skipped on
+  Linux on the same principle. Painting hostile names in a real browser has now been measured on both
+  kernels: self-hosted Windows in run `36562157439` and hosted `ubuntu-latest` in run `37191968216`,
+  whose browser lane passed 6 files and 133 tests against Google Chrome 154.0.8037.57.
 - **A fuzz corpus is not an absence proof.** The seeded 1,500 inputs guard the contract that was
   written down; they say nothing about inputs outside it.
 - **DiffBeacon does not decide whether a pull request is safe to merge**, and none of these controls
