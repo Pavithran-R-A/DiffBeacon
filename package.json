@@ -45,7 +45,7 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^16.0.0",
-    "lucide-react": "^0.453.0",
+    "lucide-react": "^1.49.0",
     "playwright-core": "^1.63.0",
     "prettier": "^3.6.2",
     "react": "^19.2.1",
