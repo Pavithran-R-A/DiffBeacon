@@ -42,10 +42,13 @@ on a trusted branch of this repository, reviewing this repository's own commits.
 pattern, and no example in this repository presents it as one.
 
 Consumers need the Action referenced independently of the repository being reviewed, by a
-reviewed immutable commit SHA. **No published DiffBeacon Action version exists yet**, so no
-such SHA can be handed out today; Stage 11 owns the release. Until then, the correct
-instruction to a consumer is "wait", not "use a form that runs their own PR's code". The
-future shape, with a deliberately unrunnable placeholder, is in
+reviewed immutable commit SHA. As of the commit this file describes, **no published DiffBeacon
+Action version exists yet**, so no such SHA can be handed out there; Stage 11 owns the release.
+Whether a release commit exists now is a tag-and-Release fact, not one this file tracks — check
+`git ls-remote --tags origin` and this repository's Releases page. Until that check names a
+reviewed release commit, the correct instruction to a consumer is "wait", not "use a form that
+runs their own PR's code". The release shape, with a deliberately unrunnable placeholder until a
+reviewed release commit exists, is in
 [`docs/examples/diffbeacon-pull-request-review.yml`](../../docs/examples/diffbeacon-pull-request-review.yml):
 
 ```yaml
@@ -100,6 +103,6 @@ scripts/action-smoke.mjs` launches the bundle path that `action.yml` names, from
 directory outside the reviewed repository. All of it runs locally on Windows and Linux, and the same
 lanes have passed in this repository's CI on GitHub-hosted runners (Actions run
 [`37191968216`](https://github.com/Pavithran-R-A/DiffBeacon/actions/runs/37191968216) at commit
-`889f52b6e53095fea978fafbe50017ff71e543db`, 2026-10-04). What has never been qualified anywhere is
-consumption: no repository other than this one has run the Action, and there is no release commit for
-one to pin.
+`889f52b6e53095fea978fafbe50017ff71e543db`, 2026-10-04). What was not qualified as of that commit is
+consumption: no repository other than this one had run the Action, and no release commit existed for
+one to pin. `docs/audits/` records the stage that changes either half of that sentence.

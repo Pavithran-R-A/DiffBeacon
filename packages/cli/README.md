@@ -2,7 +2,7 @@
 
 The CLI reviews a Git range using the shared local core. It uses argument-vector Git execution with external diff and text-conversion hooks disabled. It does not execute repository scripts, install repository dependencies, run tests, or upload source code. It never fetches, mutates, or cleans the repository it is pointed at.
 
-`diffbeacon` is not published to the npm registry yet, so `npx diffbeacon …` does not resolve today. Build this repository and run the bundle, or install the packed tarball and use the `diffbeacon` bin:
+As of the commit this tarball was packed from, `diffbeacon` is not published to the npm registry yet, so `npx diffbeacon …` does not resolve there; `npm view diffbeacon` is the authority on whether it resolves now. Build this repository and run the bundle, or install the packed tarball and use the `diffbeacon` bin:
 
 ```bash
 npm run build
