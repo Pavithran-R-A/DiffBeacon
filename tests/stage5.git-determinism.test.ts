@@ -130,6 +130,30 @@ describe('Git diff determinism boundary', () => {
     expect(prescribed).not.toContain('--default-prefix');
   });
 
+  it('snapshots symbolic range endpoints before the diff process starts', async () => {
+    const repo = repository();
+    writeRepositoryFile(repo.cwd, 'src.ts', 'export const value = 1;\n');
+    repo.commit('base');
+    const base = gitIn(repo.cwd, ['rev-parse', 'HEAD']);
+    writeRepositoryFile(repo.cwd, 'src.ts', 'export const value = 2;\n');
+    repo.commit('head');
+    const head = gitIn(repo.cwd, ['rev-parse', 'HEAD']);
+    const trace = path.join(repo.root, 'range-trace.log');
+    const previous = process.env.GIT_TRACE;
+    process.env.GIT_TRACE = trace;
+    try {
+      await collectGitDiffAsync('HEAD~1...HEAD', repo.cwd);
+    } finally {
+      if (previous === undefined) delete process.env.GIT_TRACE;
+      else process.env.GIT_TRACE = previous;
+    }
+
+    const log = readFileSync(trace, 'utf8');
+    expect(log).toContain('--revs-only --end-of-options');
+    expect(log).toContain(`${base}...${head} --`);
+    expect(log).not.toContain('git diff HEAD~1...HEAD');
+  });
+
   it('normalizes hostile repository diff configuration to the same report', async () => {
     const repo = repository();
     const oldText = Array.from({ length: 20 }, (_, index) => `line ${index}\n`).join('');
