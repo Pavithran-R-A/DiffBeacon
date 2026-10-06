@@ -502,6 +502,47 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         current.copyTo = null;
       }
 
+      const specialKinds = [
+        current.isNewFile,
+        current.isDeletedFile,
+        current.isCopy,
+        current.renameFrom !== null && current.renameTo !== null,
+      ].filter(Boolean).length;
+      const incompatibleModeMetadata =
+        (current.isNewFile && current.oldMode !== null) ||
+        (current.isDeletedFile && current.newMode !== null);
+      if (specialKinds > 1 || incompatibleModeMetadata) {
+        diagnostics.push({
+          code: 'malformed-header',
+          message:
+            'File-status metadata is contradictory; add, delete, rename, copy, and mode-change forms cannot be combined this way.',
+          line: current.renameFromLine ?? current.renameToLine ?? current.copyLine ?? 1,
+        });
+        // Keep only the paths and content the structural headers proved. A malformed
+        // status mixture must not manufacture an added/deleted/renamed result.
+        current.isNewFile = false;
+        current.isDeletedFile = false;
+        current.isCopy = false;
+        current.renameFrom = null;
+        current.renameTo = null;
+        current.copyFrom = null;
+        current.copyTo = null;
+      }
+
+      if (
+        current.oldMode !== null &&
+        current.newMode !== null &&
+        current.oldMode === current.newMode
+      ) {
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'old mode and new mode are identical, so they do not describe a mode change.',
+          line: 1,
+        });
+        current.oldMode = null;
+        current.newMode = null;
+      }
+
       files.push(finalize(current));
     }
     current = null;
