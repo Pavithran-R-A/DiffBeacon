@@ -36,15 +36,18 @@ describe('Stage 9 CI contract', () => {
     expect(workflow).not.toMatch(/id-token/);
     expect(workflow).not.toMatch(/secrets\.|GITHUB_TOKEN/);
 
-    // GitHub's custom Pages model requires exactly three grants on the deploying job: read the
-    // source, write only the Pages site, and mint the OIDC token the official deploy action uses.
-    // The set is asserted as a set, so widening it — or dropping `contents: read` — fails here
-    // instead of passing a one-directional "no write" scan.
-    expect([...grantLines(pages)].sort()).toEqual([
+    // Build/test code receives only source read. The Pages write and OIDC mint are scoped to the
+    // dedicated deployment job, so package scripts and browser tests never execute with deployment
+    // credentials in their environment.
+    const [beforeDeploy, deployJob] = pages.split(/^ {2}deploy:$/m);
+    expect(deployJob, 'pages.yml must keep a dedicated deploy job').toBeDefined();
+    expect(grantLines(beforeDeploy ?? '')).toEqual(['contents: read']);
+    expect([...grantLines(deployJob ?? '')].sort()).toEqual([
       'contents: read',
       'id-token: write',
       'pages: write',
     ]);
+    expect(pages).not.toMatch(/^permissions:/m);
     expect(pages).toMatch(/^ {4}environment:\n {6}name: github-pages/m);
     expect(pages).not.toMatch(/secrets\.|GITHUB_TOKEN/);
     expect(pages).not.toMatch(/deployments:|pull-requests:|security-events:|admin:/);
