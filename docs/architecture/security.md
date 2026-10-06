@@ -143,8 +143,8 @@ to the same painted _shape_, and the exact encoding has its own cases.
 The data stays factual. `renderJson` and the clipboard export keep the raw value, so a control
 character survives to a JSON consumer as an escape rather than being silently rewritten; the same is
 true of a path that merely looks like `../`, a shell command, or a Windows device name, none of which
-is ever opened. A name with trailing whitespace is the one measured exception: Git's C-quoted header
-form is recognised by trimming, so `src/x ` is displayed as `src/x`.
+is ever opened. Unquoted Git paths keep meaningful trailing spaces rather than being trimmed into a
+different filename; a POSIX real-Git rename fixture holds that distinction to Git's emitted bytes.
 
 Painting hostile text was measured in real Chromium over the shared corpus, including a name carrying a
 U+202E override at 800 characters, where no `<code>` element escapes its own pile and the page's
