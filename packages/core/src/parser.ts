@@ -38,9 +38,14 @@ function decodeGitQuoted(value: string): string {
     }
     const octal = inner.slice(index + 1, index + 4);
     if (/^[0-7]{3}$/.test(octal)) {
-      bytes.push(Number.parseInt(octal, 8));
-      index += 3;
-      continue;
+      const byte = Number.parseInt(octal, 8);
+      // Git C-quotes bytes, so an octal escape cannot exceed 0xff. Keep impossible
+      // escapes literal rather than letting Uint8Array wrap (for example \\777 -> 0xff).
+      if (byte <= 0xff) {
+        bytes.push(byte);
+        index += 3;
+        continue;
+      }
     }
     const next = inner[index + 1] ?? '';
     const escapes: Record<string, number> = {
@@ -106,11 +111,9 @@ function parseQuotedPair(value: string): [string | null, string | null] | null {
   if (tokens.length !== 2 || cursor !== trimmed.length) return null;
   const oldToken = decodeGitQuoted(tokens[0] as string);
   const newToken = decodeGitQuoted(tokens[1] as string);
-  if (
-    !(oldToken === NULL_PATH || oldToken.startsWith('a/')) ||
-    !(newToken === NULL_PATH || newToken.startsWith('b/'))
-  )
-    return null;
+  // The extended ---/+++ and Binary-files lines may use /dev/null, but Git's
+  // leading diff --git header never does, even for an add/delete.
+  if (!oldToken.startsWith('a/') || !newToken.startsWith('b/')) return null;
   const oldPath = stripDiffPrefix(tokens[0] as string);
   const newPath = stripDiffPrefix(tokens[1] as string);
   // A quoted `a/` or `b/` still names no file, so it is not a decodable pair.
@@ -130,7 +133,13 @@ function parseGitPair(value: string): PairResolution {
   // can decompose several ways. A split is only provable when one side of `a/`
   // and `b/` structure survives and, with competing splits left, when exactly
   // one of them keeps both paths identical.
-  return resolvePair(pair, ' b/', 2);
+  const resolution = resolvePair(pair, ' b/', 2);
+  if (
+    resolution.pair !== null &&
+    (resolution.pair.oldPath === null || resolution.pair.newPath === null)
+  )
+    return { reason: 'unprovable', pair: null };
+  return resolution;
 }
 
 function parseBinaryPair(value: string): PairResolution {
@@ -204,8 +213,9 @@ function inferStatus(file: {
   if (file.isCopy) return 'added';
   if (file.oldPath === null && file.newPath !== null) return 'added';
   if (file.newPath === null && file.oldPath !== null) return 'deleted';
-  if (file.renameFrom !== null || file.renameTo !== null || file.similarity !== null)
-    return 'renamed';
+  // Similarity is supporting metadata, not a status by itself. Git emits it with
+  // rename/copy metadata; hostile pasted input must not turn a plain file into a rename.
+  if (file.renameFrom !== null || file.renameTo !== null) return 'renamed';
   // A mode pair only stands alone as mode-only when the patch shows no content
   // change at all: neither counted hunks nor a binary payload.
   if (file.hunks.length === 0 && !file.binary && file.oldMode !== null && file.newMode !== null)
