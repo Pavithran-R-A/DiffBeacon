@@ -145,6 +145,27 @@ describe.runIf(process.platform !== 'win32')(
         similarity: 100,
       });
     });
+
+    it('accepts a real rename where Git quotes only the unusual side', () => {
+      const repo = repository();
+      writeRepositoryFile(repo.cwd, 'old\tname.ts', textLines(4));
+      repo.commit('base quoted-side name');
+      repo.git(['mv', '--', 'old\tname.ts', 'new.ts']);
+      repo.commit('rename from quoted side');
+
+      const patch = repo.gitRaw(VECTOR);
+      expect(patch).toContain('diff --git "a/old\\tname.ts" b/new.ts');
+      const parsed = parseUnifiedDiff(patch);
+      expect(parsed.diagnostics).toEqual([]);
+      expect(parsed.files).toHaveLength(1);
+      expect(parsed.files[0]).toMatchObject({
+        status: 'renamed',
+        oldPath: 'old\tname.ts',
+        newPath: 'new.ts',
+        displayPath: 'new.ts',
+        similarity: 100,
+      });
+    });
   },
 );
 
