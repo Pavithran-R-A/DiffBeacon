@@ -84,9 +84,12 @@ describe('Stage 9 published-package contract', () => {
     );
   });
 
-  it('says the package is not published anywhere a reader can install it', () => {
+  it('states the published version and the install path that was consumer-smoke-tested', () => {
     const readme = readFileSync('packages/cli/README.md', 'utf8');
-    expect(readme).toContain('not published to the npm registry yet');
+    expect(readme).toContain('diffbeacon@0.1.0');
+    expect(readme).toContain('npm install diffbeacon@0.1.0');
+    expect(readme).not.toContain('not published to the npm registry yet');
+    // A global install has never been qualified here, so the README must not invent it.
     expect(readme).not.toContain('npm install -g diffbeacon');
   });
 });

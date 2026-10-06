@@ -317,15 +317,17 @@ describe('help text describes only accepted forms', () => {
       expect(help, `${option} is in the README but not in --help`).toContain(option);
   });
 
-  it('qualifies the npx claim instead of promising a published binary', () => {
+  it('pins every published-package example to the released version', () => {
     for (const file of ['README.md', 'packages/cli/README.md']) {
-      for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-        if (line.includes('npx diffbeacon')) {
-          expect(line, `${file} advertises npx without saying the package is unpublished`).toMatch(
-            /not published|does not resolve/,
-          );
-        }
-      }
+      const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+      const npxLines = lines.filter((line) => line.includes('npx diffbeacon'));
+      expect(npxLines.length, `${file} shows no npx example`).toBeGreaterThan(0);
+      // `v0.1.0` is on the registry, so an npx example is now a promise about resolution: it has to
+      // name the version that was actually consumer-smoke-tested, not a bare `latest`.
+      for (const line of npxLines)
+        expect(line, `${file} advertises an unpinned npx run`).toMatch(
+          /npx (?:--yes )?diffbeacon@0\.1\.0/,
+        );
     }
   });
 });

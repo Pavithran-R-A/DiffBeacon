@@ -41,14 +41,19 @@ chosen. The path form is therefore for trusted development and self-testing only
 on a trusted branch of this repository, reviewing this repository's own commits. It is not the recommended consumer
 pattern, and no example in this repository presents it as one.
 
-Consumers need the Action referenced independently of the repository being reviewed, by a
-reviewed immutable commit SHA. As of the commit this file describes, **no published DiffBeacon
-Action version exists yet**, so no such SHA can be handed out there; Stage 11 owns the release.
-Whether a release commit exists now is a tag-and-Release fact, not one this file tracks — check
-`git ls-remote --tags origin` and this repository's Releases page. Until that check names a
-reviewed release commit, the correct instruction to a consumer is "wait", not "use a form that
-runs their own PR's code". The release shape, with a deliberately unrunnable placeholder until a
-reviewed release commit exists, is in
+Consumers need the Action referenced independently of the repository being reviewed, by a reviewed
+immutable commit SHA. That reference exists: the annotated `v0.1.0` tag peels to commit
+`5a50b52028ead78942ea3fc3bee93ba26e0a79cc`, whose `packages/action/dist/index.js` bundle hashes to
+`45660da735388dee35fc581e94490d2aacc295b2382f8bea23ab12dff2350049`, and a repository other than this
+one has run it from that commit — Actions run `37430396143`, recorded in
+[`docs/audits/stage14-v0.1.0-consumer-release.md`](../../docs/audits/stage14-v0.1.0-consumer-release.md).
+Pin the **full commit SHA**: it names the exact bundle the runner will execute, and only this
+repository's owner can move a tag, so a SHA is the reference a consumer can audit. The `v0.1.0` tag
+points at the same commit for anyone who prefers the shorter form; there is deliberately no moving
+major tag, and creating one is not part of this release. Check for yourself what a reference resolves
+to, with `git ls-remote --tags origin` and this repository's Releases page, and read the release
+runbook in [`docs/releasing.md`](../../docs/releasing.md). The consumer shape is documented as a
+non-executed example file in
 [`docs/examples/diffbeacon-pull-request-review.yml`](../../docs/examples/diffbeacon-pull-request-review.yml):
 
 ```yaml
@@ -65,7 +70,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: Pavithran-R-A/DiffBeacon@<REVIEWED_FULL_COMMIT_SHA>
+      - uses: Pavithran-R-A/DiffBeacon@5a50b52028ead78942ea3fc3bee93ba26e0a79cc
 ```
 
 `pull_request_target` is not the alternative. It runs the base branch's workflow in the base

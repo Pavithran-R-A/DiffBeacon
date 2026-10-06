@@ -2,7 +2,15 @@
 
 The CLI reviews a Git range using the shared local core. It uses argument-vector Git execution with external diff and text-conversion hooks disabled. It does not execute repository scripts, install repository dependencies, run tests, or upload source code. It never fetches, mutates, or cleans the repository it is pointed at.
 
-As of the commit this tarball was packed from, `diffbeacon` is not published to the npm registry yet, so `npx diffbeacon …` does not resolve there; `npm view diffbeacon` is the authority on whether it resolves now. Build this repository and run the bundle, or install the packed tarball and use the `diffbeacon` bin:
+`diffbeacon@0.1.0` is on the public npm registry, released on 2026-10-06 from commit `5a50b52028ead78942ea3fc3bee93ba26e0a79cc`; `npm view diffbeacon version` is the authority on what `latest` reports today. Install the version that was consumer-smoke-tested, or run it straight from the registry without a project install:
+
+```bash
+npm install diffbeacon@0.1.0     # provides node_modules/.bin/diffbeacon
+npx diffbeacon@0.1.0 --version
+git diff main...HEAD | npx diffbeacon@0.1.0 review --stdin
+```
+
+The package ships one bundled file, declares no runtime dependencies, and has no install-time script. To run this repository's own build instead of the published package:
 
 ```bash
 npm run build

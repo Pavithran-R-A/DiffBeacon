@@ -77,6 +77,20 @@ const STALE_CURRENT_STATE_CLAIMS: RegExp[] = [
   /hosted Linux browser cell[^.]{0,80}(?:never|unmeasured|unqualified)/i,
   /(?:development[- ]tree|development)[^.]{0,40}(?:audit|audits)[^.]{0,80}(?:1 high|one high)/i,
   /`npm audit --audit-level=high`? reports[^.]{0,20}(?:1 high|one high)/i,
+  // Stage 14 falsified this second group: `diffbeacon@0.1.0` reached the public registry on
+  // 2026-10-06T07:12:58.935Z, the annotated `v0.1.0` tag was pushed at the release commit, and the
+  // GitHub Release was published from it. Each pattern below is a publication negative that a
+  // document could still carry after those facts became true. Scoped narrowly on purpose:
+  // CODE_OF_CONDUCT.md's "has not published a moderation address" stays true and must stay matched
+  // by nothing here.
+  /\*\*not published\*\*/i,
+  /not published to the npm registry yet/i,
+  /no version of diffbeacon is published/i,
+  /no published diffbeacon action version exists/i,
+  /`npm view diffbeacon` returns `404`/i,
+  /there are still zero tags and zero github releases/i,
+  /it has not made its first release/i,
+  /so `npx diffbeacon[^`]*` does not resolve/i,
 ];
 
 /** Markdown link targets outside fenced code blocks and inline code; external/in-page dropped. */
@@ -161,23 +175,43 @@ describe('the detector documentation names exactly the shipped surfaces', () => 
 });
 
 describe('current-facing prose does not carry stale project status', () => {
-  it.each(CURRENT_DOCS)('%s makes no unfulfilled publication or availability claim', (file) => {
+  it.each(CURRENT_DOCS)('%s makes no unbacked availability claim', (file) => {
     const text = read(file);
-    expect(text).not.toMatch(/npm install --save diffbeacon/);
-    expect(text).not.toMatch(/is now published|has been published|are now published/);
-    expect(text).not.toMatch(/(?<!\bnot )\bpublished to the (?:npm )?registry/);
     expect(text).not.toMatch(/TODO|FIXME|XXX\b/);
+    // Every install instruction must be runnable against the registry today. An unpinned
+    // `npm install diffbeacon` / `npx diffbeacon` would resolve whatever `latest` happens to be
+    // rather than the qualified release, which is the promise the documentation makes.
+    expect(text, `${file} carries an unpinned install instruction`).not.toMatch(
+      /(?:npm (?:install|i)|npx)(?:\s+--?\w[\w-]*)*\s+diffbeacon(?![@\w-])/i,
+    );
+    expect(text).not.toMatch(
+      /listed on the github marketplace|marketplace listing (?:is live|exists)/i,
+    );
   });
 
-  it('keeps every changelog section a candidate rather than a shipped release', () => {
-    const headings = [...read('CHANGELOG.md').matchAll(/^## (.+)$/gm)].map((match) => match[1]);
+  it('keeps changelog releases dated and candidates marked unreleased', () => {
+    const text = read('CHANGELOG.md');
+    const headings = [...text.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
     expect(headings.length).toBeGreaterThan(0);
-    for (const heading of headings) expect(heading).toMatch(/Unreleased/);
+    for (const heading of headings)
+      expect(heading).toMatch(/^(?:Unreleased|\d+\.\d+\.\d+ — \d{4}-\d{2}-\d{2})$/);
+    // The shipped release is dated from the registry and Release timestamps, and a free
+    // `Unreleased` candidate section has to exist for the work that follows it.
+    expect(headings).toContain('0.1.0 — 2026-10-06');
+    expect(headings).toContain('Unreleased');
   });
 
   it('keeps the status block dated, dated-true, and pointed at the release runbook', () => {
     const readme = read('README.md');
-    expect(readme).toMatch(/not published/);
+    expect(readme).toMatch(/Published on npm\?\s*\|\s*Yes/);
+    for (const fact of [
+      'diffbeacon@0.1.0',
+      'v0.1.0',
+      '5a50b52028ead78942ea3fc3bee93ba26e0a79cc',
+      '2026-10-06',
+    ])
+      expect(readme, `README omits the measured release fact ${fact}`).toContain(fact);
+    expect(readme).not.toContain('<REVIEWED_FULL_COMMIT_SHA>');
     expect(readme).toMatch(/36562157439/);
     expect(readme).toContain('docs/releasing.md');
   });

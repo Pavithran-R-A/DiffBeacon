@@ -1,10 +1,11 @@
-# DiffBeacon GitHub Action — future consumer example.
+# DiffBeacon GitHub Action — consumer example.
 #
-# NOT A WORKFLOW GITHUB RUNS. This file is documentation kept outside `.github/workflows/`
-# on purpose, and it cannot execute today: the DiffBeacon reference below is a placeholder,
-# because no reviewed public Action version exists yet. Stage 11 owns that release.
+# NOT A WORKFLOW GITHUB RUNS FROM THIS REPOSITORY. This file is documentation kept outside
+# `.github/workflows/` on purpose: it is the reference a *consumer* copies into their own
+# repository. What it references is a reviewed, published release rather than an unfilled slot —
+# `v0.1.0` exists, and the commit named below is the release commit it points at.
 #
-# Why the placeholder is the point:
+# Why the reference is a full commit SHA:
 #
 #   - The Action you run and the repository it reads are two different trust domains.
 #     `actions/checkout` copies the pull request into the runner; DiffBeacon then reads that
@@ -19,9 +20,16 @@
 #     precisely why workflows go wrong there by checking out the pull request's code themselves.
 #     DiffBeacon has no use for the trigger and refuses the event outright.
 #
-# Provenance of the pin below: `3d3c42e5aac5ba805825da76410c181273ba90b1` was checked against
-# `refs/tags/v7` of https://github.com/actions/checkout with `git ls-remote --tags` on
-# 2026-09-26, and is the same pin this repository's own CI uses. Re-verify before replacing it.
+# Provenance of each pin:
+#
+#   - `3d3c42e5aac5ba805825da76410c181273ba90b1` was checked against `refs/tags/v7` of
+#     https://github.com/actions/checkout with `git ls-remote --tags` on 2026-09-26, and is the
+#     same pin this repository's own CI uses. Re-verify before replacing it.
+#   - `5a50b52028ead78942ea3fc3bee93ba26e0a79cc` is the commit the annotated `v0.1.0` tag peels to,
+#     verified with `git ls-remote` on 2026-10-06. That commit is what a release is pinned to; a
+#     moving major tag was deliberately not created, so the SHA below is the recommended reference
+#     rather than a stricter alternative to a convenient one. See
+#     `docs/audits/stage14-v0.1.0-consumer-release.md` for the consumer run that exercised it.
 name: DiffBeacon review
 on:
   pull_request:
@@ -40,8 +48,6 @@ jobs:
           # runner's credentials do not need to persist into the steps that read PR code.
           # No PAT, no secret, and no pull-request write permission is required or used.
           persist-credentials: false
-      # Replace this placeholder with the reviewed DiffBeacon release's 40-character commit
-      # SHA once Stage 11 publishes one. A moving tag such as `@v1` is not a reviewed pin.
       # The step needs no `with:` inputs: DiffBeacon reads the event the runner delivered and
       # writes its review to the Job Summary, which is the Action's only v0.1 output.
-      - uses: Pavithran-R-A/DiffBeacon@<REVIEWED_FULL_COMMIT_SHA>
+      - uses: Pavithran-R-A/DiffBeacon@5a50b52028ead78942ea3fc3bee93ba26e0a79cc

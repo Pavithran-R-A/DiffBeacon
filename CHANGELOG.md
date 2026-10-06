@@ -1,18 +1,28 @@
 # Changelog
 
 This project aims at [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html). It has not made its first release, so
-there is exactly one section: the unreleased `0.1.0` candidate. Capability details live in
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). Its first release, `0.1.0`, reached the
+npm registry and GitHub on 2026-10-06. Capability details live in
 [`README.md`](README.md) and [`docs/architecture/`](docs/architecture/), not here.
 
-## 0.1.0 — Unreleased
+## Unreleased
 
-Declared in `packages/cli/package.json`, **not published**. Measured again on 2026-10-04: `npm view
-diffbeacon` returns `404`, there are zero tags, zero GitHub Releases and no Marketplace listing, while
-the source repository is public and the browser demo is deployed to GitHub Pages.
-[`docs/releasing.md`](docs/releasing.md) is the checklist an explicit maintainer authorization would
-follow, [`docs/audits/stage11-release-qualification.md`](docs/audits/stage11-release-qualification.md)
-is the record of the qualification runs behind this section, and
+Nothing yet. Work that lands after `v0.1.0` is listed here until it ships in the next version; a
+defect found after the release does not change the immutable `v0.1.0` identity — it is fixed
+forward.
+
+## 0.1.0 — 2026-10-06
+
+Shipped as `diffbeacon@0.1.0` on npm at `2026-10-06T07:12:58.935Z`, from commit
+`5a50b52028ead78942ea3fc3bee93ba26e0a79cc`, which the annotated tag `v0.1.0` names and GitHub Release
+`404432804` points at (published `2026-10-06T07:28:16Z`, no draft, no prerelease, no attached
+assets). Measured 2026-10-06: `npm view diffbeacon version` reports `0.1.0`, the published tarball is
+byte-identical to the qualified pack, a throwaway project installed and ran it, and a separate
+consumer repository ran the Action at that SHA on its `pull_request` event.
+[`docs/audits/stage14-v0.1.0-consumer-release.md`](docs/audits/stage14-v0.1.0-consumer-release.md)
+is the record of those measurements and [`docs/releasing.md`](docs/releasing.md) is the checklist the
+release followed. [`docs/audits/stage11-release-qualification.md`](docs/audits/stage11-release-qualification.md)
+records the qualification runs behind the shipped code, and
 [`docs/audits/stage12-public-source-pages.md`](docs/audits/stage12-public-source-pages.md) records the
 public-source and Pages measurements.
 
@@ -54,8 +64,16 @@ public-source and Pages measurements.
   `actions/deploy-pages`, each pinned to a resolved immutable commit SHA. Measured 2026-10-04: Pages
   run `37217200407` concluded `success` and GitHub reports the site at
   `https://pavithran-r-a.github.io/DiffBeacon/`, where a pasted diff still analyzes with zero outbound
-  requests. The npm package, the `v0.1.0` tag, the GitHub Release and the Marketplace listing are
-  untouched by this.
+  requests.
+- **Published release surfaces** — `diffbeacon@0.1.0` on npm (MIT, `engines.node: ">=22"`, no runtime
+  dependencies, four-file tarball byte-identical to the qualified pack), the annotated `v0.1.0` tag on
+  the release commit, and the public GitHub Release with no attached assets. The Action was verified at
+  that tag: `runs.using: node24`, `runs.main: packages/action/dist/index.js`, and the bundled artifact
+  hashing to `45660da735388dee35fc581e94490d2aacc295b2382f8bea23ab12dff2350049`. Consumer-side proof
+  covers installing and running the package from the registry in a throwaway project and one hosted
+  `pull_request` run in a separate repository whose job concluded `success`. No GitHub Marketplace
+  listing was requested or created, and no moving version tag was made — the documented consumer pin is
+  the full commit SHA.
 
 ### Not included, on purpose
 

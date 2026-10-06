@@ -77,16 +77,23 @@ describe('Git diff determinism boundary', () => {
     };
     expect(rootReadme).not.toContain('OWNER/diffbeacon');
     expect(actionReadme).not.toContain('OWNER/diffbeacon');
-    // A tag-style reference is only valid after a public release exists. Stage 6 keeps that
-    // rule and adds one exception it can still prove: the documented placeholder, which no
-    // runner can resolve.
+    // A consumer reference is only valid once it resolves to a reviewed release. Stage 14 published
+    // `v0.1.0` at the full commit SHA below, so every owner reference in the shipped prose must be
+    // that immutable SHA — not the earlier placeholder, which no runner can resolve, and not a
+    // movable version tag, which a consumer cannot audit.
+    const reviewedActionReference =
+      'uses: Pavithran-R-A/DiffBeacon@5a50b52028ead78942ea3fc3bee93ba26e0a79cc';
     for (const readme of [rootReadme, actionReadme]) {
       const ownerReferences = readme.match(/uses:\s*\S*diffbeacon@\S*/gi) ?? [];
-      for (const reference of ownerReferences)
-        expect(reference).toBe('uses: Pavithran-R-A/DiffBeacon@<REVIEWED_FULL_COMMIT_SHA>');
+      expect(ownerReferences.length, 'a README names no usable Action reference').toBeGreaterThan(
+        0,
+      );
+      for (const reference of ownerReferences) expect(reference).toBe(reviewedActionReference);
+      expect(readme).not.toContain('<REVIEWED_FULL_COMMIT_SHA>');
+      expect(readme).not.toMatch(/diffbeacon@v\d/i);
       expect(readme).toContain('uses: ./');
     }
-    expect(rootReadme).toContain('not published to the npm registry yet');
+    expect(rootReadme).toContain('diffbeacon@0.1.0');
     expect(rootReadme).toContain('node packages/cli/dist/index.js review');
     expect(manifest.repository).toEqual({
       type: 'git',

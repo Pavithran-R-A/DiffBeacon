@@ -5,10 +5,16 @@ intentionally narrow: it analyzes the diff and does not execute the changed repo
 
 ## Supported versions
 
-No version of DiffBeacon is published, so no release is currently supported. Analysis runs only from
-source you build yourself, from the commit you checked out; see
-[`CHANGELOG.md`](CHANGELOG.md) for the unreleased `0.1.0` candidate. If and when a release exists,
-this section will name the versions that receive security work.
+The published surface is `diffbeacon@0.1.0`, released on 2026-10-06, together with the annotated
+`v0.1.0` tag at commit `5a50b52028ead78942ea3fc3bee93ba26e0a79cc` and the Action bundle checked out at
+that commit. Those three references are what "a supported version" means here.
+
+Security work is assessed against the latest published release — the version
+`npm view diffbeacon version` reports when you read this — and a fix ships as a new release instead of
+rewriting the immutable `v0.1.0` tag, package, or history. No response time, no disclosure timeline,
+no fix window, and no support period for older releases is promised: this is a single-maintainer
+open-source project at `0.1.0`. Analysis you build from source yourself is analysis of the commit you
+checked out; it is not a supported release. See [`CHANGELOG.md`](CHANGELOG.md) for what has shipped.
 
 ## Reporting a vulnerability
 

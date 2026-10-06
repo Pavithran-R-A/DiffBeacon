@@ -1,0 +1,131 @@
+name: Publish
+
+# The gate a *future* npm release passes through. Stage 14 published `diffbeacon@0.1.0` by hand, from
+# the tarball qualified in `docs/releasing.md` §1, so this file has never run and never published
+# anything; it exists so the next publication follows the same procedure without a human holding an
+# npm credential. Sections 3 and 7 of `docs/releasing.md` are the runbook this implements.
+#
+# One trigger, and it is the moment a release becomes a decision rather than a wish: an annotated
+# release tag. A tag push also runs `ci.yml`, whose `browser` job qualifies the Chromium suites, so
+# this job does not duplicate that surface — see the suppression below.
+on:
+  push:
+    tags:
+      - 'v*'
+
+# No cancel-in-progress, deliberately. A run that has reached the registry write must be allowed to
+# finish, because a cancelled publish can leave a version permanently consumed with no run recording
+# what published it.
+concurrency:
+  group: publish-${{ github.ref }}
+
+# Exactly two grants. `contents: read` is the source being published; `id-token: write` mints the
+# short-lived OIDC credential that npm's Trusted Publishing consumes, which is why no npm publishing
+# token exists in this repository, its secrets, or this file.
+# tests/stage14.publish-workflow.test.ts asserts this set as a set, so widening it fails there instead
+# of passing a one-directional "no credential" scan.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish packages/cli to npm (Node 24)
+    # GitHub-hosted, which is a trust property rather than a preference: the OIDC assertion npm
+    # accepts names this repository, workflow file and commit as seen from GitHub's own
+    # infrastructure. A self-hosted runner is the operator's machine, and an identity minted there is
+    # not evidence about this repository.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The browser contract `ci.yml`'s source lanes use: the harness reports this suppression
+      # instead of pretending the Chromium cases ran, and the tag push runs that file's `browser` job
+      # for the engine-qualified surface.
+      DIFFBEACON_SKIP_BROWSER: '1'
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      # `0.1.0` is public forever: never re-published, never unpublished, never the target of a later
+      # run. A tag matching `v*` is the only input that reaches this job, so the consumed version is
+      # refused by name here as well as by the runbook that forbids moving the tag.
+      - name: Refuse the version Stage 14 already published
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if [ "$version" = '0.1.0' ]; then
+            echo "diffbeacon@0.1.0 is published and permanently consumed; this workflow must never publish it." >&2
+            exit 1
+          fi
+          echo "publish candidate: diffbeacon@${version}"
+      # The tag and the manifest have to name the same version, or the registry ends up holding bytes
+      # labelled with a release that never produced them.
+      - name: Require the tag to name the package version
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          declared="$(node -p "require('./packages/cli/package.json').version")"
+          if [ "$version" != "$declared" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not name packages/cli version ${declared}; refusing to publish a mismatched pair." >&2
+            exit 1
+          fi
+      # Trusted Publishing needs a CLI that speaks the OIDC exchange. Below this floor the job would
+      # have to authenticate some other way, and "some other way" in a public repository means a
+      # long-lived secret.
+      - name: Require the npm CLI that supports Trusted Publishing
+        run: |
+          set -euo pipefail
+          installed="$(npm --version)"
+          node -e 'const [major, minor, patch] = process.argv[1].split(".").map(Number); if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) { console.error(`npm ${process.argv[1]} predates Trusted Publishing; 11.5.1 or newer is required.`); process.exit(1); }' "$installed"
+      # Exactly one package of this workspace is publishable. If either of the other two ever stops
+      # being private, that is a repository change to notice, not something a release job publishes
+      # by accident.
+      - name: Confirm only the CLI is publishable
+        run: |
+          set -euo pipefail
+          for package in packages/core packages/action; do
+            if [ "$(node -p "require('./$package/package.json').private")" != 'true' ]; then
+              echo "${package} is not private; this workflow publishes exactly one package, diffbeacon." >&2
+              exit 1
+            fi
+          done
+      # A published version is immutable, so a number the registry already carries is a stop
+      # condition rather than something to overwrite. The second half matters as much as the first:
+      # a network failure or a rate limit is not evidence that a version is absent.
+      - name: Refuse a version the registry already carries
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          response="$(npm view "diffbeacon@${version}" version 2>&1)" && {
+            echo "diffbeacon@${version} already resolves to ${response}; a published version is never re-published." >&2
+            exit 1
+          }
+          case "$response" in
+            *404*|*'not found'*) ;;
+            *) echo "The registry did not answer not-found for ${version}: ${response}" >&2; exit 1 ;;
+          esac
+      - name: Install dependencies
+        run: npm ci
+      # The same two audit surfaces `ci.yml` gates on, read again here because advisories move without
+      # a commit in this repository.
+      - name: Dependency audit (release surface)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Dependency audit (development tree)
+        run: npm audit --audit-level=high
+      # One ordered gate: source completeness, format, lint, typecheck, tests, build, artifact
+      # freshness, secret scan, manifest drift, CLI startup, package smoke, Action smoke.
+      - name: Verify the release candidate
+        run: npm run verify
+      # Packs the tarball, installs it into a throwaway project and runs the bin, so what is published
+      # is what this job just executed rather than what it assumes.
+      - name: Smoke the packed package through a real install
+        run: npm run package-smoke
+      # `--provenance` is what makes the OIDC grant worth having: the attestation names this
+      # repository, this workflow file and this commit as the publisher, which is the record a
+      # consumer can verify independently of any token.
+      - name: Publish packages/cli
+        run: npm publish ./packages/cli --provenance

@@ -51,10 +51,19 @@ describe('the Action documentation keeps the two trust domains apart', () => {
     }
   });
 
-  it('says plainly that no reviewed Action version exists yet', () => {
+  it('names the released Action version, its immutable pin, and its consumer proof', () => {
     for (const file of actionDocs) {
-      expect(read(file), file).toMatch(/no published|does not exist yet|not published/i);
-      expect(read(file), file).toMatch(/Stage 11/);
+      const text = read(file);
+      expect(text, `${file} omits the released version`).toMatch(/v0\.1\.0/);
+      expect(text, `${file} omits the reviewed release SHA`).toMatch(
+        /5a50b52028ead78942ea3fc3bee93ba26e0a79cc/,
+      );
+      // Documentation that recommends a reference must show the recommendation working somewhere.
+      expect(text, `${file} omits the consumer Actions run`).toMatch(/37430396143/);
+      expect(text, `${file} drops the release runbook pointer`).toMatch(/docs\/releasing\.md/);
+      expect(text, `${file} still denies the release`).not.toMatch(
+        /no published|does not exist yet|not published/i,
+      );
     }
   });
 
@@ -75,11 +84,14 @@ describe('the future consumer workflow fixture', () => {
     expect(fixture.startsWith('.github/')).toBe(false);
     // The inventory this repository actually runs. Stage 9's self-hosted qualification lane is a
     // workflow this repository does run, so it belongs here; the documented `pull_request` fixture
-    // still does not, which is the point of the assertion.
+    // still does not, which is the point of the assertion. Stage 14 added `publish.yml`, which runs
+    // only when someone pushes a future release tag, so it is a workflow of this repository rather
+    // than an example — and it is guarded by `tests/stage14.publish-workflow.test.ts`, not here.
     expect(readdirSync(path.join(repository, '.github/workflows')).sort()).toEqual([
       'ci-self-hosted-stage9.yml',
       'ci.yml',
       'pages.yml',
+      'publish.yml',
     ]);
     expect(read(fixture)).toMatch(/NOT A WORKFLOW|not.*run by GitHub|documentation/i);
   });
@@ -105,10 +117,12 @@ describe('the future consumer workflow fixture', () => {
       if (!reference.includes('<')) expect(reference, reference).toMatch(/^[^@]+@[0-9a-f]{40}$/);
   });
 
-  it('keeps the DiffBeacon reference an unmistakable placeholder', () => {
-    expect(uses()).toContain('Pavithran-R-A/DiffBeacon@<REVIEWED_FULL_COMMIT_SHA>');
-    expect(read(fixture)).toMatch(/REVIEWED_FULL_COMMIT_SHA/);
-    expect(read(fixture)).toMatch(/placeholder/);
+  it('pins the reviewed release SHA rather than a placeholder', () => {
+    expect(uses()).toContain('Pavithran-R-A/DiffBeacon@5a50b52028ead78942ea3fc3bee93ba26e0a79cc');
+    const text = read(fixture);
+    expect(text).not.toMatch(/REVIEWED_FULL_COMMIT_SHA|placeholder|TBD|FIXME/i);
+    for (const reference of uses()) expect(reference, reference).toMatch(/^[^@]+@[0-9a-f]{40}$/);
+    expect(text).toMatch(/pull_request/i);
   });
 
   it('runs nothing: no build, install, or shell step in the reviewed repository', () => {
