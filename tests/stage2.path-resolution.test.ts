@@ -89,6 +89,24 @@ describe('diff --git path pairs', () => {
     expect(codes(parsed)).toEqual(['malformed-header']);
   });
 
+  it('reports a malformed header when the second quoted path is never closed', () => {
+    const parsed = parseUnifiedDiff('diff --git "a/one.ts" "b/two.ts');
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]?.displayPath).toBe('<unknown path>');
+  });
+
+  it('rejects trailing text after a complete quoted path pair', () => {
+    const parsed = parseUnifiedDiff('diff --git "a/one.ts" "b/two.ts" trailing');
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]?.displayPath).toBe('<unknown path>');
+  });
+
+  it('requires quoted diff --git paths to identify their old and new sides', () => {
+    const parsed = parseUnifiedDiff('diff --git "one.ts" "two.ts"');
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]?.displayPath).toBe('<unknown path>');
+  });
+
   it('drops the trailing timestamp of a context-diff header', () => {
     const parsed = parseUnifiedDiff(
       [
