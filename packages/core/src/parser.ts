@@ -272,6 +272,7 @@ function inferStatus(file: {
   newPath: string | null;
   oldMode: string | null;
   newMode: string | null;
+  modeLine: number | null;
   similarity: number | null;
   binary: boolean;
   hunks: Hunk[];
@@ -516,7 +517,12 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
           code: 'malformed-header',
           message:
             'File-status metadata is contradictory; add, delete, rename, copy, and mode-change forms cannot be combined this way.',
-          line: current.renameFromLine ?? current.renameToLine ?? current.copyLine ?? 1,
+          line:
+            current.renameFromLine ??
+            current.renameToLine ??
+            current.copyLine ??
+            current.modeLine ??
+            1,
         });
         // Keep only the paths and content the structural headers proved. A malformed
         // status mixture must not manufacture an added/deleted/renamed result.
@@ -537,7 +543,7 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         diagnostics.push({
           code: 'malformed-header',
           message: 'old mode and new mode are identical, so they do not describe a mode change.',
-          line: 1,
+          line: current.modeLine ?? 1,
         });
         current.oldMode = null;
         current.newMode = null;
@@ -560,6 +566,7 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         newPath: resolution.pair?.newPath ?? null,
         oldMode: null,
         newMode: null,
+        modeLine: null,
         similarity: null,
         binary: false,
         hunks: [],
@@ -667,6 +674,7 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         current.isNewFile = true;
         current.oldMode = null;
         current.newMode = mode;
+        current.modeLine = lineNumber;
       }
     } else if (line.startsWith('deleted file mode ')) {
       const mode = gitMode(line.slice('deleted file mode '.length));
@@ -680,6 +688,7 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         current.isDeletedFile = true;
         current.oldMode = mode;
         current.newMode = null;
+        current.modeLine = lineNumber;
       }
     } else if (line.startsWith('old mode ')) {
       const mode = gitMode(line.slice('old mode '.length));
@@ -689,7 +698,10 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
           message: 'old mode must be one of Git's file entry modes: 100644, 100755, 120000, or 160000.',
           line: lineNumber,
         });
-      else current.oldMode = mode;
+      else {
+        current.oldMode = mode;
+        current.modeLine = lineNumber;
+      }
     } else if (line.startsWith('new mode ')) {
       const mode = gitMode(line.slice('new mode '.length));
       if (mode === null)
@@ -698,7 +710,10 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
           message: 'new mode must be one of Git's file entry modes: 100644, 100755, 120000, or 160000.',
           line: lineNumber,
         });
-      else current.newMode = mode;
+      else {
+        current.newMode = mode;
+        current.modeLine = lineNumber;
+      }
     } else if (line.startsWith('similarity index ')) {
       const raw = line.slice('similarity index '.length).trim();
       const match = /^(\d+)%$/.exec(raw);
