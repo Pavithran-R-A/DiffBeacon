@@ -103,4 +103,3 @@ describe.runIf(process.platform !== 'win32')('Source manifest symbolic-link boun
     }
   });
 });
-

@@ -51,8 +51,7 @@ function trackedBlobBytes(root, file) {
   // representation rather than following the link into arbitrary host files. On a
   // checkout with core.symlinks=false the same path is already a regular file whose
   // contents are that target string, so both checkout modes produce the same digest.
-  if (lstatSync(absolute).isSymbolicLink())
-    return readlinkSync(absolute, { encoding: 'buffer' });
+  if (lstatSync(absolute).isSymbolicLink()) return readlinkSync(absolute, { encoding: 'buffer' });
   return readFileSync(absolute);
 }
 

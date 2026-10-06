@@ -140,4 +140,3 @@ describe.runIf(process.platform !== 'win32')('secret-scan symbolic-link boundary
     }
   });
 });
-
