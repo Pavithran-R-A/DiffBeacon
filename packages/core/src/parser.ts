@@ -81,43 +81,53 @@ function stripDiffPrefix(value: string): string | null {
   return path;
 }
 
-function parseQuotedPair(value: string): [string | null, string | null] | null {
-  const trimmed = value;
-  if (!trimmed.startsWith('"')) return null;
-  const tokens: string[] = [];
-  let cursor = 0;
-  while (cursor < trimmed.length && tokens.length < 2) {
-    while (trimmed[cursor] === ' ') cursor += 1;
-    if (trimmed[cursor] !== '"') return null;
-    const start = cursor;
-    cursor += 1;
-    let escaped = false;
-    let closed = false;
-    while (cursor < trimmed.length) {
-      const character = trimmed[cursor] ?? '';
-      if (!escaped && character === '"') {
-        cursor += 1;
-        closed = true;
-        break;
-      }
-      escaped = !escaped && character === '\\';
-      if (character !== '\\') escaped = false;
-      cursor += 1;
-    }
-    if (!closed) return null;
-    tokens.push(trimmed.slice(start, cursor));
+function quotedTokenEnd(value: string, start = 0): number | null {
+  if (value[start] !== '"') return null;
+  let escaped = false;
+  for (let cursor = start + 1; cursor < value.length; cursor += 1) {
+    const character = value[cursor] ?? '';
+    if (!escaped && character === '"') return cursor + 1;
+    escaped = !escaped && character === '\\';
+    if (character !== '\\') escaped = false;
   }
-  while (trimmed[cursor] === ' ') cursor += 1;
-  if (tokens.length !== 2 || cursor !== trimmed.length) return null;
-  const oldToken = decodeGitQuoted(tokens[0] as string);
-  const newToken = decodeGitQuoted(tokens[1] as string);
+  return null;
+}
+
+function pairFromTokens(oldRaw: string, newRaw: string): [string | null, string | null] | null {
+  const oldToken = decodeGitQuoted(oldRaw);
+  const newToken = decodeGitQuoted(newRaw);
   // The extended ---/+++ and Binary-files lines may use /dev/null, but Git's
   // leading diff --git header never does, even for an add/delete.
   if (!oldToken.startsWith('a/') || !newToken.startsWith('b/')) return null;
-  const oldPath = stripDiffPrefix(tokens[0] as string);
-  const newPath = stripDiffPrefix(tokens[1] as string);
-  // A quoted `a/` or `b/` still names no file, so it is not a decodable pair.
+  const oldPath = stripDiffPrefix(oldRaw);
+  const newPath = stripDiffPrefix(newRaw);
+  // A quoted or unquoted `a/` or `b/` still names no file.
   return oldPath === '' || newPath === '' ? null : [oldPath, newPath];
+}
+
+function parseQuotedPair(value: string): [string | null, string | null] | null {
+  // Git quotes each pathname independently. A rename can therefore have a quoted
+  // source and plain destination, or the reverse; requiring both sides to have the
+  // same quoting style drops real Git output.
+  if (value.startsWith('"')) {
+    const end = quotedTokenEnd(value);
+    if (end === null || value[end] !== ' ') return null;
+    const oldRaw = value.slice(0, end);
+    const newRaw = value.slice(end + 1);
+    if (newRaw === '') return null;
+    if (newRaw.startsWith('"') && quotedTokenEnd(newRaw) !== newRaw.length) return null;
+    return pairFromTokens(oldRaw, newRaw);
+  }
+
+  const candidates: [string | null, string | null][] = [];
+  for (let separator = value.indexOf(' "'); separator >= 0; separator = value.indexOf(' "', separator + 1)) {
+    const oldRaw = value.slice(0, separator);
+    const newRaw = value.slice(separator + 1);
+    if (quotedTokenEnd(newRaw) !== newRaw.length) continue;
+    const pair = pairFromTokens(oldRaw, newRaw);
+    if (pair !== null) candidates.push(pair);
+  }
+  return candidates.length === 1 ? (candidates[0] as [string | null, string | null]) : null;
 }
 function parseGitPair(value: string): PairResolution {
   // `diff --git` contributes exactly one separator before the old-side token. Remove
@@ -143,16 +153,7 @@ function parseGitPair(value: string): PairResolution {
 }
 
 function decodeWholeQuotedToken(value: string): string | null {
-  if (!value.startsWith('"')) return null;
-  let escaped = false;
-  for (let index = 1; index < value.length; index += 1) {
-    const character = value[index] ?? '';
-    if (!escaped && character === '"')
-      return index === value.length - 1 ? decodeGitQuoted(value) : null;
-    escaped = !escaped && character === '\\';
-    if (character !== '\\') escaped = false;
-  }
-  return null;
+  return quotedTokenEnd(value) === value.length ? decodeGitQuoted(value) : null;
 }
 
 function metadataPath(value: string): string | null {
