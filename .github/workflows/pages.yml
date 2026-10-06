@@ -5,16 +5,12 @@ name: Deploy browser demo to GitHub Pages
 on:
   workflow_dispatch:
 
-# Exactly three grants: read the source being published, write only the Pages site, and mint the
-# OIDC credential the official deploy action presents for the `github-pages` environment.
-# tests/stage9.ci-contract.test.ts asserts this set as a set, so widening it fails there.
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
+# Permissions are job-scoped: build/test code can read source but cannot mint a Pages OIDC token
+# or write a deployment. Only the dedicated deploy job receives the two elevated Pages grants.
 jobs:
   build:
+    permissions:
+      contents: read
     # workflow_dispatch can be pointed at any ref in the UI. Only main is a deployable source;
     # selecting another branch must stop before an artifact or Pages credential is produced.
     if: github.ref == 'refs/heads/main'
@@ -60,6 +56,10 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
