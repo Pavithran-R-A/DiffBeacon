@@ -60,7 +60,9 @@ or piped in from elsewhere:
   and Windows-device-shaped names are treated as opaque labels, never opened, and neutralised at paint
   time. Path parsing preserves meaningful trailing spaces in Git's unquoted headers and rename
   metadata; those names remain distinct in the raw report even though some target filesystems cannot
-  create them.
+  create them. Detector structure follows Git's patch grammar: `/` is the separator. A literal
+  backslash in a POSIX filename stays a filename byte instead of being reinterpreted as a synthetic
+  directory boundary.
 
 ## Each adapter has its own edges
 
