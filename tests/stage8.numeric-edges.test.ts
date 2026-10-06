@@ -134,6 +134,19 @@ describe('counted quantities under extreme headers', () => {
       expect(parsed.files[0]?.similarity).toBe(value);
     }
   });
+
+  it('does not infer a rename from similarity metadata alone', () => {
+    const parsed = parseUnifiedDiff(
+      ['diff --git a/src/app.ts b/src/app.ts', 'similarity index 95%', ''].join('\n'),
+    );
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'src/app.ts',
+      newPath: 'src/app.ts',
+      similarity: 95,
+    });
+  });
 });
 
 describe('line terminators the unified-diff format does not define', () => {
