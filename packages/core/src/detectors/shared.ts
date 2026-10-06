@@ -4,12 +4,14 @@
  */
 
 export function normalizedPath(path: string): string {
-  return path.replaceAll('\\', '/').toLowerCase();
+  // Git's patch format always uses "/" as the path separator. A backslash is a
+  // legal filename byte on POSIX and arrives C-quoted from Git, so treating it as
+  // a separator would invent directory structure the diff never reported.
+  return path.toLowerCase();
 }
 
 export function basename(path: string): string {
-  const normalized = path.replaceAll('\\', '/');
-  return normalized.slice(normalized.lastIndexOf('/') + 1).toLowerCase();
+  return path.slice(path.lastIndexOf('/') + 1).toLowerCase();
 }
 
 export function hasSegment(path: string, segment: string): boolean {
