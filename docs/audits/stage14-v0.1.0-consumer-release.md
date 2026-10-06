@@ -12,9 +12,10 @@ recorded in §16 alongside this document's own phases, because they are the qual
 publication consumed.
 
 **Measured commit.** `5a50b52028ead78942ea3fc3bee93ba26e0a79cc` — subject
-`docs(release): date-anchor publication wording in shipped READMEs`. `main`, `origin/main`, and
-`git ls-remote origin refs/heads/main` all named it at every phase boundary in this record, and the
-annotated tag `v0.1.0` names it still.
+`docs(release): date-anchor publication wording in shipped READMEs`. `main`, `origin/main`,
+and `git ls-remote origin refs/heads/main` all named it through Phase R, which is the commit
+§§1–11 measure. §12 then records `main` moving past it — first to `0d7f171`, then to
+`b371eff` — while the annotated tag `v0.1.0` still names `5a50b520…` and nothing else.
 
 **Date.** 2026-10-06. Timestamps below are registry/API/GitHub values in UTC, read from the services
 that produced them, not host clocks.
@@ -743,15 +744,269 @@ appended beneath them.
 
 ## 12. Phases S–T — commits, push, and final `main` CI
 
-_Not yet executed in this pass._
+### 12.1 Phase S: one commit, a normal push, and the SHA readings
+
+`stage14/phaseS-commit.txt`. The 17 staged paths of §11 became one commit,
+`0d7f171f57ef00c3f1d9c498605be177e959f87c`, subject
+`ci(release): prepare tokenless npm publishing and record v0.1.0 consumer launch` —
+17 files changed, 1487 insertions, 134 deletions, three of them new
+(`.github/workflows/publish.yml`, this record, and
+`tests/stage14.publish-workflow.test.ts`). §11.4 records why that is one commit
+rather than the two the brief suggested.
+
+`git push origin main` answered `5a50b52..0d7f171 main -> main`, exit 0. No `--force`,
+no `--no-verify`, no wildcard refspec, no other ref sent. The global `core.hooksPath`
+shim printed `Can't find lefthook in PATH` above that output, exactly as it did during
+the tag push in §3: lefthook is not installed on this host, so the hook executes
+nothing, and the line is disclosed instead of being silenced.
+
+The three readings the brief requires — `git rev-parse HEAD`, `git rev-parse
+origin/main`, `git ls-remote origin refs/heads/main` — answered
+`0d7f171f57ef00c3f1d9c498605be177e959f87c` all three times, and the same three
+readings answered `b371eff…` after §12.4's second push. The worktree was clean at both
+boundaries.
+
+The tag did not move: `git rev-list -n1 v0.1.0` → `5a50b52028ead78942ea3fc3bee93ba26e0a79cc`,
+tag object `5311ee05e3199b84854d719453b8939c5c482dc7`, and a remote read after the push
+returned the same pair. The remote's entire tag ref inventory is still `v0.1.0` and
+`v0.1.0^{}` — advancing `main` created no `@v1` alias and moved nothing.
+
+### 12.2 Phase T, first run: four of five jobs red
+
+Run `37453802193` (`push`, `ci.yml`) at `0d7f171`: the four `Source …` cells each
+`failure`, the `Browser lane` `success`. All four failed on the same step,
+`Dependency audit (development tree)` = `npm audit --audit-level=high`, while the step
+immediately before it in the same job, `Dependency audit (release surface)` =
+`npm audit --omit=dev …`, printed `found 0 vulnerabilities`. Verbatim from the hosted
+log (`phaseT-ci-log-failed.txt`, ANSI stripped):
+
+```text
+source-map-js  1.0.0 - 1.2.1
+Severity: high
+source-map-js allows event-loop denial of service through indexed source-map section offsets - https://github.com/advisories/GHSA-68fv-2mgg-jv7q
+node_modules/source-map-js
+1 high severity vulnerability
+##[error]Process completed with exit code 1.
+```
+
+### 12.3 Root cause, established before any fix
+
+Four measurements, in `phaseT-audit-classify.txt` and `phaseT-prior-green-audit.txt`:
+
+1. **The advisory.** `GHSA-68fv-2mgg-jv7q`, severity high, _event-loop denial of
+   service through indexed source-map section offsets_, published
+   `2026-09-18T18:31:44Z`, **`updated_at` `2026-10-05T23:31:22Z`**, vulnerable range
+   `>= 1.0.0, < 1.2.2`, first patched `1.2.2`.
+2. **What this tree locks.** `node_modules/source-map-js → 1.2.1`, reached by exactly
+   one reverse edge — `node_modules/postcss` requires `^1.2.1` — and marked
+   `"dev": true`. The registry offers `1.2.1` and `1.2.2`, so the patched release was
+   already in range.
+3. **The tree did not change; the advisory did.** `git diff --exit-code` over
+   `5a50b520..0d7f171 -- package-lock.json` is empty, and run `37296796659` executed
+   this same lockfile on the hosted runners at `2026-10-05T10:28Z` with both audit
+   steps printing `found 0 vulnerabilities`. Thirteen hours later the advisory was
+   updated to cover 1.2.1, and the next push's audit went red. Nothing in the release
+   pass caused it.
+4. **No second detector exists here.** `GET /repos/…/dependabot/alerts` answers HTTP
+   403, `Dependabot alerts are disabled for this repository`, so no automated bump PR
+   was ever going to arrive. The blocking audit step in `ci.yml` is this repository's
+   detector for this class of change, and it is what caught it.
+
+### 12.4 The repair, its red/green proof, and the final green run
+
+The repair is `npm audit fix --package-lock-only` — lockfile only, `node_modules`
+untouched, and **`--force` never run**, so npm was not permitted to cross a declared
+major range. `phaseT-auditfix.txt` keeps the whole sequence:
+
+| Step                   | Command                                                       | Result                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| RED                    | `npm audit --package-lock-only --audit-level=high`            | exit **1**, `1 high severity vulnerability`                                                                                                                        |
+| repair                 | `npm audit fix --package-lock-only`                           | exit 0, `up to date, audited 218 packages`                                                                                                                         |
+| GREEN, dev tree        | the RED command again                                         | exit **0**, `found 0 vulnerabilities`                                                                                                                              |
+| GREEN, release surface | `npm audit --omit=dev --package-lock-only --audit-level=high` | exit **0**, `found 0 vulnerabilities`                                                                                                                              |
+| scope                  | `git diff --stat -- package-lock.json`                        | 1 file, **3 insertions, 3 deletions**, one hunk: `source-map-js` version `1.2.1` → `1.2.2`, its `resolved` URL, its `integrity`                                    |
+| governance             | `npm run manifest`, then again                                | 160 entries before and after; exactly one digest line moves, `ac60c521…` → `ef54c353…` for `package-lock.json`; second run is a no-op                              |
+| driver                 | `npm run verify` on the repaired tree                         | `verify_exit=0`, `11:10:07Z` → `11:16:41Z`, 0 unstaged and 0 untracked afterwards, and no diff for `packages/action/dist/index.js` (the rebuild is byte-identical) |
+
+The pre-repair lockfile is preserved at `stage14/package-lock.before-audit-fix.json`
+(134 303 bytes, digest `ac60c521…` — the value SOURCE_MANIFEST carried).
+
+Commit `b371effbee85dd021830843e972bd8644d1dc550`, subject
+`fix(deps): resolve GHSA-68fv-2mgg-jv7q in the locked dev tree`, 2 files and +4/−4
+(the lockfile hunk plus its manifest digest), pushed normally as
+`0d7f171..b371eff main -> main`, exit 0, with the same lefthook shim line above it.
+The first commit attempt exited **128**, `Author identity unknown`: this host carries
+no global git identity by design, and the per-invocation `-c user.name/-c user.email`
+recipe was used instead of writing config. That failure is in the evidence file as
+written.
+
+**Final `main` CI: run `37455508474` at `b371eff`, all five jobs `success`**,
+`11:18:21Z` → `11:20:57Z`.
+
+| Job                                    | Started → completed | Conclusion |
+| -------------------------------------- | ------------------- | ---------- |
+| Source ubuntu-latest / Node 22         | 11:18:23 → 11:19:21 | success    |
+| Source windows-latest / Node 22        | 11:18:23 → 11:20:21 | success    |
+| Source ubuntu-latest / Node 24         | 11:18:23 → 11:19:50 | success    |
+| Source windows-latest / Node 24        | 11:18:23 → 11:19:55 | success    |
+| Browser lane (ubuntu-latest / Node 24) | 11:18:23 → 11:20:57 | success    |
+
+Every step of every job answers `success` (`phaseT-jobs-final-steps.json`); the four
+Source cells share the eight steps Check out, Set up Node, Secret scan, Install
+dependencies, Dependency audit (release surface), Dependency audit (development tree),
+Verify quality, Action bundle freshness.
+
+A green conclusion is not evidence that work happened, so the hosted logs were read
+back (`phaseT-final-source-ubuntu22.log`, its ANSI-stripped twin, and
+`phaseT-final-browser-lane.clean.txt`):
+
+| Measurement                      | Hosted value                                                                                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Secret scan                      | `secret scan: 12 finding(s), 12 classified, 0 unclassified, 0 stale`                                                                                          |
+| `npm ci`                         | `added 216 packages in 6s`                                                                                                                                    |
+| Audit, release surface           | `found 0 vulnerabilities`                                                                                                                                     |
+| Audit, development tree          | `found 0 vulnerabilities` — the step that was red at `0d7f171`                                                                                                |
+| `npm run check`                  | `Test Files 60 passed \| 6 skipped (66)`, `Tests 1012 passed \| 134 skipped (1146)`, `Duration 21.09s`, ending `DiffBeacon source-first verification passed.` |
+| Bundle freshness                 | step success, i.e. `git diff --exit-code -- packages/action/dist/index.js` was empty after CI's own rebuild                                                   |
+| Engine named by the browser lane | `browser engine: /usr/bin/google-chrome; version=154.0.8037.57`, printed by each of its 6 files                                                               |
+| Browser lane totals              | `Test Files 6 passed (6)`, `Tests 133 passed (133)`, `Duration 140.03s`                                                                                       |
+
+The Source cells skip 134 tests under `DIFFBEACON_SKIP_BROWSER: '1'` (`ci.yml:29`),
+which that file annotates as a deliberate suppression rather than a silence; the
+browser lane then executes 133 Chromium cases against a real engine. This record
+reports both counts as measured and does not claim the 134th skipped test is one of
+them.
+
+`publish.yml` was **not** triggered by either push: the run list for `b371eff` contains
+exactly one entry, `CI`, and `gh run list --workflow Publish` returned `[]`
+(`phaseT-ci-trigger.txt`). The brief's "do not trigger the future npm publication
+workflow for 0.1.0" holds by not touching it, and nothing was published in this stage.
+
+One host artifact recurred: after this push, `pnpm-lock.yaml` and
+`pnpm-workspace.yaml` reappeared untracked for the third time in Stage 14. All three
+drops are **byte-identical** to each other (`d4c66539…` and `d6d0c244…`), which is what
+identifies them as an external pnpm resolver re-writing the same content rather than
+anything this pass did. They were moved aside to
+`stage14/pnpm-debris-quarantine/repeat-2-*`, never staged, and the worktree then
+answered 0 unstaged / 0 untracked / 0 staged.
+
+### 12.5 What Phase T did not change
+
+No test, timeout, workflow, or configuration file differs between the red run and the
+green run. Between `0d7f171` and `b371eff` the only content is the `source-map-js`
+version/URL/integrity triplet in `package-lock.json` and the manifest line that digests
+it. §11.8's statement that the release was qualified with these gates unchanged still
+holds; the qualification was re-executed, not relaxed.
 
 ## 13. Phase U — Pages regression, read-only
 
-_Not yet executed in this pass._
+Nothing was deployed, built into the site, or reconfigured. The evidence splits in two:
+`phaseU-pages.txt` for the byte-level reads and `phaseU-browser.txt` for the real
+Chromium session.
 
-## 14. Phase V — final consumer audit and verdict
+**Why no redeploy is the right answer.** The live deployment is run `37257883015`
+(`push`, success, `head_sha 85979940eef8750ccb4715c57a682d23a4e9e5ec`, created
+`2026-10-05T03:04:02Z`). Comparing that commit against HEAD over every path the site is
+built from — `client/`, `packages/core/src`, `packages/core/schema`, `index.html`,
+`vite.config.ts`, `package-lock.json` — returns **0 changed paths**. What has moved
+since is documentation, tests, and workflows. The deployed app is already the current
+app, so "do not redeploy unnecessarily" resolves to leaving it alone.
 
-_Not yet executed in this pass._
+| Static read                                   | Value                                                                                                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Site root                                     | HTTP **200**, 719 bytes, `Server: GitHub.com`, `Last-Modified: Mon, 05 Oct 2026 03:04:23 GMT`                                                                 |
+| Served JS                                     | `assets/index-DDHzPMhP.js` → **200**, 233 059 bytes, sha256 `9a28711058820131…`                                                                               |
+| Served CSS                                    | `assets/index-9I3gIet4.css` → **200**, 19 209 bytes, sha256 `7120be44c6b57f68…`                                                                               |
+| Pages resource                                | `{"build_type":"workflow","source_branch":"main","source_path":null,"status":null}`                                                                           |
+| Served `index.html`                           | references exactly those two hashed assets plus `/DiffBeacon/assets/favicon-snzof64s.svg`; title `DiffBeacon — Review Attention Map`                          |
+| Forbidden-surface sweep over the served bytes | `manus-storage` 0, `BUILT_IN_FORGE` 0, `debug-collector` 0, `sendBeacon` 0, `XMLHttpRequest` 0, `WebSocket` 0, `umami` 0, `google-analytics` 0, `analytics` 0 |
+| External-looking strings in the served bundle | `https://react.dev` (React's error-message prefix) and `http://www.w3.org` (the SVG namespace constant) — nothing else                                        |
+| `fetch(` in the served bundle                 | 1 occurrence, in Vite's module-preload helper (context quoted in the file); `client/src` itself contains 0                                                    |
+
+The served bundle digest is deliberately **not** compared with a local rebuild
+(`index-R83CsIRS.js`, 262 321 bytes): `pages.yml` builds with
+`BASE_PATH="/${{ github.event.repository.name }}/" npm run build:web`, and this working
+tree resolves through pnpm, so a local build has different inputs. The comparable build
+is hosted CI's, and §12.4 reads that one.
+
+**The real-browser leg** (Chrome DevTools MCP against the live URL, anonymous, no
+credentials, nothing written):
+
+- _Boot._ React mounted and the whole instrument is present in the accessibility tree:
+  the `h1` "Start with the diff. Review the evidence in order.", an empty
+  `textbox "Unified diff input"`, `Load example` / `Clear` (disabled) / `Analyze diff`,
+  the standby heading "No diff. No assumptions.", the boundary sentence, the privacy
+  sentence, and the footer `DIFFBEACON / 0.1.0`.
+- _Sample analysis._ Clicking `Load example` filled 1 464 bytes of synthetic diff and
+  rendered a complete map: FILES 5, ADDITIONS +13, DELETIONS −1, GENERATED 0; FOCUS
+  CI / Build, FOCUS Authentication / Access, FOCUS Database / Schema, CHECK Runtime
+  Implementation, CHECK Dependencies, NOTE Tests, each with its file list; a six-entry
+  REVIEW ORDER with a reason per entry; EVIDENCE LEDGER `01 MANIFEST WITHOUT LOCKFILE`
+  on `package.json` carrying the "not observed describes this diff only" qualifier; and
+  `Copy current JSON report` moving from disabled to enabled. Clicking `Analyze diff`
+  afterwards exercised the explicit submit path too, with no error.
+- _Console._ `No console messages found` — an empty log, not a filtered one.
+- _Upload regression, measured at runtime._ The entire session is **three** requests,
+  all `GET`, all same-origin (document, JS, CSS). Loading a diff and analysing it added
+  **zero** requests. That is the runtime counterpart of the static sweep above, and it
+  is what the on-page claim "Analysis does not upload it. There is no backend, API, or
+  telemetry in the analysis path" is now backed by.
+
+## 14. Phase V — final consumer audit
+
+Re-measured on 2026-10-06 between `11:10Z` and `11:24Z`, i.e. after §12.4's final push,
+with credentials used only through the pre-authenticated `gh` and `npm` CLIs and never
+read or printed. `phaseV-remeasure.txt`, `phaseV-remeasure2.txt`,
+`phaseV-remeasure3.txt`, `phaseV-npm-fresh.txt`, `phaseV-action-reread.txt`.
+
+| Surface            | Fresh measurement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NPM                | `diffbeacon` version `0.1.0`, `dist-tags.latest` `0.1.0`, and `0.1.0` is the only version in `time` (created `2026-10-06T07:12:58.684Z`); no `deprecated` field. Tarball re-downloaded from the public registry: HTTP 200, 16 869 bytes, sha256 `ee8ab030…` — the Phase H digest.                                                                                                                                                                                                                                                                                                                         |
+| NPM, as a consumer | In a directory outside this repository, with an empty private cache: `npm install diffbeacon@0.1.0` exit 0, `resolved` the public registry URL, integrity `sha512-VoD/M96+nUA/…` = the qualified integrity, installed files `LICENSE, README.md, dist, package.json`, `isSymlink false`, and `dist/index.js` sha256 `0ceb2e1e…` = the qualified CLI bundle. `npx --yes diffbeacon@0.1.0 --version` → stdout exactly `0.1.0`, stderr 0 bytes.                                                                                                                                                              |
+| CLI review         | The 1 150-byte sample (sha256 `a9685b15…`, unchanged since Phase I) through the **installed** package: pretty 1 602 B, markdown 2 332 B, JSON 4 984 B, each exit 0 with empty stderr, two JSON runs byte-identical; JSON keys exactly the six contract keys, `schemaVersion` the string `"1"`, summary 4 files / +16 / −5 / 0 binary / 0 mode-only / 0 generated / 0 diagnostics, 3 evidence observations, order 1 `auth-access` → 2 `runtime` → 3 `dependencies`. Every figure equals §2's.                                                                                                              |
+| GITHUB             | `private: false`, `visibility: "public"`, `has_pages: true`; `refs/tags/v0.1.0` → object `5311ee05…` peeling to `5a50b520…`; the remote's whole tag inventory is those two lines; release `404432804` with `published_at 2026-10-06T07:28:16Z`, `draft false`, `prerelease false`, 0 assets, URL `…/releases/tag/v0.1.0`.                                                                                                                                                                                                                                                                                 |
+| ACTION             | `action.yml` fetched from `raw.githubusercontent.com` at ref `v0.1.0`: `using: node24`, `main: packages/action/dist/index.js`. The bundle at that ref: 49 418 bytes, sha256 `45660da7…` = the digest §5 qualified. The hosted external-consumer run `37430396143`, re-read today: `pull_request`, completed, **success**, job `attention` success, its steps including `Run Pavithran-R-A/DiffBeacon@5a50b52028ead78942ea3fc3bee93ba26e0a79cc`. That repository now answers `archived: true`, so the run is a fixed historical artifact rather than something that can be re-triggered or quietly edited. |
+| PAGES              | Root, JS and CSS each **200** today; the live site booted in a real browser, produced a full attention map from its example, with an empty console and zero outbound requests (§13).                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| SECURITY           | `GET /repos/…/private-vulnerability-reporting` → `{"enabled":true}`. `SECURITY.md` present, 4 106 bytes, blob `c03bb464…`. Both CI audits answer `found 0 vulnerabilities` at the final SHA; the single advisory that reddened the dev tree is resolved in-range and the release surface has no runtime dependencies at all.                                                                                                                                                                                                                                                                              |
+| CI                 | Run `37455508474` at `b371effbee85dd021830843e972bd8644d1dc550`: 5 jobs, every step `success`, with the log-read totals in §12.4.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| DOCS               | The publication-state guards are executed, not asserted here: `tests/stage10.docs-contract.test.ts` and the §7/§8.4 guards ran inside that green `npm run check` (1 012 passed), so the current-facing prose is held by tests that fail if the wording drifts from the live surfaces.                                                                                                                                                                                                                                                                                                                     |
+| GIT                | `git rev-parse HEAD` = `git rev-parse origin/main` = `git ls-remote origin refs/heads/main` = `b371eff…`; 0 unstaged, 0 untracked, 0 staged; `v0.1.0` peels to `5a50b520…` both locally and on the remote.                                                                                                                                                                                                                                                                                                                                                                                                |
+
+Pass 1 of this measurement had three gaps, kept rather than quietly re-run: the PVR read
+used the wrong endpoint path and answered 404; the release read printed
+`published: null` because the field is `published_at`; and the `npm view diffbeacon time`
+section printed nothing at all — its cause was not chased, because pass 2 obtained the
+values directly. Pass 2 (`phaseV-remeasure2.txt`) corrects all three. Separately,
+`GET /repos/…/dependabot/alerts` answers **403** `Dependabot alerts are disabled for
+this repository`, which is recorded as the absence of a second detector (§12.3), not as a
+check that passed.
+
+The 14 mandatory items:
+
+| #   | Item                                    | Where measured                                   |
+| --- | --------------------------------------- | ------------------------------------------------ |
+| 1   | npm package live                        | §1, §14 (registry `time`, single version)        |
+| 2   | fresh registry install works            | §2, §14 (`phaseV-npm-fresh.txt`)                 |
+| 3   | `npx` works                             | §2, §14 (stdout `0.1.0`, empty stderr)           |
+| 4   | real CLI review works                   | §2, §14 (three formats, six contract keys)       |
+| 5   | immutable `v0.1.0` tag exists           | §3, §14 (two tag refs, only)                     |
+| 6   | tag targets RELEASE_SHA                 | §3, §12.1, §14 (peels to `5a50b520…`)            |
+| 7   | GitHub Release exists                   | §4, §14 (id `404432804`, 0 assets)               |
+| 8   | Action intact at the release            | §5, §14 (bundle `45660da7…` from raw at the tag) |
+| 9   | external consumer Action smoke succeeds | §6, §14 (run `37430396143` success)              |
+| 10  | Pages remains live                      | §13, §14 (200/200/200 + real browser)            |
+| 11  | final CI green                          | §12.4 (run `37455508474`, 5/5)                   |
+| 12  | docs current                            | §7, §14 (guards executed in CI)                  |
+| 13  | git clean and synchronized              | §12.1, §12.4, §14                                |
+| 14  | no release-blocking security issue      | §12.3, §12.4, §14 (both audits 0; PVR enabled)   |
+
+One honesty note about ordering, since it cannot be escaped: the commit that carries
+these sentences is a `docs(release)` commit that necessarily comes **after** `b371eff`.
+Item 11 is therefore measured at `b371eff`, the last commit that changes anything CI
+executes. A commit cannot contain the observation of its own CI run, so the record commit's
+run is written to `stage14/phaseV-record-run.txt` and reported in the closing response
+instead. `docs/audits/**` is manifest-excluded and is a historical record directory to the
+contract tests (§11.8), so that commit moves no gated bytes.
 
 ## 15. Evidence index
 
@@ -789,6 +1044,23 @@ All Stage 14 evidence lives outside this repository, under
 | `phaseR-verify.txt`, `phaseR-check.txt`                                              | the two drivers run sequentially, both exit 0, with the 66-file / 1144-passed totals and the byte-identical rebuild                      |
 | `phaseR-verify-final.txt`, `phaseR-classify-browser.txt`, `phaseR-verify-final2.txt` | gate 10's `ERR_NETWORK_CHANGED` failure on the staged tree, the isolated 133-passed browser re-run, and gate 10b's exit 0                |
 | `phaseR-final-amendment.txt`                                                         | gate 11: the five gates covering the §11.6/§11.8 wording, the 158 → 160 recount, and the clean-worktree counts                           |
+| `phaseS-commit.txt`                                                                  | the 17-path commit, the normal push, the three SHA readings, the tag re-check, and the lefthook shim line                                |
+| `phaseT-ci-trigger.txt`, `phaseT-jobs.txt`, `phaseT-jobs.json`                       | the red run's job list and the proof `publish.yml` was never triggered                                                                   |
+| `phaseT-ci-log-failed.txt`                                                           | the full hosted log of run 37453802193, ANSI-stripped in `phaseT-audit-classify.txt` reads                                               |
+| `phaseT-audit-classify.txt`                                                          | the advisory read, the lockfile's `source-map-js` pin and its single reverse edge, and the two audits' split verdicts                    |
+| `phaseT-prior-green-audit.txt`                                                       | the same lockfile printing `found 0 vulnerabilities` in both audit steps at 2026-10-05T10:28Z                                            |
+| `phaseT-auditfix.txt`, `package-lock.before-audit-fix.json`                          | the red → repair → green sequence, the 3/3-line lockfile diff, the manifest governance, and the pre-repair lockfile itself               |
+| `phaseT-repair-commit.txt`                                                           | the failed identity attempt, commit `b371eff`, the push, the three SHA readings again, the tag pin, and the repeat-2 debris move         |
+| `phaseT-jobs-final.json`, `phaseT-jobs-final-steps.json`                             | the final run's five jobs with per-job, per-step conclusions                                                                             |
+| `phaseT-final-source-ubuntu22.log`, `phaseT-final-source-ubuntu22.clean.txt`         | the hosted Source log: audits, secret scan, the 1012-passed `npm run check`, the bundle-freshness step                                   |
+| `phaseT-final-browser-lane.clean.txt`                                                | the hosted browser lane: the engine each file named, and `133 passed (133)`                                                              |
+| `phaseU-pages.txt`, `phaseU-live-index.html`, `phaseU-live-headers.txt`              | the Pages resource, the served HTML and its headers, whether a redeploy was warranted, and the forbidden-surface sweeps                  |
+| `phaseU-index-DDHzPMhP.js`, `phaseU-index-9I3gIet4.css`, `phaseU-assets-concat.txt`  | the two served assets as fetched, and the concatenation the string sweeps ran over                                                       |
+| `phaseU-browser.txt`                                                                 | the real Chromium session: boot, sample analysis, empty console, and the three-request network list                                      |
+| `phaseV-remeasure.txt`, `phaseV-remeasure2.txt`, `phaseV-remeasure3.txt`             | pass 1 with its three gaps kept, pass 2 correcting them, pass 3 the tag/Pages/bundle reads                                               |
+| `phaseV-npm-fresh.txt`, `phaseV-consumer/`, `phaseV-rescan.tgz`                      | the isolated fresh install, `npx`, the three review formats, and the re-downloaded registry tarball                                      |
+| `phaseV-action-reread.txt`                                                           | the hosted consumer run, its job steps, and the archived state of the consumer repository                                                |
+| `phaseV-raw-action-bundle.js`                                                        | the Action bundle as served at ref `v0.1.0`, digested to `45660da7…`                                                                     |
 
 ## 16. What this stage did not establish
 
@@ -810,3 +1082,12 @@ All Stage 14 evidence lives outside this repository, under
   shown, accepted, or worked around, because terms acceptance is an interactive human decision.
 - **No independent human reviewed the release commit as an artifact.** Release-runbook step 1.8 stays
   recorded as an operator action that was not performed as a separate review.
+- **Advisory intake has a single detector.** Dependabot alerts answer HTTP 403 for this repository
+  (§12.3), so a newly-published advisory reaches the project only through `ci.yml`'s blocking audit
+  steps. That is what reddened `0d7f171` thirteen hours after the identical lockfile passed, and it
+  will happen again: a `main` that was green can go red with no commit touching its dependencies.
+- **The consumer smoke cannot be re-executed.** `diffbeacon-consumer-smoke-20261006` is archived
+  (§14), so run `37430396143` is now a fixed historical artifact rather than a repeatable probe. §6's
+  cleanup handoff — the owner deletes it, after reading the Job Summary panel — is still open.
+- **`docs/audits/stage14-v0.1.0-consumer-release.md` cannot record its own CI.** §14's ordering note is
+  the limit of what this file can say about the commit carrying it.
