@@ -125,7 +125,9 @@ function validate(value: unknown, schema: Schema, path = '$'): string[] {
   }
 
   if (Array.isArray(value) && schema.items)
-    value.forEach((item, index) => errors.push(...validate(item, schema.items as Schema, `${path}[${index}]`)));
+    value.forEach((item, index) =>
+      errors.push(...validate(item, schema.items as Schema, `${path}[${index}]`)),
+    );
 
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
     const object = value as Record<string, unknown>;
