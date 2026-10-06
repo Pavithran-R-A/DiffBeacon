@@ -237,3 +237,77 @@ describe('copy detection diffs', () => {
     });
   });
 });
+
+describe('contradictory status metadata', () => {
+  it('does not let one block claim both addition and deletion', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/value.ts b/value.ts',
+        'new file mode 100644',
+        'deleted file mode 100644',
+        '',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toContain('malformed-header');
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'value.ts',
+      newPath: 'value.ts',
+    });
+  });
+
+  it('does not combine rename and copy forms into an invented status', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/old.ts b/new.ts',
+        'rename from old.ts',
+        'rename to new.ts',
+        'copy from old.ts',
+        'copy to new.ts',
+        '',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toEqual(['unsupported-dialect', 'malformed-header']);
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'old.ts',
+      newPath: 'new.ts',
+    });
+  });
+
+  it('does not report a mode-only change when old and new modes are identical', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/value.ts b/value.ts',
+        'old mode 100644',
+        'new mode 100644',
+        '',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      modeOnly: false,
+      oldMode: null,
+      newMode: null,
+    });
+  });
+
+  it('does not combine new-file metadata with an old mode', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/value.ts b/value.ts',
+        'new file mode 100644',
+        'old mode 100755',
+        '',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'value.ts',
+      newPath: 'value.ts',
+    });
+  });
+});
+
