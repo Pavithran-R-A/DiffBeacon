@@ -400,6 +400,24 @@ describe('missing history and event failures', () => {
     expect(run.stderr).not.toMatch(/SyntaxError/);
   });
 
+  it.each([
+    ['null', 'null'],
+    ['array', '[]'],
+    ['string', '"event"'],
+    ['number', '1'],
+    ['boolean', 'true'],
+  ])('rejects a JSON %s as a non-object event payload', (_label, eventRaw) => {
+    const run = runAction({
+      eventName: 'pull_request',
+      eventRaw,
+      workspace: repository,
+    });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toMatch(/does not hold a JSON object for a workflow event/);
+    expect(run.stderr).not.toMatch(/base\.sha/);
+    expect(run.summary).toBeNull();
+  });
+
   it('rejects an event payload without pull_request metadata', () => {
     const run = runAction({
       eventName: 'pull_request',
