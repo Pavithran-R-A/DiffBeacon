@@ -180,6 +180,46 @@ describe('Binary files path pairs', () => {
     });
   });
 
+  it('decodes quoted binary paths and quoted /dev/null companions without a false diagnostic', () => {
+    const unicode = parseUnifiedDiff(
+      'diff --git "a/\\303\\251.bin" "b/\\303\\251.bin"\n' +
+        'Binary files "a/\\303\\251.bin" and "b/\\303\\251.bin" differ',
+    );
+    expect(codes(unicode)).toEqual([]);
+    expect(unicode.files[0]).toMatchObject({
+      oldPath: 'é.bin',
+      newPath: 'é.bin',
+      displayPath: 'é.bin',
+      binary: true,
+    });
+
+    const added = parseUnifiedDiff(
+      'diff --git "a/\\303\\251.bin" "b/\\303\\251.bin"\n' +
+        'new file mode 100644\n' +
+        'Binary files /dev/null and "b/\\303\\251.bin" differ',
+    );
+    expect(codes(added)).toEqual([]);
+    expect(added.files[0]).toMatchObject({
+      oldPath: null,
+      newPath: 'é.bin',
+      status: 'added',
+      binary: true,
+    });
+  });
+
+  it('does not treat trailing junk as part of a Binary files destination path', () => {
+    const parsed = parseUnifiedDiff(
+      'diff --git a/x.bin b/x.bin\nBinary files a/x.bin and b/x.bin not-differ',
+    );
+    expect(codes(parsed)).toEqual(['ambiguous-path']);
+    expect(parsed.files[0]).toMatchObject({
+      oldPath: 'x.bin',
+      newPath: 'x.bin',
+      displayPath: 'x.bin',
+      binary: true,
+    });
+  });
+
   it('does not invent a path from an unprovable binary pair', () => {
     const parsed = parseUnifiedDiff(withBinaryPair('a/x.bin and y.bin'));
     expect(codes(parsed)).toEqual(['ambiguous-path']);
