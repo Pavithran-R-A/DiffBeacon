@@ -193,6 +193,11 @@ function parseHunkHeader(line: string): { oldCount: number; newCount: number } |
   };
 }
 
+function gitMode(value: string): string | null {
+  const mode = value.trim();
+  return /^[0-7]{6}$/.test(mode) ? mode : null;
+}
+
 function inferStatus(file: {
   oldPath: string | null;
   newPath: string | null;
@@ -487,17 +492,50 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
     }
 
     if (line.startsWith('new file mode ')) {
-      current.isNewFile = true;
-      current.oldMode = null;
-      current.newMode = line.slice('new file mode '.length).trim();
+      const mode = gitMode(line.slice('new file mode '.length));
+      if (mode === null)
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'new file mode must be a six-digit octal Git mode.',
+          line: lineNumber,
+        });
+      else {
+        current.isNewFile = true;
+        current.oldMode = null;
+        current.newMode = mode;
+      }
     } else if (line.startsWith('deleted file mode ')) {
-      current.isDeletedFile = true;
-      current.oldMode = line.slice('deleted file mode '.length).trim();
-      current.newMode = null;
-    } else if (line.startsWith('old mode '))
-      current.oldMode = line.slice('old mode '.length).trim();
-    else if (line.startsWith('new mode ')) current.newMode = line.slice('new mode '.length).trim();
-    else if (line.startsWith('similarity index ')) {
+      const mode = gitMode(line.slice('deleted file mode '.length));
+      if (mode === null)
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'deleted file mode must be a six-digit octal Git mode.',
+          line: lineNumber,
+        });
+      else {
+        current.isDeletedFile = true;
+        current.oldMode = mode;
+        current.newMode = null;
+      }
+    } else if (line.startsWith('old mode ')) {
+      const mode = gitMode(line.slice('old mode '.length));
+      if (mode === null)
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'old mode must be a six-digit octal Git mode.',
+          line: lineNumber,
+        });
+      else current.oldMode = mode;
+    } else if (line.startsWith('new mode ')) {
+      const mode = gitMode(line.slice('new mode '.length));
+      if (mode === null)
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'new mode must be a six-digit octal Git mode.',
+          line: lineNumber,
+        });
+      else current.newMode = mode;
+    } else if (line.startsWith('similarity index ')) {
       const raw = line.slice('similarity index '.length).trim();
       const match = /^(\d+)%$/.exec(raw);
       const value = match === null ? null : Number(match[1]);
