@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -96,6 +96,19 @@ describe('Stage 9 secret scan', () => {
     }
   });
 
+  it('does not exempt NUL-bearing files from credential detection', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'diffbeacon-scan-binary-'));
+    try {
+      writeFileSync(
+        path.join(dir, 'binary-ish.dat'),
+        Buffer.concat([Buffer.from([0, 1, 2, 0]), Buffer.from(CANARIES['aws-access-key-id'])]),
+      );
+      expect(scanDirectory(dir).map((finding) => finding.rule)).toEqual(['aws-access-key-id']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  });
+
   it('is a repository gate, not an optional script', () => {
     const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as {
       scripts: Record<string, string>;
@@ -108,3 +121,23 @@ describe('Stage 9 secret scan', () => {
     expect(smoke).toContain('scanDirectory');
   });
 });
+
+describe.runIf(process.platform !== 'win32')('secret-scan symbolic-link boundary', () => {
+  it('scans a link as repository data instead of following it outside the scan root', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'diffbeacon-scan-link-'));
+    const dir = path.join(root, 'scan');
+    try {
+      mkdirSync(dir);
+      const outside = path.join(root, 'outside.txt');
+      writeFileSync(outside, CANARIES['aws-access-key-id']);
+      symlinkSync('../outside.txt', path.join(dir, 'link.txt'));
+
+      expect(scanDirectory(dir)).toEqual([]);
+      writeFileSync(outside, CANARIES['github-token']);
+      expect(scanDirectory(dir)).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  });
+});
+
