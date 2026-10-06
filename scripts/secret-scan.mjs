@@ -8,7 +8,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const MAX_BYTES = 4 * 1024 * 1024;
+export const MAX_SCANNABLE_BYTES = 4 * 1024 * 1024;
 
 export const SECRET_RULES = [
   {
@@ -81,11 +81,17 @@ export function scanText(file, content) {
 function readIfScannable(root, rel) {
   const abs = path.join(root, rel);
   try {
-    if (!statSync(abs).isFile()) return undefined;
+    const stat = statSync(abs);
+    if (!stat.isFile()) return undefined;
+    if (stat.size > MAX_SCANNABLE_BYTES)
+      throw new Error(
+        `Secret scan refuses ${rel}: ${stat.size} bytes exceeds the ${MAX_SCANNABLE_BYTES}-byte scan bound.`,
+      );
     const content = readFileSync(abs, 'utf8');
     if (content.includes('\0')) return undefined;
     return content;
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Secret scan refuses ')) throw error;
     return undefined;
   }
 }
@@ -100,7 +106,7 @@ function walk(dir, base, out) {
     const abs = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name !== 'node_modules' && entry.name !== '.git') walk(abs, base, out);
-    } else if (entry.isFile() && statSync(abs).size <= MAX_BYTES) {
+    } else if (entry.isFile()) {
       out.push(path.relative(base, abs).split(path.sep).join('/'));
     }
   }
@@ -116,7 +122,6 @@ export function scanRepositoryFiles(root = process.cwd()) {
     if (rel.includes('/node_modules/')) continue;
     const content = readIfScannable(root, rel);
     if (content === undefined) continue;
-    if (Buffer.byteLength(content) > MAX_BYTES) continue;
     files.push({ file: rel, content });
   }
   return files;
