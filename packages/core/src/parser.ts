@@ -155,6 +155,11 @@ function decodeWholeQuotedToken(value: string): string | null {
   return null;
 }
 
+function metadataPath(value: string): string | null {
+  if (value === '') return null;
+  return value.startsWith('"') ? decodeWholeQuotedToken(value) : value;
+}
+
 function binarySide(value: string, prefix: 'a/' | 'b/'): { valid: boolean; path: string | null } {
   const decoded = value.startsWith('"') ? decodeWholeQuotedToken(value) : value;
   if (decoded === null) return { valid: false, path: null };
@@ -322,10 +327,14 @@ type CurrentFile = {
   hunks: Hunk[];
   renameFrom: string | null;
   renameTo: string | null;
+  renameFromLine: number | null;
+  renameToLine: number | null;
   isNewFile: boolean;
   isDeletedFile: boolean;
   isCopy: boolean;
+  copyFromSeen: boolean;
   copyTo: string | null;
+  copyLine: number | null;
   activeHunk: HunkAccount | null;
 };
 
@@ -425,6 +434,39 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
   const flush = () => {
     if (current !== null) {
       closeHunk(current, diagnostics);
+
+      const hasRenameFrom = current.renameFrom !== null;
+      const hasRenameTo = current.renameTo !== null;
+      if (hasRenameFrom !== hasRenameTo) {
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'Rename metadata must contain both rename from and rename to paths.',
+          line: current.renameFromLine ?? current.renameToLine ?? 1,
+        });
+        current.renameFrom = null;
+        current.renameTo = null;
+      } else if (
+        hasRenameFrom &&
+        hasRenameTo &&
+        ((current.oldPath !== null && current.oldPath !== current.renameFrom) ||
+          (current.newPath !== null && current.newPath !== current.renameTo))
+      ) {
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'Rename metadata disagrees with the paths named by the file header.',
+          line: current.renameFromLine ?? current.renameToLine ?? 1,
+        });
+        current.renameFrom = null;
+        current.renameTo = null;
+      }
+
+      if (current.isCopy && (!current.copyFromSeen || current.copyTo === null)) {
+        // Copy detection is unsupported either way, but incomplete copy metadata must
+        // not change a file's status or destination in the report.
+        current.isCopy = false;
+        current.copyTo = null;
+      }
+
       files.push(finalize(current));
     }
     current = null;
@@ -447,10 +489,14 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         hunks: [],
         renameFrom: null,
         renameTo: null,
+        renameFromLine: null,
+        renameToLine: null,
         isNewFile: false,
         isDeletedFile: false,
         isCopy: false,
+        copyFromSeen: false,
         copyTo: null,
+        copyLine: null,
         activeHunk: null,
       };
       if (resolution.reason === 'ambiguous')
@@ -589,24 +635,62 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
           line: lineNumber,
         });
       } else current.similarity = value;
-    } else if (line.startsWith('rename from '))
-      current.renameFrom = decodeGitQuoted(line.slice('rename from '.length));
-    else if (line.startsWith('rename to '))
-      current.renameTo = decodeGitQuoted(line.slice('rename to '.length));
-    else if (line.startsWith('copy from ') || line.startsWith('copy to ')) {
+    } else if (line.startsWith('rename from ')) {
+      const path = metadataPath(line.slice('rename from '.length));
+      if (path === null)
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'rename from must name one complete Git path.',
+          line: lineNumber,
+        });
+      else {
+        current.renameFrom = path;
+        current.renameFromLine = lineNumber;
+      }
+    } else if (line.startsWith('rename to ')) {
+      const path = metadataPath(line.slice('rename to '.length));
+      if (path === null)
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'rename to must name one complete Git path.',
+          line: lineNumber,
+        });
+      else {
+        current.renameTo = path;
+        current.renameToLine = lineNumber;
+      }
+    } else if (line.startsWith('copy from ') || line.startsWith('copy to ')) {
       // Git keeps the source file for a `C` entry, so a copy is not a rename, and
       // the supported vector never asks Git for copy detection. Record the
       // destination and name the dialect instead of relabelling it `renamed`.
       if (!current.isCopy) {
         current.isCopy = true;
+        current.copyLine = lineNumber;
         diagnostics.push({
           code: 'unsupported-dialect',
           message: 'Copy detection is outside the supported patch vector.',
           line: lineNumber,
         });
       }
-      if (line.startsWith('copy to '))
-        current.copyTo = decodeGitQuoted(line.slice('copy to '.length));
+      if (line.startsWith('copy from ')) {
+        const path = metadataPath(line.slice('copy from '.length));
+        if (path === null)
+          diagnostics.push({
+            code: 'malformed-header',
+            message: 'copy from must name one complete Git path.',
+            line: lineNumber,
+          });
+        else current.copyFromSeen = true;
+      } else {
+        const path = metadataPath(line.slice('copy to '.length));
+        if (path === null)
+          diagnostics.push({
+            code: 'malformed-header',
+            message: 'copy to must name one complete Git path.',
+            line: lineNumber,
+          });
+        else current.copyTo = path;
+      }
     } else if (line.startsWith('Binary files ')) {
       current.binary = true;
       const resolution = parseBinaryPair(line.slice('Binary files '.length));
