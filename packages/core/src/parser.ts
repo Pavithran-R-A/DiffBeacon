@@ -667,7 +667,8 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       if (mode === null)
         diagnostics.push({
           code: 'malformed-header',
-          message: 'new file mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.',
+          message:
+            'new file mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.',
           line: lineNumber,
         });
       else {
@@ -681,7 +682,8 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       if (mode === null)
         diagnostics.push({
           code: 'malformed-header',
-          message: 'deleted file mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.',
+          message:
+            'deleted file mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.',
           line: lineNumber,
         });
       else {
@@ -695,7 +697,8 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       if (mode === null)
         diagnostics.push({
           code: 'malformed-header',
-          message: 'old mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.',
+          message:
+            'old mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.',
           line: lineNumber,
         });
       else {
@@ -707,7 +710,8 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       if (mode === null)
         diagnostics.push({
           code: 'malformed-header',
-          message: 'new mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.',
+          message:
+            'new mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.',
           line: lineNumber,
         });
       else {

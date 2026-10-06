@@ -194,7 +194,7 @@ function parseHunkHeader(line) {
 }
 function gitMode(value) {
   const mode = value.trim();
-  return /^[0-7]{6}$/.test(mode) ? mode : null;
+  return (/* @__PURE__ */ new Set(["100644", "100755", "120000", "160000"])).has(mode) ? mode : null;
 }
 function inferStatus(file) {
   if (file.isNewFile) return "added";
@@ -329,6 +329,36 @@ function parseUnifiedDiff(input) {
         current.copyFrom = null;
         current.copyTo = null;
       }
+      const specialKinds = [
+        current.isNewFile,
+        current.isDeletedFile,
+        current.isCopy,
+        current.renameFrom !== null && current.renameTo !== null
+      ].filter(Boolean).length;
+      const incompatibleModeMetadata = current.isNewFile && current.oldMode !== null || current.isDeletedFile && current.newMode !== null;
+      if (specialKinds > 1 || incompatibleModeMetadata) {
+        diagnostics.push({
+          code: "malformed-header",
+          message: "File-status metadata is contradictory; add, delete, rename, copy, and mode-change forms cannot be combined this way.",
+          line: current.renameFromLine ?? current.renameToLine ?? current.copyLine ?? current.modeLine ?? 1
+        });
+        current.isNewFile = false;
+        current.isDeletedFile = false;
+        current.isCopy = false;
+        current.renameFrom = null;
+        current.renameTo = null;
+        current.copyFrom = null;
+        current.copyTo = null;
+      }
+      if (current.oldMode !== null && current.newMode !== null && current.oldMode === current.newMode) {
+        diagnostics.push({
+          code: "malformed-header",
+          message: "old mode and new mode are identical, so they do not describe a mode change.",
+          line: current.modeLine ?? 1
+        });
+        current.oldMode = null;
+        current.newMode = null;
+      }
       files.push(finalize(current));
     }
     current = null;
@@ -345,6 +375,7 @@ function parseUnifiedDiff(input) {
         newPath: resolution.pair?.newPath ?? null,
         oldMode: null,
         newMode: null,
+        modeLine: null,
         similarity: null,
         binary: false,
         hunks: [],
@@ -432,45 +463,53 @@ function parseUnifiedDiff(input) {
       if (mode === null)
         diagnostics.push({
           code: "malformed-header",
-          message: "new file mode must be a six-digit octal Git mode.",
+          message: "new file mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.",
           line: lineNumber
         });
       else {
         current.isNewFile = true;
         current.oldMode = null;
         current.newMode = mode;
+        current.modeLine = lineNumber;
       }
     } else if (line.startsWith("deleted file mode ")) {
       const mode = gitMode(line.slice("deleted file mode ".length));
       if (mode === null)
         diagnostics.push({
           code: "malformed-header",
-          message: "deleted file mode must be a six-digit octal Git mode.",
+          message: "deleted file mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.",
           line: lineNumber
         });
       else {
         current.isDeletedFile = true;
         current.oldMode = mode;
         current.newMode = null;
+        current.modeLine = lineNumber;
       }
     } else if (line.startsWith("old mode ")) {
       const mode = gitMode(line.slice("old mode ".length));
       if (mode === null)
         diagnostics.push({
           code: "malformed-header",
-          message: "old mode must be a six-digit octal Git mode.",
+          message: "old mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.",
           line: lineNumber
         });
-      else current.oldMode = mode;
+      else {
+        current.oldMode = mode;
+        current.modeLine = lineNumber;
+      }
     } else if (line.startsWith("new mode ")) {
       const mode = gitMode(line.slice("new mode ".length));
       if (mode === null)
         diagnostics.push({
           code: "malformed-header",
-          message: "new mode must be a six-digit octal Git mode.",
+          message: "new mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.",
           line: lineNumber
         });
-      else current.newMode = mode;
+      else {
+        current.newMode = mode;
+        current.modeLine = lineNumber;
+      }
     } else if (line.startsWith("similarity index ")) {
       const raw = line.slice("similarity index ".length).trim();
       const match = /^(\d+)%$/.exec(raw);
@@ -1273,6 +1312,11 @@ function gitSmall(args, cwd, env) {
     maxBuffer: 256 * 1024
   });
 }
+var MAX_GIT_STDERR_CHARS = 64 * 1024;
+function boundedGitStderrChunk(chunk, capturedChars) {
+  const remaining = MAX_GIT_STDERR_CHARS - capturedChars;
+  return remaining > 0 ? chunk.slice(0, remaining) : "";
+}
 function repositoryRoot(cwd, env) {
   try {
     return gitSmall(["rev-parse", "--show-toplevel"], cwd, env).trim();
@@ -1338,6 +1382,7 @@ async function collectGitDiffAsync(range, cwd = process2.cwd(), options = {}) {
   });
   const stdout = [];
   const stderr = [];
+  let stderrChars = 0;
   let bytes = 0;
   let exceeded = false;
   child.stdout.setEncoding("utf8");
@@ -1353,7 +1398,10 @@ async function collectGitDiffAsync(range, cwd = process2.cwd(), options = {}) {
     stdout.push(chunk);
   });
   child.stderr.on("data", (chunk) => {
-    if (stderr.join("").length < 64 * 1024) stderr.push(chunk);
+    const bounded = boundedGitStderrChunk(chunk, stderrChars);
+    if (bounded === "") return;
+    stderr.push(bounded);
+    stderrChars += bounded.length;
   });
   return await new Promise((resolve2, reject) => {
     child.once("error", () => {

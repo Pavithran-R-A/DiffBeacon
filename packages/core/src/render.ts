@@ -93,7 +93,8 @@ function wrap(text: string, width: number): string[] {
  * preventing C1 terminal controls and Unicode bidi/line-format controls from acting on a reader who
  * prints the JSON directly. JSON.parse restores the exact original strings.
  */
-const JSON_DISPLAY_CONTROL = /[\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
+const JSON_DISPLAY_CONTROL =
+  /[\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 
 function jsonUnicodeEscape(character: string): string {
   return `\\u${character.codePointAt(0)?.toString(16).padStart(4, '0') ?? 'fffd'}`;
