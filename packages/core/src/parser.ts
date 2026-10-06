@@ -260,7 +260,11 @@ function parseHunkHeader(line: string): { oldCount: number; newCount: number } |
 
 function gitMode(value: string): string | null {
   const mode = value.trim();
-  return /^[0-7]{6}$/.test(mode) ? mode : null;
+  // A patch describes entries, not directories. Git's file-like tree entries are
+  // ordinary blobs (100644/100755), symbolic links (120000), and gitlinks
+  // (160000). Accepting any six octal digits would let hostile pasted metadata
+  // invent a mode Git itself cannot store for a changed path.
+  return new Set(['100644', '100755', '120000', '160000']).has(mode) ? mode : null;
 }
 
 function inferStatus(file: {
