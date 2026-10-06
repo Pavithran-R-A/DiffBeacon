@@ -23,6 +23,7 @@ import {
 import {
   BIDI_CONTROL_PATHS,
   CONTROL_CHAR_PATHS,
+  diffForPath,
   diffForPaths,
   HOSTILE_PATHS,
 } from './stage8.hostile-corpus.js';
@@ -179,6 +180,20 @@ describeBrowser('the hostile corpus in a real Chromium', () => {
     const { page, errors, dialogs } = await reportedPage(corpus);
     expect(errors).toEqual([]);
     expect(dialogs).toEqual([]);
+    await page.context().close();
+  });
+
+  it('renders repeated blocks for the same path without duplicate-key console errors', async () => {
+    const duplicate = `${diffForPath('src/app.ts')}${diffForPath('src/app.ts')}`;
+    const { page, errors } = await reportedPage(duplicate);
+    expect(analyzeDiff(duplicate).files.map((file) => file.displayPath)).toEqual([
+      'src/app.ts',
+      'src/app.ts',
+    ]);
+    expect(errors).toEqual([]);
+    expect((await paintedCodes(page)).filter((value) => value === 'src/app.ts').length).toBeGreaterThan(
+      1,
+    );
     await page.context().close();
   });
 
