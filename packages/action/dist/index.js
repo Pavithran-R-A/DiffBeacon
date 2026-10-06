@@ -26,9 +26,12 @@ function decodeGitQuoted(value) {
     }
     const octal = inner.slice(index + 1, index + 4);
     if (/^[0-7]{3}$/.test(octal)) {
-      bytes.push(Number.parseInt(octal, 8));
-      index += 3;
-      continue;
+      const byte = Number.parseInt(octal, 8);
+      if (byte <= 255) {
+        bytes.push(byte);
+        index += 3;
+        continue;
+      }
     }
     const next = inner[index + 1] ?? "";
     const escapes = {
@@ -88,8 +91,7 @@ function parseQuotedPair(value) {
   if (tokens.length !== 2 || cursor !== trimmed.length) return null;
   const oldToken = decodeGitQuoted(tokens[0]);
   const newToken = decodeGitQuoted(tokens[1]);
-  if (!(oldToken === NULL_PATH || oldToken.startsWith("a/")) || !(newToken === NULL_PATH || newToken.startsWith("b/")))
-    return null;
+  if (!oldToken.startsWith("a/") || !newToken.startsWith("b/")) return null;
   const oldPath = stripDiffPrefix(tokens[0]);
   const newPath = stripDiffPrefix(tokens[1]);
   return oldPath === "" || newPath === "" ? null : [oldPath, newPath];
@@ -102,7 +104,10 @@ function parseGitPair(value) {
       reason: "proven",
       pair: { oldPath: quoted[0], newPath: quoted[1] }
     };
-  return resolvePair(pair, " b/", 2);
+  const resolution = resolvePair(pair, " b/", 2);
+  if (resolution.pair !== null && (resolution.pair.oldPath === null || resolution.pair.newPath === null))
+    return { reason: "unprovable", pair: null };
+  return resolution;
 }
 function parseBinaryPair(value) {
   return resolvePair(value.replace(/ differ$/, ""), " and ", 0);
@@ -141,14 +146,17 @@ function parseHunkHeader(line) {
     newCount: Number.parseInt(match[4] ?? "1", 10)
   };
 }
+function gitMode(value) {
+  const mode = value.trim();
+  return /^[0-7]{6}$/.test(mode) ? mode : null;
+}
 function inferStatus(file) {
   if (file.isNewFile) return "added";
   if (file.isDeletedFile) return "deleted";
   if (file.isCopy) return "added";
   if (file.oldPath === null && file.newPath !== null) return "added";
   if (file.newPath === null && file.oldPath !== null) return "deleted";
-  if (file.renameFrom !== null || file.renameTo !== null || file.similarity !== null)
-    return "renamed";
+  if (file.renameFrom !== null || file.renameTo !== null) return "renamed";
   if (file.hunks.length === 0 && !file.binary && file.oldMode !== null && file.newMode !== null)
     return "mode-only";
   return "modified";
@@ -341,17 +349,50 @@ function parseUnifiedDiff(input) {
       continue;
     }
     if (line.startsWith("new file mode ")) {
-      current.isNewFile = true;
-      current.oldMode = null;
-      current.newMode = line.slice("new file mode ".length).trim();
+      const mode = gitMode(line.slice("new file mode ".length));
+      if (mode === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "new file mode must be a six-digit octal Git mode.",
+          line: lineNumber
+        });
+      else {
+        current.isNewFile = true;
+        current.oldMode = null;
+        current.newMode = mode;
+      }
     } else if (line.startsWith("deleted file mode ")) {
-      current.isDeletedFile = true;
-      current.oldMode = line.slice("deleted file mode ".length).trim();
-      current.newMode = null;
-    } else if (line.startsWith("old mode "))
-      current.oldMode = line.slice("old mode ".length).trim();
-    else if (line.startsWith("new mode ")) current.newMode = line.slice("new mode ".length).trim();
-    else if (line.startsWith("similarity index ")) {
+      const mode = gitMode(line.slice("deleted file mode ".length));
+      if (mode === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "deleted file mode must be a six-digit octal Git mode.",
+          line: lineNumber
+        });
+      else {
+        current.isDeletedFile = true;
+        current.oldMode = mode;
+        current.newMode = null;
+      }
+    } else if (line.startsWith("old mode ")) {
+      const mode = gitMode(line.slice("old mode ".length));
+      if (mode === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "old mode must be a six-digit octal Git mode.",
+          line: lineNumber
+        });
+      else current.oldMode = mode;
+    } else if (line.startsWith("new mode ")) {
+      const mode = gitMode(line.slice("new mode ".length));
+      if (mode === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "new mode must be a six-digit octal Git mode.",
+          line: lineNumber
+        });
+      else current.newMode = mode;
+    } else if (line.startsWith("similarity index ")) {
       const raw = line.slice("similarity index ".length).trim();
       const match = /^(\d+)%$/.exec(raw);
       const value = match === null ? null : Number(match[1]);
@@ -1282,9 +1323,7 @@ function readEvent(eventPath) {
     throw new Error("GITHUB_EVENT_PATH is not valid JSON for a workflow event.");
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-    throw new Error(
-      "GITHUB_EVENT_PATH does not hold a JSON object for a workflow event: DiffBeacon reads pull_request.base.sha and pull_request.head.sha from the object the runner wrote."
-    );
+    throw new Error("GITHUB_EVENT_PATH does not hold a JSON object for a workflow event.");
   return parsed;
 }
 function summaryBytesBefore(summaryPath) {
