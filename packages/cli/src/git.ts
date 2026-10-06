@@ -87,6 +87,14 @@ export interface GitProcessOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+const MAX_GIT_STDERR_CHARS = 64 * 1024;
+
+/** Keep diagnostic capture bounded even when one stderr event is larger than the whole allowance. */
+export function boundedGitStderrChunk(chunk: string, capturedChars: number): string {
+  const remaining = MAX_GIT_STDERR_CHARS - capturedChars;
+  return remaining > 0 ? chunk.slice(0, remaining) : '';
+}
+
 function repositoryRoot(cwd: string, env?: NodeJS.ProcessEnv): string {
   try {
     return gitSmall(['rev-parse', '--show-toplevel'], cwd, env).trim();
@@ -184,9 +192,8 @@ export async function collectGitDiffAsync(
     stdout.push(chunk);
   });
   child.stderr.on('data', (chunk: string) => {
-    const remaining = 64 * 1024 - stderrChars;
-    if (remaining <= 0) return;
-    const bounded = chunk.slice(0, remaining);
+    const bounded = boundedGitStderrChunk(chunk, stderrChars);
+    if (bounded === '') return;
     stderr.push(bounded);
     stderrChars += bounded.length;
   });
