@@ -181,6 +181,41 @@ describe('copy detection diffs', () => {
     });
   });
 
+  it('does not let incomplete copy metadata invent an added destination', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/source.txt b/destination.txt',
+        'copy to invented.txt',
+        '',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toEqual(['unsupported-dialect', 'malformed-header']);
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'source.txt',
+      newPath: 'destination.txt',
+      displayPath: 'destination.txt',
+    });
+  });
+
+  it('does not let contradictory copy metadata replace proven header paths', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/source.txt b/destination.txt',
+        'copy from other-source.txt',
+        'copy to invented.txt',
+        '',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toEqual(['unsupported-dialect', 'malformed-header']);
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'source.txt',
+      newPath: 'destination.txt',
+      displayPath: 'destination.txt',
+    });
+  });
+
   it('keeps rename metadata working as the supported same-path dialect', () => {
     const parsed = parseUnifiedDiff(
       [
