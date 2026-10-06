@@ -205,8 +205,8 @@ function AttentionRow({ item, index }: { item: SurfaceObservation; index: number
         </div>
         <p>{item.description}</p>
         <div className="file-pile">
-          {item.files.slice(0, 3).map((file) => (
-            <code key={file}>{paintedName(file)}</code>
+          {item.files.slice(0, 3).map((file, fileIndex) => (
+            <code key={`${fileIndex}:${file}`}>{paintedName(file)}</code>
           ))}
           {item.files.length > 3 && <span>+{item.files.length - 3} more</span>}
         </div>
@@ -284,8 +284,8 @@ function EvidenceLedger({ report }: { report: ReviewAttentionMap }) {
                 <h3>{item.title}</h3>
                 <p>{item.message}</p>
                 <div className="ledger-item__paths">
-                  {item.relatedFiles.slice(0, 2).map((file) => (
-                    <code key={file}>{paintedName(file)}</code>
+                  {item.relatedFiles.slice(0, 2).map((file, fileIndex) => (
+                    <code key={`${fileIndex}:${file}`}>{paintedName(file)}</code>
                   ))}
                 </div>
               </div>
