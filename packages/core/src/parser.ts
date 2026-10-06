@@ -160,6 +160,19 @@ function metadataPath(value: string): string | null {
   return value.startsWith('"') ? decodeWholeQuotedToken(value) : value;
 }
 
+function fileHeaderPath(
+  value: string,
+  prefix: 'a/' | 'b/',
+): { valid: boolean; path: string | null } {
+  const token = value.split('\t', 1)[0] ?? value;
+  const decoded = token.startsWith('"') ? decodeWholeQuotedToken(token) : token;
+  if (decoded === null || decoded === '') return { valid: false, path: null };
+  if (decoded === NULL_PATH) return { valid: true, path: null };
+  if (!decoded.startsWith(prefix) || decoded.length === prefix.length)
+    return { valid: false, path: null };
+  return { valid: true, path: decoded.slice(prefix.length) };
+}
+
 function binarySide(value: string, prefix: 'a/' | 'b/'): { valid: boolean; path: string | null } {
   const decoded = value.startsWith('"') ? decodeWholeQuotedToken(value) : value;
   if (decoded === null) return { valid: false, path: null };
@@ -334,7 +347,6 @@ type CurrentFile = {
   isCopy: boolean;
   copyFromSeen: boolean;
   copyTo: string | null;
-  copyLine: number | null;
   activeHunk: HunkAccount | null;
 };
 
@@ -496,7 +508,6 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         isCopy: false,
         copyFromSeen: false,
         copyTo: null,
-        copyLine: null,
         activeHunk: null,
       };
       if (resolution.reason === 'ambiguous')
@@ -665,7 +676,6 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       // destination and name the dialect instead of relabelling it `renamed`.
       if (!current.isCopy) {
         current.isCopy = true;
-        current.copyLine = lineNumber;
         diagnostics.push({
           code: 'unsupported-dialect',
           message: 'Copy detection is outside the supported patch vector.',
@@ -705,17 +715,16 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         });
     } else if (line === 'GIT binary patch') current.binary = true;
     else if (line.startsWith('--- ') || line.startsWith('+++ ')) {
-      const path = stripDiffPrefix(line.slice(4));
-      // An empty side names no file; keep any path the header already proved and
-      // say that this line could not be read.
-      if (path === '')
+      const oldSide = line.startsWith('--- ');
+      const resolved = fileHeaderPath(line.slice(4), oldSide ? 'a/' : 'b/');
+      if (!resolved.valid)
         diagnostics.push({
           code: 'malformed-header',
-          message: 'File header named no path.',
+          message: `${oldSide ? '---' : '+++'} file header must name /dev/null or a complete ${oldSide ? 'a/' : 'b/'} Git path.`,
           line: lineNumber,
         });
-      else if (line.startsWith('--- ')) current.oldPath = path;
-      else current.newPath = path;
+      else if (oldSide) current.oldPath = resolved.path;
+      else current.newPath = resolved.path;
     } else if (line.startsWith('@@ ')) {
       const counts = parseHunkHeader(line);
       if (counts === null)
