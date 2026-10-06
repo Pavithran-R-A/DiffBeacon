@@ -1,9 +1,9 @@
 # DiffBeacon Architecture
 
-DiffBeacon is organized around one pure analysis engine and three adapters. The engine receives a unified diff string and returns a versioned Review Attention Map. Adapters supply or display that map in their own environment.
+DiffBeacon is organized around one pure analysis engine and three adapters. The engine receives a Git unified-diff string and returns a versioned Review Attention Map. Adapters supply or display that map in their own environment.
 
 ```text
-unified diff text
+Git unified-diff text
       │
       ▼
 packages/core/parser.ts
