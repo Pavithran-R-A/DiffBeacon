@@ -78,6 +78,62 @@ describe('diff --git path pairs', () => {
     expect(parsed.files[0]).toMatchObject({ oldPath: 'one.txt', newPath: 'three.txt' });
   });
 
+  it('refuses incomplete rename metadata instead of inventing a renamed file', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/a.ts b/b.ts',
+        'similarity index 95%',
+        'rename from a.ts',
+        '',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toContain('malformed-header');
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'a.ts',
+      newPath: 'b.ts',
+      similarity: 95,
+    });
+  });
+
+  it('refuses rename metadata that contradicts an already-proven header', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/a.ts b/b.ts',
+        'similarity index 95%',
+        'rename from other.ts',
+        'rename to b.ts',
+        '',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'a.ts',
+      newPath: 'b.ts',
+      similarity: 95,
+    });
+  });
+
+  it('rejects malformed quoting in rename metadata', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/a.ts b/b.ts',
+        'rename from "a.ts',
+        'rename to b.ts',
+        '',
+      ].join('\n'),
+    );
+    expect(codes(parsed).filter((code) => code === 'malformed-header').length).toBeGreaterThanOrEqual(
+      1,
+    );
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'a.ts',
+      newPath: 'b.ts',
+    });
+  });
+
   it('decodes a quoted pair that carries spaces', () => {
     const parsed = parseUnifiedDiff('diff --git "a/two words.ts" "b/two words.ts"');
     expect(codes(parsed)).toEqual([]);
