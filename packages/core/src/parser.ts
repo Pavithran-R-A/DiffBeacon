@@ -25,8 +25,10 @@ type PairResolution = {
   pair: PathPair | null;
 };
 
-function decodeGitQuoted(value: string): string {
-  if (!(value.startsWith('"') && value.endsWith('"'))) return value;
+type DecodedGitQuoted = { value: string; validUtf8: boolean };
+
+function decodeGitQuotedResult(value: string): DecodedGitQuoted {
+  if (!(value.startsWith('"') && value.endsWith('"'))) return { value, validUtf8: true };
   const inner = value.slice(1, -1);
   const bytes: number[] = [];
   const encoder = new TextEncoder();
@@ -66,7 +68,16 @@ function decodeGitQuoted(value: string): string {
     }
     bytes.push(...encoder.encode('\\'));
   }
-  return new TextDecoder().decode(Uint8Array.from(bytes));
+  const encoded = Uint8Array.from(bytes);
+  try {
+    return { value: new TextDecoder('utf-8', { fatal: true }).decode(encoded), validUtf8: true };
+  } catch {
+    return { value: new TextDecoder().decode(encoded), validUtf8: false };
+  }
+}
+
+function decodeGitQuoted(value: string): string {
+  return decodeGitQuotedResult(value).value;
 }
 
 export function decodeGitPath(value: string): string {
@@ -94,8 +105,11 @@ function quotedTokenEnd(value: string, start = 0): number | null {
 }
 
 function pairFromTokens(oldRaw: string, newRaw: string): [string | null, string | null] | null {
-  const oldToken = decodeGitQuoted(oldRaw);
-  const newToken = decodeGitQuoted(newRaw);
+  const oldDecoded = decodeGitQuotedResult(oldRaw);
+  const newDecoded = decodeGitQuotedResult(newRaw);
+  if (!oldDecoded.validUtf8 || !newDecoded.validUtf8) return null;
+  const oldToken = oldDecoded.value;
+  const newToken = newDecoded.value;
   // The extended ---/+++ and Binary-files lines may use /dev/null, but Git's
   // leading diff --git header never does, even for an add/delete.
   if (!oldToken.startsWith('a/') || !newToken.startsWith('b/')) return null;
@@ -157,7 +171,9 @@ function parseGitPair(value: string): PairResolution {
 }
 
 function decodeWholeQuotedToken(value: string): string | null {
-  return quotedTokenEnd(value) === value.length ? decodeGitQuoted(value) : null;
+  if (quotedTokenEnd(value) !== value.length) return null;
+  const decoded = decodeGitQuotedResult(value);
+  return decoded.validUtf8 ? decoded.value : null;
 }
 
 function metadataPath(value: string): string | null {
