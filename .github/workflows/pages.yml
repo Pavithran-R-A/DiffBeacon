@@ -15,7 +15,15 @@ permissions:
 
 jobs:
   build:
+    # workflow_dispatch can be pointed at any ref in the UI. Only main is a deployable source;
+    # selecting another branch must stop before an artifact or Pages credential is produced.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Source verification is serialized without its embedded browser projects; the dedicated
+      # fail-closed Chromium step below owns that surface before the final Pages build.
+      DIFFBEACON_SKIP_BROWSER: '1'
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -24,8 +32,22 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Secret scan
+        run: npm run secret-scan
       - name: Install dependencies
         run: npm ci
+      - name: Dependency audit (release surface)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Dependency audit (development tree)
+        run: npm audit --audit-level=high
+      - name: Verify source, packages and committed artifacts
+        run: npm run check
+      - name: Qualify the browser before deployment
+        env:
+          DIFFBEACON_SKIP_BROWSER: '0'
+          DIFFBEACON_REQUIRE_BROWSER: '1'
+        run: npm run test:browser
+      # Browser qualification may build its own local-root fixture; make the deployable bytes last.
       - name: Build the repository-path web bundle
         run: BASE_PATH="/${{ github.event.repository.name }}/" npm run build:web
       - name: Configure Pages
