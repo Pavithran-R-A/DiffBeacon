@@ -49,6 +49,8 @@ function gitFailure(error: unknown, command: string): DiffUnavailableError {
 
 function gitArgs(range: string): string[] {
   return [
+    '-c',
+    'core.quotePath=true',
     'diff',
     '--no-ext-diff',
     '--no-textconv',
