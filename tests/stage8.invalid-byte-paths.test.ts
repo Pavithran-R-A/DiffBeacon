@@ -188,23 +188,25 @@ describe.runIf(POSIX)('what a real Git writes for a name that is not valid UTF-8
     if (repo) removeFixtureRepository(repo.root);
   });
 
-  it('is read as one file through the shipped diff collector', async () => {
+  it('pins Git quoting and refuses to publish a lossy filename as a factual path', async () => {
     const patch = await collectGitDiffAsync('HEAD~1...HEAD', repo?.cwd ?? '');
-    console.info(
-      'OBSERVED (default core.quotePath): quoted escape =',
-      patch.includes('\\377'),
-      'raw octet in the text =',
-      patch.includes('\uFFFD'),
-    );
+    expect(patch).toContain('\\377');
+    expect(patch).not.toContain(REPLACEMENT);
+
     const report = analyzeDiff(patch);
     expect(report.files).toHaveLength(1);
-    expect(report.summary.diagnostics).toBe(0);
-    expect(report.files[0]?.displayPath).toContain(REPLACEMENT);
-    expect(report.files[0]?.displayPath).not.toMatch(SURROGATE_HALF);
+    expect(report.summary.diagnostics).toBeGreaterThan(0);
+    expect(report.diagnostics.map((entry) => entry.code)).toContain('malformed-header');
+    expect(report.files[0]).toMatchObject({
+      oldPath: null,
+      newPath: null,
+      displayPath: '<unknown path>',
+      surfaces: [],
+    });
     for (const line of renderPretty(report).split('\n')) expect(line).not.toMatch(CONTROL);
   });
 
-  it('is read the same way when Git is told not to quote, so the byte reaches the reader raw', () => {
+  it('documents the external raw-text limitation when core.quotePath=false bypasses the collector pin', () => {
     const raw = execFileSync(
       'git',
       ['-c', 'core.quotePath=false', 'diff', '--no-color', 'HEAD~1...HEAD', '--'],
