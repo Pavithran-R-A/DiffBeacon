@@ -129,7 +129,7 @@ describe.runIf(process.platform !== 'win32')(
       repo.git(['mv', '--', 'old ', 'new ']);
       repo.commit('rename trailing-space name');
 
-      const patch = repo.git(VECTOR);
+      const patch = repo.gitRaw(VECTOR);
       expect(patch).toContain('diff --git a/old  b/new ');
       expect(patch).toContain('rename from old ');
       expect(patch).toContain('rename to new ');
