@@ -619,7 +619,7 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       if (mode === null)
         diagnostics.push({
           code: 'malformed-header',
-          message: 'new file mode must be a six-digit octal Git mode.',
+          message: 'new file mode must be one of Git's file entry modes: 100644, 100755, 120000, or 160000.',
           line: lineNumber,
         });
       else {
@@ -632,7 +632,7 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       if (mode === null)
         diagnostics.push({
           code: 'malformed-header',
-          message: 'deleted file mode must be a six-digit octal Git mode.',
+          message: 'deleted file mode must be one of Git's file entry modes: 100644, 100755, 120000, or 160000.',
           line: lineNumber,
         });
       else {
@@ -645,7 +645,7 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       if (mode === null)
         diagnostics.push({
           code: 'malformed-header',
-          message: 'old mode must be a six-digit octal Git mode.',
+          message: 'old mode must be one of Git's file entry modes: 100644, 100755, 120000, or 160000.',
           line: lineNumber,
         });
       else current.oldMode = mode;
@@ -654,7 +654,7 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       if (mode === null)
         diagnostics.push({
           code: 'malformed-header',
-          message: 'new mode must be a six-digit octal Git mode.',
+          message: 'new mode must be one of Git's file entry modes: 100644, 100755, 120000, or 160000.',
           line: lineNumber,
         });
       else current.newMode = mode;
