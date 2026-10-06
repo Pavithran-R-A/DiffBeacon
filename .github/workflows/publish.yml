@@ -38,9 +38,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # The browser contract `ci.yml`'s source lanes use: the harness reports this suppression
-      # instead of pretending the Chromium cases ran, and the tag push runs that file's `browser` job
-      # for the engine-qualified surface.
+      # `npm run verify` owns the source/package gates, so its embedded browser suites stay
+      # suppressed here. A dedicated fail-closed Chromium step runs later in this same job before
+      # the irreversible registry write; a concurrent `ci.yml` run is corroboration, not a
+      # publication dependency.
       DIFFBEACON_SKIP_BROWSER: '1'
     steps:
       - name: Check out
@@ -120,6 +121,14 @@ jobs:
       # freshness, secret scan, manifest drift, CLI startup, package smoke, Action smoke.
       - name: Verify the release candidate
         run: npm run verify
+      # A tag push starts ci.yml independently, so that workflow can finish after this job has already
+      # reached npm. Qualify the real browser here as a publication prerequisite instead of racing an
+      # irreversible registry write against another workflow.
+      - name: Qualify the browser before registry write
+        env:
+          DIFFBEACON_SKIP_BROWSER: '0'
+          DIFFBEACON_REQUIRE_BROWSER: '1'
+        run: npm run test:browser
       # Packs the tarball, installs it into a throwaway project and runs the bin, so what is published
       # is what this job just executed rather than what it assumes.
       - name: Smoke the packed package through a real install
