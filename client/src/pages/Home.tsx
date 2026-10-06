@@ -36,6 +36,7 @@ import {
   analyzeDiff,
   MAX_DIFF_BYTES,
   neutralizeDisplayControls,
+  renderJson,
   type ReviewAttentionMap,
   type SurfaceObservation,
 } from '@core/index';
@@ -420,7 +421,7 @@ export default function Home() {
 
   async function copyReport() {
     if (!report) return;
-    const payload = JSON.stringify(report, null, 2);
+    const payload = renderJson(report);
     if (!navigator.clipboard?.writeText) {
       setNotice(
         'This browser exposes no clipboard write API, so the JSON report could not be placed on the clipboard.',
