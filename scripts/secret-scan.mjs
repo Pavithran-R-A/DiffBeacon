@@ -4,7 +4,7 @@
 // carried into the report, so running the gate cannot itself leak a credential.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, readlinkSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -81,18 +81,28 @@ export function scanText(file, content) {
 function readIfScannable(root, rel) {
   const abs = path.join(root, rel);
   try {
-    const stat = statSync(abs);
-    if (!stat.isFile()) return undefined;
-    if (stat.size > MAX_SCANNABLE_BYTES)
+    const stat = lstatSync(abs);
+    let bytes;
+    if (stat.isSymbolicLink()) {
+      // Scan the tracked link blob itself. Following it would let a repository make this
+      // gate inspect an arbitrary host path outside the checkout.
+      bytes = readlinkSync(abs, { encoding: 'buffer' });
+    } else if (stat.isFile()) {
+      bytes = readFileSync(abs);
+    } else {
+      return undefined;
+    }
+    if (bytes.length > MAX_SCANNABLE_BYTES)
       throw new Error(
-        `Secret scan refuses ${rel}: ${stat.size} bytes exceeds the ${MAX_SCANNABLE_BYTES}-byte scan bound.`,
+        `Secret scan refuses ${rel}: ${bytes.length} bytes exceeds the ${MAX_SCANNABLE_BYTES}-byte scan bound.`,
       );
-    const content = readFileSync(abs, 'utf8');
-    if (content.includes('\0')) return undefined;
-    return content;
+    // ASCII credential shapes remain detectable in binary-ish data too; a NUL is not
+    // a reason to silently exempt a tracked or shipped file from the scan.
+    return bytes.toString('utf8');
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('Secret scan refuses ')) throw error;
-    return undefined;
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Secret scan could not read ${rel}: ${reason}`);
   }
 }
 
@@ -106,7 +116,7 @@ function walk(dir, base, out) {
     const abs = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name !== 'node_modules' && entry.name !== '.git') walk(abs, base, out);
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() || entry.isSymbolicLink()) {
       out.push(path.relative(base, abs).split(path.sep).join('/'));
     }
   }
