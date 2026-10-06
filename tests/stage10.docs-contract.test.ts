@@ -93,6 +93,7 @@ const STALE_CURRENT_STATE_CLAIMS: RegExp[] = [
   /so `npx diffbeacon[^`]*` does not resolve/i,
   /consumption of the Action[^.]{0,160}still never[^.]{0,60}measured/i,
   /reviewed commit SHA[^.]{0,160}does not exist until the Stage 11 release/i,
+  /trailing whitespace[^.]{0,160}(?:trimmed|displayed as)/i,
 ];
 
 /** Markdown link targets outside fenced code blocks and inline code; external/in-page dropped. */
