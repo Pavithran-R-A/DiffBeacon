@@ -174,6 +174,28 @@ const modeOnly = [
   '',
 ].join('\n');
 
+const generatedVolume = [
+  'diff --git a/dist/a.js b/dist/a.js',
+  '--- a/dist/a.js',
+  '+++ b/dist/a.js',
+  '@@ -1 +1 @@',
+  '-old',
+  '+new',
+  'diff --git a/dist/b.js b/dist/b.js',
+  '--- a/dist/b.js',
+  '+++ b/dist/b.js',
+  '@@ -1 +1 @@',
+  '-old',
+  '+new',
+  'diff --git a/src/app.ts b/src/app.ts',
+  '--- a/src/app.ts',
+  '+++ b/src/app.ts',
+  '@@ -1 +1 @@',
+  '-old',
+  '+new',
+  '',
+].join('\n');
+
 const malformedSimilarity = [
   'diff --git a/src/old.ts b/src/new.ts',
   'similarity index 101%',
@@ -195,6 +217,7 @@ describe('runtime JSON conforms to the committed schema', () => {
       analyzeDiff(ordinary),
       analyzeDiff(binary),
       analyzeDiff(modeOnly),
+      analyzeDiff(generatedVolume),
       analyzeDiff(malformedSimilarity),
       analyzeDiff(
         diffForPaths([...OBJECT_SHAPE_PATHS.slice(0, 8), ...MIXED_UNICODE_PATHS.slice(0, 8)]),
@@ -211,6 +234,20 @@ describe('runtime JSON conforms to the committed schema', () => {
     const report = analyzeDiff(malformedSimilarity);
     expect(report.files[0]?.similarity).toBeNull();
     expect(report.summary.diagnostics).toBeGreaterThan(0);
+    expect(validate(report, rootSchema)).toEqual([]);
+  });
+
+  it('validates optional evidence metrics when runtime output actually contains them', () => {
+    const report = analyzeDiff(generatedVolume);
+    const observation = report.evidence.find((item) => item.kind === 'generated-volume');
+    expect(observation?.metrics).toMatchObject({
+      generatedFiles: 2,
+      changedFiles: 3,
+      generatedFileShare: 2 / 3,
+      generatedChangedLines: 4,
+      totalChangedLines: 6,
+      generatedLineShare: 4 / 6,
+    });
     expect(validate(report, rootSchema)).toEqual([]);
   });
 });
