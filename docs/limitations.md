@@ -62,7 +62,9 @@ or piped in from elsewhere:
   metadata; those names remain distinct in the raw report even though some target filesystems cannot
   create them. Detector structure follows Git's patch grammar: `/` is the separator. A literal
   backslash in a POSIX filename stays a filename byte instead of being reinterpreted as a synthetic
-  directory boundary.
+  directory boundary. JSON keeps those raw names as data after parsing, while its serialized text
+  spells C1, bidi-formatting, and line-format controls as `\\uXXXX` escapes so printing JSON cannot
+  turn a filename into terminal instructions or reorder the trusted text around it.
 
 ## Each adapter has its own edges
 
