@@ -50,7 +50,8 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
-          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
       # `0.1.0` is public forever: never re-published, never unpublished, never the target of a later
       # run. A tag matching `v*` is the only input that reaches this job, so the consumed version is
       # refused by name here as well as by the runbook that forbids moving the tag.
