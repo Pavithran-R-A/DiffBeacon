@@ -58,8 +58,9 @@ or piped in from elsewhere:
   explicit failure, not a truncated report.
 - **Naming oddities are display problems, not classification problems.** Traversal-, shell-, markup-,
   and Windows-device-shaped names are treated as opaque labels, never opened, and neutralised at paint
-  time. One measured exception: Git's C-quoted header form is trimmed of trailing whitespace, so
-  `src/x ` is displayed as `src/x`.
+  time. Path parsing preserves meaningful trailing spaces in Git's unquoted headers and rename
+  metadata; those names remain distinct in the raw report even though some target filesystems cannot
+  create them.
 
 ## Each adapter has its own edges
 
