@@ -346,8 +346,9 @@ type CurrentFile = {
   isNewFile: boolean;
   isDeletedFile: boolean;
   isCopy: boolean;
-  copyFromSeen: boolean;
+  copyFrom: string | null;
   copyTo: string | null;
+  copyLine: number | null;
   activeHunk: HunkAccount | null;
 };
 
@@ -473,10 +474,22 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         current.renameTo = null;
       }
 
-      if (current.isCopy && (!current.copyFromSeen || current.copyTo === null)) {
-        // Copy detection is unsupported either way, but incomplete copy metadata must
-        // not change a file's status or destination in the report.
+      if (
+        current.isCopy &&
+        (current.copyFrom === null ||
+          current.copyTo === null ||
+          (current.oldPath !== null && current.oldPath !== current.copyFrom) ||
+          (current.newPath !== null && current.newPath !== current.copyTo))
+      ) {
+        // Copy detection is unsupported either way, but incomplete or contradictory
+        // copy metadata must not invent a destination or change the file's status.
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'Copy metadata must contain a source and destination consistent with the file header.',
+          line: current.copyLine ?? 1,
+        });
         current.isCopy = false;
+        current.copyFrom = null;
         current.copyTo = null;
       }
 
@@ -507,8 +520,9 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         isNewFile: false,
         isDeletedFile: false,
         isCopy: false,
-        copyFromSeen: false,
+        copyFrom: null,
         copyTo: null,
+        copyLine: null,
         activeHunk: null,
       };
       if (resolution.reason === 'ambiguous')
@@ -677,6 +691,7 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       // destination and name the dialect instead of relabelling it `renamed`.
       if (!current.isCopy) {
         current.isCopy = true;
+        current.copyLine = lineNumber;
         diagnostics.push({
           code: 'unsupported-dialect',
           message: 'Copy detection is outside the supported patch vector.',
@@ -691,7 +706,7 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
             message: 'copy from must name one complete Git path.',
             line: lineNumber,
           });
-        else current.copyFromSeen = true;
+        else current.copyFrom = path;
       } else {
         const path = metadataPath(line.slice('copy to '.length));
         if (path === null)
