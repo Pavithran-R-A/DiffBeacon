@@ -1,11 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { analyzeDiff, renderJson } from '../packages/core/src/index.js';
-import {
-  MIXED_UNICODE_PATHS,
-  OBJECT_SHAPE_PATHS,
-  diffForPaths,
-} from './stage8.hostile-corpus.js';
+import { MIXED_UNICODE_PATHS, OBJECT_SHAPE_PATHS, diffForPaths } from './stage8.hostile-corpus.js';
 
 /**
  * Stage 15: validate runtime reports against the committed JSON Schema without adding a
@@ -59,10 +55,7 @@ function schemaNodes(schema: Schema, path = '$'): Array<[string, Schema]> {
   for (const [name, child] of Object.entries(schema.properties ?? {}))
     nodes.push(...schemaNodes(child, `${path}.properties.${name}`));
   if (schema.items) nodes.push(...schemaNodes(schema.items, `${path}.items`));
-  if (
-    schema.additionalProperties !== undefined &&
-    typeof schema.additionalProperties === 'object'
-  )
+  if (schema.additionalProperties !== undefined && typeof schema.additionalProperties === 'object')
     nodes.push(...schemaNodes(schema.additionalProperties, `${path}.additionalProperties`));
   return nodes;
 }
@@ -193,9 +186,7 @@ describe('runtime JSON conforms to the committed schema', () => {
   it('fails closed if the schema gains a validation keyword this harness does not implement', () => {
     for (const [path, node] of schemaNodes(rootSchema))
       for (const key of Object.keys(node))
-        expect(supportedKeywords.has(key), `${path}: unsupported schema keyword ${key}`).toBe(
-          true,
-        );
+        expect(supportedKeywords.has(key), `${path}: unsupported schema keyword ${key}`).toBe(true);
   });
 
   it('validates representative normal, hostile, nullable and malformed reports', () => {
@@ -206,10 +197,7 @@ describe('runtime JSON conforms to the committed schema', () => {
       analyzeDiff(modeOnly),
       analyzeDiff(malformedSimilarity),
       analyzeDiff(
-        diffForPaths([
-          ...OBJECT_SHAPE_PATHS.slice(0, 8),
-          ...MIXED_UNICODE_PATHS.slice(0, 8),
-        ]),
+        diffForPaths([...OBJECT_SHAPE_PATHS.slice(0, 8), ...MIXED_UNICODE_PATHS.slice(0, 8)]),
       ),
     ];
 

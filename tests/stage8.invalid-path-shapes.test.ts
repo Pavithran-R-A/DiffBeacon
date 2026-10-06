@@ -148,4 +148,3 @@ describe('an invalid-looking name is never opened', () => {
 function reportOf(file: string): { schemaVersion: string } {
   return JSON.parse(readFileSync(file, 'utf8')) as { schemaVersion: string };
 }
-

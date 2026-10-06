@@ -167,9 +167,7 @@ describe('current limitation prose matches parser dialect handling', () => {
   });
 
   it('documents bounded similarity metadata rather than accepting arbitrary percentages', () => {
-    expect(flatRead('docs/limitations.md')).toMatch(
-      /similarity[^.]{0,160}0%[^.]{0,80}100%/i,
-    );
+    expect(flatRead('docs/limitations.md')).toMatch(/similarity[^.]{0,160}0%[^.]{0,80}100%/i);
   });
 });
 

@@ -112,7 +112,10 @@ describe('counted quantities under extreme headers', () => {
     for (const diff of malformed) {
       const parsed = parseUnifiedDiff(diff);
       expect(parsed.files[0]?.similarity, diff).toBeNull();
-      expect(parsed.diagnostics.map((entry) => entry.code), diff).toContain('malformed-header');
+      expect(
+        parsed.diagnostics.map((entry) => entry.code),
+        diff,
+      ).toContain('malformed-header');
       expect(analyzeDiff(diff).summary.diagnostics, diff).toBeGreaterThan(0);
     }
   });
