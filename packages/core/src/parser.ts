@@ -88,19 +88,30 @@ function parseQuotedPair(value: string): [string | null, string | null] | null {
     const start = cursor;
     cursor += 1;
     let escaped = false;
+    let closed = false;
     while (cursor < trimmed.length) {
       const character = trimmed[cursor] ?? '';
       if (!escaped && character === '"') {
         cursor += 1;
+        closed = true;
         break;
       }
       escaped = !escaped && character === '\\';
       if (character !== '\\') escaped = false;
       cursor += 1;
     }
+    if (!closed) return null;
     tokens.push(trimmed.slice(start, cursor));
   }
-  if (tokens.length !== 2) return null;
+  while (trimmed[cursor] === ' ') cursor += 1;
+  if (tokens.length !== 2 || cursor !== trimmed.length) return null;
+  const oldToken = decodeGitQuoted(tokens[0] as string);
+  const newToken = decodeGitQuoted(tokens[1] as string);
+  if (
+    !(oldToken === NULL_PATH || oldToken.startsWith('a/')) ||
+    !(newToken === NULL_PATH || newToken.startsWith('b/'))
+  )
+    return null;
   const oldPath = stripDiffPrefix(tokens[0] as string);
   const newPath = stripDiffPrefix(tokens[1] as string);
   // A quoted `a/` or `b/` still names no file, so it is not a decodable pair.
@@ -474,8 +485,17 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
       current.oldMode = line.slice('old mode '.length).trim();
     else if (line.startsWith('new mode ')) current.newMode = line.slice('new mode '.length).trim();
     else if (line.startsWith('similarity index ')) {
-      const value = Number.parseInt(line.slice('similarity index '.length), 10);
-      current.similarity = Number.isFinite(value) ? value : null;
+      const raw = line.slice('similarity index '.length).trim();
+      const match = /^(\d+)%$/.exec(raw);
+      const value = match === null ? null : Number(match[1]);
+      if (value === null || !Number.isInteger(value) || value < 0 || value > 100) {
+        current.similarity = null;
+        diagnostics.push({
+          code: 'malformed-header',
+          message: 'Similarity index must be an integer percentage from 0% through 100%.',
+          line: lineNumber,
+        });
+      } else current.similarity = value;
     } else if (line.startsWith('rename from '))
       current.renameFrom = decodeGitQuoted(line.slice('rename from '.length));
     else if (line.startsWith('rename to '))
