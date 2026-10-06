@@ -26,9 +26,8 @@ type PairResolution = {
 };
 
 function decodeGitQuoted(value: string): string {
-  const trimmed = value.trim();
-  if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) return trimmed;
-  const inner = trimmed.slice(1, -1);
+  if (!(value.startsWith('"') && value.endsWith('"'))) return value;
+  const inner = value.slice(1, -1);
   const bytes: number[] = [];
   const encoder = new TextEncoder();
   for (let index = 0; index < inner.length; index += 1) {
@@ -71,14 +70,14 @@ export function decodeGitPath(value: string): string {
 
 function stripDiffPrefix(value: string): string | null {
   const withoutTimestamp = value.split('\t', 1)[0] ?? value;
-  const path = decodeGitQuoted(withoutTimestamp.trim());
+  const path = decodeGitQuoted(withoutTimestamp);
   if (path === NULL_PATH) return null;
   if (path.startsWith('a/') || path.startsWith('b/')) return path.slice(2);
   return path;
 }
 
 function parseQuotedPair(value: string): [string | null, string | null] | null {
-  const trimmed = value.trim();
+  const trimmed = value;
   if (!trimmed.startsWith('"')) return null;
   const tokens: string[] = [];
   let cursor = 0;
@@ -118,8 +117,10 @@ function parseQuotedPair(value: string): [string | null, string | null] | null {
   return oldPath === '' || newPath === '' ? null : [oldPath, newPath];
 }
 function parseGitPair(value: string): PairResolution {
-  const trimmed = value.trim();
-  const quoted = parseQuotedPair(trimmed);
+  // `diff --git` contributes exactly one separator before the old-side token. Remove
+  // that separator only; trailing spaces can be real filename bytes on POSIX filesystems.
+  const pair = value.startsWith(' ') ? value.slice(1) : value;
+  const quoted = parseQuotedPair(pair);
   if (quoted !== null)
     return {
       reason: 'proven',
@@ -129,11 +130,13 @@ function parseGitPair(value: string): PairResolution {
   // can decompose several ways. A split is only provable when one side of `a/`
   // and `b/` structure survives and, with competing splits left, when exactly
   // one of them keeps both paths identical.
-  return resolvePair(trimmed, ' b/', 2);
+  return resolvePair(pair, ' b/', 2);
 }
 
 function parseBinaryPair(value: string): PairResolution {
-  return resolvePair(value.trim().replace(/ differ$/, ''), ' and ', 0);
+  // The final space belongs to the ` differ` delimiter. Any earlier space may be
+  // part of the new-side filename and must survive.
+  return resolvePair(value.replace(/ differ$/, ''), ' and ', 0);
 }
 
 const isOldSide = (value: string): boolean => value === NULL_PATH || value.startsWith('a/');
