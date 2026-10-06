@@ -5,6 +5,12 @@ name: Deploy browser demo to GitHub Pages
 on:
   workflow_dispatch:
 
+# Serialize deployments without cancelling the one already writing the public site. A newer manual
+# dispatch waits its turn instead of racing an older artifact and accidentally publishing out of order.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 # Permissions are job-scoped: build/test code can read source but cannot mint a Pages OIDC token
 # or write a deployment. Only the dedicated deploy job receives the two elevated Pages grants.
 jobs:
