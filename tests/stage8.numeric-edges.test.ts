@@ -83,14 +83,53 @@ describe('counted quantities under extreme headers', () => {
     expect(parsed.diagnostics.map((entry) => entry.code)).toContain('truncated-hunk');
   });
 
-  it('keeps a percentage out of the report when it is not a number at all', () => {
-    const words = analyzeDiff(extreme[4] as string);
-    expect(words.files[0]?.similarity).toBeNull();
-    const huge = analyzeDiff(extreme[3] as string);
-    // A claimed percentage beyond the double range stays finite and is reported as the patch
-    // spelled it; the guard exists so no non-finite number can reach a report.
-    expect(huge.files[0]?.similarity).toBe(1e20);
-    expect(Number.isFinite(huge.files[0]?.similarity as number)).toBe(true);
+  it('rejects malformed and out-of-range similarity percentages', () => {
+    const malformed = [
+      extreme[3] as string,
+      extreme[4] as string,
+      [
+        'diff --git a/src/old.ts b/src/new.ts',
+        'similarity index -1%',
+        'rename from src/old.ts',
+        'rename to src/new.ts',
+        '',
+      ].join('\n'),
+      [
+        'diff --git a/src/old.ts b/src/new.ts',
+        'similarity index 101%',
+        'rename from src/old.ts',
+        'rename to src/new.ts',
+        '',
+      ].join('\n'),
+      [
+        'diff --git a/src/old.ts b/src/new.ts',
+        'similarity index 92% trailing',
+        'rename from src/old.ts',
+        'rename to src/new.ts',
+        '',
+      ].join('\n'),
+    ];
+    for (const diff of malformed) {
+      const parsed = parseUnifiedDiff(diff);
+      expect(parsed.files[0]?.similarity, diff).toBeNull();
+      expect(parsed.diagnostics.map((entry) => entry.code), diff).toContain('malformed-header');
+      expect(analyzeDiff(diff).summary.diagnostics, diff).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps the valid similarity boundaries inside the schema range', () => {
+    for (const value of [0, 1, 99, 100]) {
+      const diff = [
+        'diff --git a/src/old.ts b/src/new.ts',
+        `similarity index ${value}%`,
+        'rename from src/old.ts',
+        'rename to src/new.ts',
+        '',
+      ].join('\n');
+      const parsed = parseUnifiedDiff(diff);
+      expect(parsed.diagnostics, diff).toEqual([]);
+      expect(parsed.files[0]?.similarity).toBe(value);
+    }
   });
 });
 
