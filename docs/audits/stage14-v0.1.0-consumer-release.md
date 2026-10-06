@@ -15,7 +15,9 @@ publication consumed.
 `docs(release): date-anchor publication wording in shipped READMEs`. `main`, `origin/main`,
 and `git ls-remote origin refs/heads/main` all named it through Phase R, which is the commit
 §§1–11 measure. §12 then records `main` moving past it — first to `0d7f171`, then to
-`b371eff` — while the annotated tag `v0.1.0` still names `5a50b520…` and nothing else.
+`b371eff`, the last commit that changes anything CI executes — and §14.1 records the
+`docs(release)` commits that follow, while the annotated tag `v0.1.0` still names
+`5a50b520…` and nothing else.
 
 **Date.** 2026-10-06. Timestamps below are registry/API/GitHub values in UTC, read from the services
 that produced them, not host clocks.
@@ -995,72 +997,138 @@ The 14 mandatory items:
 | 8   | Action intact at the release            | §5, §14 (bundle `45660da7…` from raw at the tag) |
 | 9   | external consumer Action smoke succeeds | §6, §14 (run `37430396143` success)              |
 | 10  | Pages remains live                      | §13, §14 (200/200/200 + real browser)            |
-| 11  | final CI green                          | §12.4 (run `37455508474`, 5/5)                   |
+| 11  | final CI green                          | §12.4, §14.1 (runs `37455508474`, `37457082342`) |
 | 12  | docs current                            | §7, §14 (guards executed in CI)                  |
 | 13  | git clean and synchronized              | §12.1, §12.4, §14                                |
 | 14  | no release-blocking security issue      | §12.3, §12.4, §14 (both audits 0; PVR enabled)   |
 
-One honesty note about ordering, since it cannot be escaped: the commit that carries
-these sentences is a `docs(release)` commit that necessarily comes **after** `b371eff`.
-Item 11 is therefore measured at `b371eff`, the last commit that changes anything CI
-executes. A commit cannot contain the observation of its own CI run, so the record commit's
-run is written to `stage14/phaseV-record-run.txt` and reported in the closing response
-instead. `docs/audits/**` is manifest-excluded and is a historical record directory to the
-contract tests (§11.8), so that commit moves no gated bytes.
+### 14.1 The record commit, its gates, and its own CI run
+
+The commit that carries the §12–§14 prose is `7deafabcd45ff52ba34eeee64c35bbf62be88101`,
+message `docs(release): record v0.1.0 consumer launch`, **1 file changed, 289 insertions(+) /
+8 deletions(−)** — the record and nothing else. It was staged as one path and measured before
+committing (`stage14/phaseV-record-gates.txt`):
+
+| Gate                  | Command                                         | Exit | Output                                                                   |
+| --------------------- | ----------------------------------------------- | ---- | ------------------------------------------------------------------------ |
+| format, file          | `npx prettier --check` on this record           | 0    | `All matched files use Prettier code style!`                             |
+| format, whole tree    | `npm run format:check`                          | 0    | same, over every matched file                                            |
+| secrets, worktree     | `npm run secret-scan`                           | 0    | `12 finding(s), 12 classified, 0 unclassified, 0 stale`                  |
+| secrets, final index  | `npm run secret-scan` after staging             | 0    | the identical line                                                       |
+| manifest              | `npm run manifest`, then `git diff --exit-code` | 0    | `SOURCE_MANIFEST.txt: 160 files`, and the no-op proof above it           |
+| worktree              | `git diff --name-only`, `git ls-files --others` | 0    | 0 unstaged paths, 0 untracked paths, and 0 after the `git add` as well   |
+| measured == committed | `git show :path \| sha256sum` vs `sha256sum`    | 0    | both `d8d44160…`; the index blob and the worktree file are 106 164 bytes |
+
+The first `npx prettier --check` on these sentences answered exit 1 — the file's content was
+final but its form was not — and that was re-measured directly on the saved pre-write bytes
+(`stage14/prettier/stage14-audit.r5.before.md` reads exit 1 through `--stdin-filepath`, in
+`stage14/phaseV-prettier.txt`). Rather than guess what prettier wanted, the intended bytes were
+generated to `stage14/prettier/stage14-audit.r5.pretty`, diffed against the file, and reviewed:
+11 hunks, all of them column-width realignment in four tables, one `*emphasis*` → `_emphasis_`
+marker, and one collapsed double blank line — **no prose moved**. One hunk needed a hand fix
+first: a code span written across two lines inside §12.3 item 3 was restructured into two
+single-line spans, because prettier de-indents a wrapped span and would have changed how the
+command reads. `npx prettier --write` then produced bytes identical to that preview (`diff -u`
+returns 0 lines), which is why the digest in the table above is the digest of the measured
+bytes rather than of a later surprise.
+
+The push was ordinary — `b371eff..7deafab  main -> main`, `push_exit=0`, no force, no
+`--no-verify` — and the global `core.hooksPath` shim printed nothing at all this time, unlike
+the Phase R and Phase T pushes where it emitted `Can't find lefthook in PATH`. That difference
+is recorded as observed, not explained: the shim is not this repository's gate, and no gate
+output was suppressed by this push. Three readings agree on the SHA afterwards — `git rev-parse
+HEAD`, `git rev-parse refs/remotes/origin/main`, and `git ls-remote origin refs/heads/main` all
+answer `7deafabcd45ff52ba34eeee64c35bbf62be88101` — and the tag is untouched by the push:
+`git rev-parse v0.1.0` is still the tag object `5311ee05e3199b84854d719453b8939c5c482dc7`, which
+still peels to `5a50b52028ead78942ea3fc3bee93ba26e0a79cc`.
+
+**`main` is green at `7deafab` too: run `37457082342`, five jobs, every step `success`**
+(`stage14/phaseV-record-run.txt`, `phaseV-record-run-watch.raw`). `gh run watch --exit-status`
+answered 0 over `11:32:44Z` → `11:36:09Z`; the jobs ran `11:33:10Z` → `11:35:38Z`:
+
+| Job                                    | Started → completed | Conclusion |
+| -------------------------------------- | ------------------- | ---------- |
+| Source ubuntu-latest / Node 24         | 11:33:10 → 11:33:45 | success    |
+| Source ubuntu-latest / Node 22         | 11:33:10 → 11:33:54 | success    |
+| Source windows-latest / Node 24        | 11:33:12 → 11:35:26 | success    |
+| Source windows-latest / Node 22        | 11:33:12 → 11:35:32 | success    |
+| Browser lane (ubuntu-latest / Node 24) | 11:33:10 → 11:35:38 | success    |
+
+The run inventory for that commit lists exactly one workflow, `CI` — `publish.yml` was not
+triggered, which is the brief's requirement that the future publication workflow must not run
+for `0.1.0`. The per-step read shows all 12 steps on each of the four Source cells and all 9 on
+the browser lane returning `success`, including both dependency audits and the Action bundle
+freshness step on a commit whose only changed file is a manifest-excluded record.
+
+One honesty note about ordering, since it cannot be escaped: a commit cannot contain the
+observation of its own CI run. Item 11 above is therefore measured at `b371eff`, the last commit
+that changes anything CI executes, and §14.1 adds the green run at the record commit `7deafab`
+that follows it. This section is itself an amendment, so the bytes that contain §14.1 are
+committed by a commit that is not `7deafab`; that amendment's gates are written to
+`stage14/phaseV-amendment2-gates.txt` before it enters Git, its commit and push are appended to
+`stage14/phaseV-amendment2-commit.txt` by the commands that make them, and its hosted run is read
+back after the fact and reported in the closing response. `docs/audits/**` is manifest-excluded
+and is a historical record directory to the contract tests (§11.8), so each such commit moves no
+gated bytes.
 
 ## 15. Evidence index
 
 All Stage 14 evidence lives outside this repository, under
 `…/Documents/Qoder/2026-09-24/904c4a23/stage14/`. The files behind the numbers above:
 
-| Path                                                                                 | Contents                                                                                                                                 |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `phaseH-live-check.txt`                                                              | registry reads, tarball and member digests, material scans, H verdict                                                                    |
-| `phaseH-public/`                                                                     | the tarball downloaded from the public registry                                                                                          |
-| `phaseI-consumer-smoke.txt`                                                          | fresh-install run, three output formats, JSON contract, I verdict                                                                        |
-| `phaseI-consumer/`, `phaseI-cache/`                                                  | the consumer project and its separate npm cache                                                                                          |
-| `phaseJ-tag.txt`                                                                     | tag preflight, creation, push, hosted cross-check, J verdict                                                                             |
-| `phaseK-release.txt`, `phaseK-release-body-readback.md`, `release-notes-v0.1.0.md`   | Release creation, API read-back, body as published                                                                                       |
-| `phaseL-action-at-tag.txt`, `phaseL-bundle-at-tag.js`                                | tagged `action.yml`, three-source bundle digest, the extracted bundle                                                                    |
-| `phaseM-consumer-smoke.txt`                                                          | consumer repository, PR, run/job/steps, summary read-back attempts, replay, disposition                                                  |
-| `phaseM-replay/`                                                                     | the anonymous clone, event file, and two byte-identical replayed summaries                                                               |
-| `phaseM-m13-checkrun-raw.json`                                                       | the raw check-run object showing `summary: null`                                                                                         |
-| `m14-raw.txt`, `m14-archive.txt`                                                     | PR closure and archive read-back                                                                                                         |
-| `n1-red.log`, `phaseN-docs.txt`                                                      | the failing guard run against stale docs, and the Phase N record                                                                         |
-| `mutations/`, `n-mutation-proofs.sh`                                                 | Phase N's twelve doc mutations, their named failures and digest checks                                                                   |
-| `phaseO-red.txt`, `phaseO-green.txt`, `phaseO-affected-tests.txt`                    | Phase O's 13-failed RED, 13-passed GREEN, and the 105-passed affected-suite run                                                          |
-| `extract-publish-steps.mjs`, `publish-steps/`                                        | the committed workflow split into per-step scripts, plus the fabricated `npm` version shims                                              |
-| `phaseO-gates.sh`, `phaseO-gates.txt`                                                | the extracted guard scripts executed against fabricated inputs, 15 recorded outcomes                                                     |
-| `phaseO-mutations.txt`                                                               | the first mutation pass, including the O7 control that applied nothing — kept as written                                                 |
-| `o-mutation-proofs.sh`, `phaseO-mutations-v2.txt`, `mutations-o/`                    | the corrected full mutation run: named failures, per-file digests, and green controls                                                    |
-| `phaseP-trusted-publisher.txt`                                                       | `npm trust github --dry-run` (exit 0) and the owner-authenticated `trust list` rejection                                                 |
-| `phaseQ-marketplace.txt`                                                             | Marketplace eligibility reads, the documented publishing steps, the CLI-route absence checks, and the determination                      |
-| `phaseR-format-check.txt`, `phaseR-lint.txt`, `phaseR-typecheck.txt`                 | the three static gates, including the first format run's exit 1 and the prettier-only repair                                             |
-| `phaseR-secret-scan.txt`, `phaseR-secret-scan-post-staging.txt`                      | the scan before staging, the same scan after it, and the coverage control that shows the index is what it reads                          |
-| `phaseR-contract-suites.txt`                                                         | the 176-passed contract run, twice, plus the failed `--reporter=basic` attempt kept as written                                           |
-| `phaseR-staging.txt`                                                                 | the 17 staged paths, the manifest's 15/13 line reconciliation, the two new entries, the no-op proof, and the appended 158/160 correction |
-| `phaseR-split-probe.txt`                                                             | HEAD's Action guard against this tree: the three named failures that make the commit set atomic                                          |
-| `phaseR-debris-quarantine.txt`, `pnpm-debris-quarantine/`                            | the two untracked pnpm files moved aside, with digests, and why `verify` requires that                                                   |
-| `phaseR-verify.txt`, `phaseR-check.txt`                                              | the two drivers run sequentially, both exit 0, with the 66-file / 1144-passed totals and the byte-identical rebuild                      |
-| `phaseR-verify-final.txt`, `phaseR-classify-browser.txt`, `phaseR-verify-final2.txt` | gate 10's `ERR_NETWORK_CHANGED` failure on the staged tree, the isolated 133-passed browser re-run, and gate 10b's exit 0                |
-| `phaseR-final-amendment.txt`                                                         | gate 11: the five gates covering the §11.6/§11.8 wording, the 158 → 160 recount, and the clean-worktree counts                           |
-| `phaseS-commit.txt`                                                                  | the 17-path commit, the normal push, the three SHA readings, the tag re-check, and the lefthook shim line                                |
-| `phaseT-ci-trigger.txt`, `phaseT-jobs.txt`, `phaseT-jobs.json`                       | the red run's job list and the proof `publish.yml` was never triggered                                                                   |
-| `phaseT-ci-log-failed.txt`                                                           | the full hosted log of run 37453802193, ANSI-stripped in `phaseT-audit-classify.txt` reads                                               |
-| `phaseT-audit-classify.txt`                                                          | the advisory read, the lockfile's `source-map-js` pin and its single reverse edge, and the two audits' split verdicts                    |
-| `phaseT-prior-green-audit.txt`                                                       | the same lockfile printing `found 0 vulnerabilities` in both audit steps at 2026-10-05T10:28Z                                            |
-| `phaseT-auditfix.txt`, `package-lock.before-audit-fix.json`                          | the red → repair → green sequence, the 3/3-line lockfile diff, the manifest governance, and the pre-repair lockfile itself               |
-| `phaseT-repair-commit.txt`                                                           | the failed identity attempt, commit `b371eff`, the push, the three SHA readings again, the tag pin, and the repeat-2 debris move         |
-| `phaseT-jobs-final.json`, `phaseT-jobs-final-steps.json`                             | the final run's five jobs with per-job, per-step conclusions                                                                             |
-| `phaseT-final-source-ubuntu22.log`, `phaseT-final-source-ubuntu22.clean.txt`         | the hosted Source log: audits, secret scan, the 1012-passed `npm run check`, the bundle-freshness step                                   |
-| `phaseT-final-browser-lane.clean.txt`                                                | the hosted browser lane: the engine each file named, and `133 passed (133)`                                                              |
-| `phaseU-pages.txt`, `phaseU-live-index.html`, `phaseU-live-headers.txt`              | the Pages resource, the served HTML and its headers, whether a redeploy was warranted, and the forbidden-surface sweeps                  |
-| `phaseU-index-DDHzPMhP.js`, `phaseU-index-9I3gIet4.css`, `phaseU-assets-concat.txt`  | the two served assets as fetched, and the concatenation the string sweeps ran over                                                       |
-| `phaseU-browser.txt`                                                                 | the real Chromium session: boot, sample analysis, empty console, and the three-request network list                                      |
-| `phaseV-remeasure.txt`, `phaseV-remeasure2.txt`, `phaseV-remeasure3.txt`             | pass 1 with its three gaps kept, pass 2 correcting them, pass 3 the tag/Pages/bundle reads                                               |
-| `phaseV-npm-fresh.txt`, `phaseV-consumer/`, `phaseV-rescan.tgz`                      | the isolated fresh install, `npx`, the three review formats, and the re-downloaded registry tarball                                      |
-| `phaseV-action-reread.txt`                                                           | the hosted consumer run, its job steps, and the archived state of the consumer repository                                                |
-| `phaseV-raw-action-bundle.js`                                                        | the Action bundle as served at ref `v0.1.0`, digested to `45660da7…`                                                                     |
+| Path                                                                                             | Contents                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `phaseH-live-check.txt`                                                                          | registry reads, tarball and member digests, material scans, H verdict                                                                    |
+| `phaseH-public/`                                                                                 | the tarball downloaded from the public registry                                                                                          |
+| `phaseI-consumer-smoke.txt`                                                                      | fresh-install run, three output formats, JSON contract, I verdict                                                                        |
+| `phaseI-consumer/`, `phaseI-cache/`                                                              | the consumer project and its separate npm cache                                                                                          |
+| `phaseJ-tag.txt`                                                                                 | tag preflight, creation, push, hosted cross-check, J verdict                                                                             |
+| `phaseK-release.txt`, `phaseK-release-body-readback.md`, `release-notes-v0.1.0.md`               | Release creation, API read-back, body as published                                                                                       |
+| `phaseL-action-at-tag.txt`, `phaseL-bundle-at-tag.js`                                            | tagged `action.yml`, three-source bundle digest, the extracted bundle                                                                    |
+| `phaseM-consumer-smoke.txt`                                                                      | consumer repository, PR, run/job/steps, summary read-back attempts, replay, disposition                                                  |
+| `phaseM-replay/`                                                                                 | the anonymous clone, event file, and two byte-identical replayed summaries                                                               |
+| `phaseM-m13-checkrun-raw.json`                                                                   | the raw check-run object showing `summary: null`                                                                                         |
+| `m14-raw.txt`, `m14-archive.txt`                                                                 | PR closure and archive read-back                                                                                                         |
+| `n1-red.log`, `phaseN-docs.txt`                                                                  | the failing guard run against stale docs, and the Phase N record                                                                         |
+| `mutations/`, `n-mutation-proofs.sh`                                                             | Phase N's twelve doc mutations, their named failures and digest checks                                                                   |
+| `phaseO-red.txt`, `phaseO-green.txt`, `phaseO-affected-tests.txt`                                | Phase O's 13-failed RED, 13-passed GREEN, and the 105-passed affected-suite run                                                          |
+| `extract-publish-steps.mjs`, `publish-steps/`                                                    | the committed workflow split into per-step scripts, plus the fabricated `npm` version shims                                              |
+| `phaseO-gates.sh`, `phaseO-gates.txt`                                                            | the extracted guard scripts executed against fabricated inputs, 15 recorded outcomes                                                     |
+| `phaseO-mutations.txt`                                                                           | the first mutation pass, including the O7 control that applied nothing — kept as written                                                 |
+| `o-mutation-proofs.sh`, `phaseO-mutations-v2.txt`, `mutations-o/`                                | the corrected full mutation run: named failures, per-file digests, and green controls                                                    |
+| `phaseP-trusted-publisher.txt`                                                                   | `npm trust github --dry-run` (exit 0) and the owner-authenticated `trust list` rejection                                                 |
+| `phaseQ-marketplace.txt`                                                                         | Marketplace eligibility reads, the documented publishing steps, the CLI-route absence checks, and the determination                      |
+| `phaseR-format-check.txt`, `phaseR-lint.txt`, `phaseR-typecheck.txt`                             | the three static gates, including the first format run's exit 1 and the prettier-only repair                                             |
+| `phaseR-secret-scan.txt`, `phaseR-secret-scan-post-staging.txt`                                  | the scan before staging, the same scan after it, and the coverage control that shows the index is what it reads                          |
+| `phaseR-contract-suites.txt`                                                                     | the 176-passed contract run, twice, plus the failed `--reporter=basic` attempt kept as written                                           |
+| `phaseR-staging.txt`                                                                             | the 17 staged paths, the manifest's 15/13 line reconciliation, the two new entries, the no-op proof, and the appended 158/160 correction |
+| `phaseR-split-probe.txt`                                                                         | HEAD's Action guard against this tree: the three named failures that make the commit set atomic                                          |
+| `phaseR-debris-quarantine.txt`, `pnpm-debris-quarantine/`                                        | the two untracked pnpm files moved aside, with digests, and why `verify` requires that                                                   |
+| `phaseR-verify.txt`, `phaseR-check.txt`                                                          | the two drivers run sequentially, both exit 0, with the 66-file / 1144-passed totals and the byte-identical rebuild                      |
+| `phaseR-verify-final.txt`, `phaseR-classify-browser.txt`, `phaseR-verify-final2.txt`             | gate 10's `ERR_NETWORK_CHANGED` failure on the staged tree, the isolated 133-passed browser re-run, and gate 10b's exit 0                |
+| `phaseR-final-amendment.txt`                                                                     | gate 11: the five gates covering the §11.6/§11.8 wording, the 158 → 160 recount, and the clean-worktree counts                           |
+| `phaseS-commit.txt`                                                                              | the 17-path commit, the normal push, the three SHA readings, the tag re-check, and the lefthook shim line                                |
+| `phaseT-ci-trigger.txt`, `phaseT-jobs.txt`, `phaseT-jobs.json`                                   | the red run's job list and the proof `publish.yml` was never triggered                                                                   |
+| `phaseT-ci-log-failed.txt`                                                                       | the full hosted log of run 37453802193, ANSI-stripped in `phaseT-audit-classify.txt` reads                                               |
+| `phaseT-audit-classify.txt`                                                                      | the advisory read, the lockfile's `source-map-js` pin and its single reverse edge, and the two audits' split verdicts                    |
+| `phaseT-prior-green-audit.txt`                                                                   | the same lockfile printing `found 0 vulnerabilities` in both audit steps at 2026-10-05T10:28Z                                            |
+| `phaseT-auditfix.txt`, `package-lock.before-audit-fix.json`                                      | the red → repair → green sequence, the 3/3-line lockfile diff, the manifest governance, and the pre-repair lockfile itself               |
+| `phaseT-repair-commit.txt`                                                                       | the failed identity attempt, commit `b371eff`, the push, the three SHA readings again, the tag pin, and the repeat-2 debris move         |
+| `phaseT-jobs-final.json`, `phaseT-jobs-final-steps.json`                                         | the final run's five jobs with per-job, per-step conclusions                                                                             |
+| `phaseT-final-source-ubuntu22.log`, `phaseT-final-source-ubuntu22.clean.txt`                     | the hosted Source log: audits, secret scan, the 1012-passed `npm run check`, the bundle-freshness step                                   |
+| `phaseT-final-browser-lane.clean.txt`                                                            | the hosted browser lane: the engine each file named, and `133 passed (133)`                                                              |
+| `phaseU-pages.txt`, `phaseU-live-index.html`, `phaseU-live-headers.txt`                          | the Pages resource, the served HTML and its headers, whether a redeploy was warranted, and the forbidden-surface sweeps                  |
+| `phaseU-index-DDHzPMhP.js`, `phaseU-index-9I3gIet4.css`, `phaseU-assets-concat.txt`              | the two served assets as fetched, and the concatenation the string sweeps ran over                                                       |
+| `phaseU-browser.txt`                                                                             | the real Chromium session: boot, sample analysis, empty console, and the three-request network list                                      |
+| `phaseV-remeasure.txt`, `phaseV-remeasure2.txt`, `phaseV-remeasure3.txt`                         | pass 1 with its three gaps kept, pass 2 correcting them, pass 3 the tag/Pages/bundle reads                                               |
+| `phaseV-npm-fresh.txt`, `phaseV-consumer/`, `phaseV-rescan.tgz`                                  | the isolated fresh install, `npx`, the three review formats, and the re-downloaded registry tarball                                      |
+| `phaseV-action-reread.txt`                                                                       | the hosted consumer run, its job steps, and the archived state of the consumer repository                                                |
+| `phaseV-raw-action-bundle.js`                                                                    | the Action bundle as served at ref `v0.1.0`, digested to `45660da7…`                                                                     |
+| `phaseV-prettier.txt`, `prettier/stage14-audit.r5.before.md`, `prettier/stage14-audit.r5.pretty` | the record's first `--check` failure, the intended bytes reviewed before writing, and the clean re-measurement                           |
+| `phaseV-record-gates.txt`                                                                        | §14.1's seven gates: both formats, both secret scans, the manifest no-op and 160-file line, the worktree counts, the digest equality     |
+| `phaseV-record-commit.txt`                                                                       | the failed-then-good commit, `7deafab`, the ordinary push, the three SHA readings, the unchanged tag, and the clean-worktree counts      |
+| `phaseV-record-run.txt`, `phaseV-record-run-watch.raw`, `phaseV-record-run-list.txt`             | §14.1's hosted run `37457082342`: watch exit, five jobs, every step, and the one-workflow inventory that excludes `publish.yml`          |
+| `phaseV-amendment2-gates.txt`, `phaseV-amendment2-commit.txt`                                    | the §14.1 amendment's gates (written before it is committed) and its commit/push output (produced by it)                                 |
 
 ## 16. What this stage did not establish
 
@@ -1089,5 +1157,6 @@ All Stage 14 evidence lives outside this repository, under
 - **The consumer smoke cannot be re-executed.** `diffbeacon-consumer-smoke-20261006` is archived
   (§14), so run `37430396143` is now a fixed historical artifact rather than a repeatable probe. §6's
   cleanup handoff — the owner deletes it, after reading the Job Summary panel — is still open.
-- **`docs/audits/stage14-v0.1.0-consumer-release.md` cannot record its own CI.** §14's ordering note is
-  the limit of what this file can say about the commit carrying it.
+- **`docs/audits/stage14-v0.1.0-consumer-release.md` cannot record its own CI.** §14.1 states the
+  limit exactly: this file can carry the hosted run of any earlier commit, including the record
+  commit it describes, but never the run of the commit carrying §14.1 itself.
