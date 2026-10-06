@@ -159,9 +159,10 @@ describe('counted quantities under extreme headers', () => {
       const parsed = parseUnifiedDiff(
         ['diff --git a/src/app.ts b/src/app.ts', ...lines, ''].join('\n'),
       );
-      expect(parsed.diagnostics.map((entry) => entry.code), lines.join(' / ')).toContain(
-        'malformed-header',
-      );
+      expect(
+        parsed.diagnostics.map((entry) => entry.code),
+        lines.join(' / '),
+      ).toContain('malformed-header');
       expect(parsed.files[0]?.status, lines.join(' / ')).toBe('modified');
     }
   });
