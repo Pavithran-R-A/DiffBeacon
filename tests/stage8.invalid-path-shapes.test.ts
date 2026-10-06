@@ -80,27 +80,22 @@ describe('a Windows-invalid name stays display data', () => {
     const parsed = parseUnifiedDiff(diffForPaths(WINDOWS_INVALID_PATHS));
     expect(parsed.files).toHaveLength(WINDOWS_INVALID_PATHS.length);
     expect(parsed.files.map((file) => file.displayPath).sort()).toEqual(
-      [...WINDOWS_INVALID_PATHS].map(headerTrim).sort(),
+      [...WINDOWS_INVALID_PATHS].sort(),
     );
     expect(parsed.diagnostics).toEqual([]);
   });
 
-  it('keeps a trailing dot, and drops a trailing space as the header reader always has', () => {
-    // Measured, and pinned rather than "fixed": a header path loses its trailing whitespace in
-    // `decodeGitQuoted` (packages/core/src/parser.ts:28), which trims before testing for the
-    // C-quoted `"…"` form Git uses when it escapes a name. A plain name therefore has its
-    // trailing space removed with whatever else surrounds it. Nothing here needs a repair: the
-    // name is only ever a label, since DiffBeacon never opens it, so the worst case is that two
-    // distinct names `x` and `x ` are shown with one spelling. Dropping that trim would change
-    // how quoted headers are recognised, and the only honest oracle for a header ending in a
-    // space is a real Git on a platform that allows the name — so the contract stays as measured.
+  it('keeps trailing dots and trailing spaces as distinct filename data', () => {
     expect(analyzeDiff(diffForPath('src/trailing-dot.')).files[0]?.displayPath).toBe(
       'src/trailing-dot.',
     );
     expect(analyzeDiff(diffForPath('src/trailing-space ')).files[0]?.displayPath).toBe(
-      'src/trailing-space',
+      'src/trailing-space ',
     );
     expect(analyzeDiff(diffForPath('src/trailing-space ')).summary.changedFiles).toBe(1);
+    expect(analyzeDiff(diffForPath('src/trailing-space')).files[0]?.displayPath).not.toBe(
+      analyzeDiff(diffForPath('src/trailing-space ')).files[0]?.displayPath,
+    );
   });
 
   it('gives the Markdown table exactly one row per name', () => {
@@ -154,10 +149,3 @@ function reportOf(file: string): { schemaVersion: string } {
   return JSON.parse(readFileSync(file, 'utf8')) as { schemaVersion: string };
 }
 
-/**
- * What the header reader reports for a name: trailing whitespace goes with the timestamp it
- * exists to remove, which the trailing-space case above pins as measured behaviour.
- */
-function headerTrim(name: string): string {
-  return name.replace(/\s+$/, '');
-}
