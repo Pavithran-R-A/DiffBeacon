@@ -26,16 +26,17 @@ user range
    │
    ├─ split only into validated revision tokens
    │
-   ├─ git rev-parse --verify --quiet --end-of-options TOKEN^{commit}
+   ├─ git rev-parse --revs-only --end-of-options LEFT^{commit} RIGHT^{commit}
+   │     └─ require exactly two full commit object IDs; otherwise resolve each side for a bounded error
    │
    └─ git diff --no-ext-diff --no-textconv --no-color \
               --src-prefix=a/ --dst-prefix=b/ \
               --ignore-submodules=none --submodule=short \
               --diff-algorithm=myers --find-renames=50% -l1000 \
-              --unified=3 RANGE --
+              --unified=3 FULL_OID...FULL_OID --
 ```
 
-The CLI and Action never construct `exec('git diff ' + userInput)`. Small repository-root and revision-resolution metadata queries use bounded argument-vector execution; the actual diff uses a bounded asynchronous `spawn` stream. Both boundaries use `shell: false`, and diff collection explicitly owns prefixes (`--src-prefix=a/ --dst-prefix=b/`), submodule handling (`--ignore-submodules=none --submodule=short`), the Myers algorithm, a 50% rename threshold, and a bounded rename limit of 1000. Submodule pointer changes are therefore collected in fixed short form and cannot be hidden or expanded by repository Git configuration. Command-line prefixes take precedence over `diff.noprefix`, `diff.srcPrefix`, `diff.dstPrefix`, and `diff.mnemonicPrefix`, and are used instead of `--default-prefix` because that option is not available on older still-common Git releases that the explicit pair supports. `--binary` is intentionally omitted: ordinary `Binary files ... differ` markers preserve classification without emitting `GIT binary patch` payloads. The Action uses trusted event SHAs and the same vectorized `git diff` invocation. It does not use `pull_request_target` or a privileged checkout of untrusted code.
+The CLI and Action never construct `exec('git diff ' + userInput)`. Small repository-root and revision-resolution metadata queries use bounded argument-vector execution; the actual diff uses a bounded asynchronous `spawn` stream. A symbolic two-endpoint range is snapshotted in one `rev-parse` call and the resulting full object IDs, not the original ref names, are passed to `git diff`. That closes the check/use gap in which a branch or tag could otherwise move after validation but before collection. Both boundaries use `shell: false`, and diff collection explicitly owns prefixes (`--src-prefix=a/ --dst-prefix=b/`), submodule handling (`--ignore-submodules=none --submodule=short`), the Myers algorithm, a 50% rename threshold, and a bounded rename limit of 1000. Submodule pointer changes are therefore collected in fixed short form and cannot be hidden or expanded by repository Git configuration. Command-line prefixes take precedence over `diff.noprefix`, `diff.srcPrefix`, `diff.dstPrefix`, and `diff.mnemonicPrefix`, and are used instead of `--default-prefix` because that option is not available on older still-common Git releases that the explicit pair supports. `--binary` is intentionally omitted: ordinary `Binary files ... differ` markers preserve classification without emitting `GIT binary patch` payloads. The Action uses trusted event SHAs and the same vectorized `git diff` invocation. It does not use `pull_request_target` or a privileged checkout of untrusted code.
 
 Ambient Git variables are handled by two different policies, because the two callers have different
 owners. `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY` and
@@ -104,8 +105,9 @@ restricts a fork pull request's `GITHUB_TOKEN` to read-only and withholds secret
 settings can change the details, so no universal statement is made about any one pull request's
 token privileges. DiffBeacon's boundary is the stricter one — the repository under review must
 never choose or run the reviewer. That form is limited to trusted development on this repository's
-own branches; consumers are directed to an independently referenced, reviewed commit SHA, which
-does not exist until the Stage 11 release. `pull_request_target` runs the base branch's workflow in
+own branches; consumers are directed to the independently referenced, reviewed release commit
+`5a50b52028ead78942ea3fc3bee93ba26e0a79cc`, which a separate consumer repository exercised
+successfully in Actions run `37430396143`. `pull_request_target` runs the base branch's workflow in
 the base repository's context, where the default checkout is the base branch rather than the pull
 request, and it can carry more trust than an ordinary fork event; the hazard is a workflow that
 then checks out or executes the pull request's code inside that context, which DiffBeacon neither
