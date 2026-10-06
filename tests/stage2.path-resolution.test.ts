@@ -84,6 +84,30 @@ describe('diff --git path pairs', () => {
     expect(parsed.files[0]).toMatchObject({ oldPath: 'two words.ts', newPath: 'two words.ts' });
   });
 
+  it('rejects /dev/null in the leading diff --git pair', () => {
+    for (const input of [
+      'diff --git /dev/null b/new.ts',
+      'diff --git a/old.ts /dev/null',
+      'diff --git "/dev/null" "b/new.ts"',
+      'diff --git "a/old.ts" "/dev/null"',
+    ]) {
+      const parsed = parseUnifiedDiff(input);
+      expect(codes(parsed), input).toEqual(['malformed-header']);
+      expect(parsed.files[0], input).toMatchObject({
+        oldPath: null,
+        newPath: null,
+        displayPath: '<unknown path>',
+      });
+    }
+  });
+
+  it('keeps impossible C-style octal escapes literal instead of wrapping them to a byte', () => {
+    const parsed = parseUnifiedDiff('diff --git "a/src/x\\777.ts" "b/src/x\\777.ts"');
+    expect(codes(parsed)).toEqual([]);
+    expect(parsed.files[0]?.displayPath).toBe('src/x\\777.ts');
+    expect(parsed.files[0]?.displayPath).not.toContain('\uFFFD');
+  });
+
   it('reports a malformed header when a quoted path is never closed', () => {
     const parsed = parseUnifiedDiff('diff --git "a/broken.ts b/broken.ts');
     expect(codes(parsed)).toEqual(['malformed-header']);
