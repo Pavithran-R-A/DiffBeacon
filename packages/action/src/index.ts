@@ -44,9 +44,7 @@ function readEvent(eventPath: string): PullRequestEvent {
   // Well-formed JSON is not enough: arrays and scalar JSON values are not workflow-event
   // objects, and letting them reach the field reader would produce a different error shape.
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
-    throw new Error(
-      'GITHUB_EVENT_PATH does not hold a JSON object for a workflow event: DiffBeacon reads pull_request.base.sha and pull_request.head.sha from the object the runner wrote.',
-    );
+    throw new Error('GITHUB_EVENT_PATH does not hold a JSON object for a workflow event.');
   return parsed as PullRequestEvent;
 }
 
