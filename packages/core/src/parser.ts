@@ -272,7 +272,6 @@ function inferStatus(file: {
   newPath: string | null;
   oldMode: string | null;
   newMode: string | null;
-  modeLine: number | null;
   similarity: number | null;
   binary: boolean;
   hunks: Hunk[];
@@ -345,6 +344,7 @@ type CurrentFile = {
   newPath: string | null;
   oldMode: string | null;
   newMode: string | null;
+  modeLine: number | null;
   similarity: number | null;
   binary: boolean;
   hunks: Hunk[];
