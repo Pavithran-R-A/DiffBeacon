@@ -201,6 +201,36 @@ describe('diff --git path pairs', () => {
     expect(codes(parsed)).toEqual([]);
     expect(parsed.files[0]).toMatchObject({ oldPath: 'f.ts', newPath: 'f.ts' });
   });
+
+  it('rejects a file header that names the wrong Git side', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/f.ts b/f.ts',
+        '--- b/old-side.ts',
+        '+++ a/new-side.ts',
+        '@@ -1 +1 @@',
+        '-a',
+        '+b',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toEqual(['malformed-header', 'malformed-header']);
+    expect(parsed.files[0]).toMatchObject({ oldPath: 'f.ts', newPath: 'f.ts' });
+  });
+
+  it('rejects an unterminated quoted file-header path without replacing a proven path', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/f.ts b/f.ts',
+        '--- "a/f.ts',
+        '+++ b/f.ts',
+        '@@ -1 +1 @@',
+        '-a',
+        '+b',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]).toMatchObject({ oldPath: 'f.ts', newPath: 'f.ts' });
+  });
 });
 
 describe('Binary files path pairs', () => {
