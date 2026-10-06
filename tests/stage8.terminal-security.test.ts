@@ -136,12 +136,22 @@ describe('pretty output keeps display controls out of the terminal', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps the JSON report factual where the presentation layer neutralises', () => {
-    const path = 'src/\u009b[31mC1csi.ts';
-    const report = analyzeDiff(diffForPath(path));
-    expect(report.files[0]?.displayPath).toBe(path);
-    expect(JSON.parse(renderJson(report)).files[0].displayPath).toBe(path);
-    expect(prettyFor(path)).not.toContain('\u009b');
+  it('keeps JSON factual while escaping controls in the serialized text', () => {
+    for (const path of [
+      'src/\u009b[31mC1csi.ts',
+      'src/\u202eRLO.ts',
+      'src/\u2066isolate.ts',
+      'src/\u200emark.ts',
+    ]) {
+      const report = analyzeDiff(diffForPath(path));
+      const json = renderJson(report);
+      expect(report.files[0]?.displayPath, path).toBe(path);
+      expect(JSON.parse(json).files[0].displayPath, path).toBe(path);
+      expect(containsDisplayControl(json), path).toBe(false);
+    }
+    expect(renderJson(analyzeDiff(diffForPath('src/\u009b[31mC1csi.ts')))).toContain('\\u009b');
+    expect(renderJson(analyzeDiff(diffForPath('src/\u202eRLO.ts')))).toContain('\\u202e');
+    expect(prettyFor('src/\u009b[31mC1csi.ts')).not.toContain('\u009b');
   });
 });
 
@@ -202,5 +212,20 @@ describe('the CLI message surface keeps one bounded line', () => {
     expect(containsDisplayControl(result.stdout.trim())).toBe(false);
     expect(result.stdout).not.toContain(ESC);
     expect(result.stderr).toBe('');
+  });
+
+  it('prints hostile JSON to stdout as safe JSON escapes that round-trip to the raw names', async () => {
+    const paths = [`src/${'\u202e'}RLO.ts`, `src/${'\u009b'}[31mC1csi.ts`];
+    async function* feed(): AsyncGenerator<string> {
+      for (const path of paths) yield diffForPath(path);
+    }
+    const result = await runCli(['review', '--stdin', '--format', 'json'], feed());
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(containsDisplayControl(result.stdout.trim())).toBe(false);
+    expect(result.stdout).toContain('\\u202e');
+    expect(result.stdout).toContain('\\u009b');
+    const parsed = JSON.parse(result.stdout) as { files: Array<{ displayPath: string }> };
+    expect(parsed.files.map((file) => file.displayPath)).toEqual(paths);
   });
 });
