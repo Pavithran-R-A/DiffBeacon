@@ -120,7 +120,11 @@ function parseQuotedPair(value: string): [string | null, string | null] | null {
   }
 
   const candidates: [string | null, string | null][] = [];
-  for (let separator = value.indexOf(' "'); separator >= 0; separator = value.indexOf(' "', separator + 1)) {
+  for (
+    let separator = value.indexOf(' "');
+    separator >= 0;
+    separator = value.indexOf(' "', separator + 1)
+  ) {
     const oldRaw = value.slice(0, separator);
     const newRaw = value.slice(separator + 1);
     if (quotedTokenEnd(newRaw) !== newRaw.length) continue;
@@ -485,7 +489,8 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         // copy metadata must not invent a destination or change the file's status.
         diagnostics.push({
           code: 'malformed-header',
-          message: 'Copy metadata must contain a source and destination consistent with the file header.',
+          message:
+            'Copy metadata must contain a source and destination consistent with the file header.',
           line: current.copyLine ?? 1,
         });
         current.isCopy = false;

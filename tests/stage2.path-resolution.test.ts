@@ -80,12 +80,7 @@ describe('diff --git path pairs', () => {
 
   it('refuses incomplete rename metadata instead of inventing a renamed file', () => {
     const parsed = parseUnifiedDiff(
-      [
-        'diff --git a/a.ts b/b.ts',
-        'similarity index 95%',
-        'rename from a.ts',
-        '',
-      ].join('\n'),
+      ['diff --git a/a.ts b/b.ts', 'similarity index 95%', 'rename from a.ts', ''].join('\n'),
     );
     expect(codes(parsed)).toContain('malformed-header');
     expect(parsed.files[0]).toMatchObject({
@@ -117,16 +112,11 @@ describe('diff --git path pairs', () => {
 
   it('rejects malformed quoting in rename metadata', () => {
     const parsed = parseUnifiedDiff(
-      [
-        'diff --git a/a.ts b/b.ts',
-        'rename from "a.ts',
-        'rename to b.ts',
-        '',
-      ].join('\n'),
+      ['diff --git a/a.ts b/b.ts', 'rename from "a.ts', 'rename to b.ts', ''].join('\n'),
     );
-    expect(codes(parsed).filter((code) => code === 'malformed-header').length).toBeGreaterThanOrEqual(
-      1,
-    );
+    expect(
+      codes(parsed).filter((code) => code === 'malformed-header').length,
+    ).toBeGreaterThanOrEqual(1);
     expect(parsed.files[0]).toMatchObject({
       status: 'modified',
       oldPath: 'a.ts',
@@ -237,14 +227,9 @@ describe('diff --git path pairs', () => {
 
   it('rejects an unterminated quoted file-header path without replacing a proven path', () => {
     const parsed = parseUnifiedDiff(
-      [
-        'diff --git a/f.ts b/f.ts',
-        '--- "a/f.ts',
-        '+++ b/f.ts',
-        '@@ -1 +1 @@',
-        '-a',
-        '+b',
-      ].join('\n'),
+      ['diff --git a/f.ts b/f.ts', '--- "a/f.ts', '+++ b/f.ts', '@@ -1 +1 @@', '-a', '+b'].join(
+        '\n',
+      ),
     );
     expect(codes(parsed)).toEqual(['malformed-header']);
     expect(parsed.files[0]).toMatchObject({ oldPath: 'f.ts', newPath: 'f.ts' });

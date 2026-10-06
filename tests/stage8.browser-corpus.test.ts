@@ -191,9 +191,9 @@ describeBrowser('the hostile corpus in a real Chromium', () => {
       'src/app.ts',
     ]);
     expect(errors).toEqual([]);
-    expect((await paintedCodes(page)).filter((value) => value === 'src/app.ts').length).toBeGreaterThan(
-      1,
-    );
+    expect(
+      (await paintedCodes(page)).filter((value) => value === 'src/app.ts').length,
+    ).toBeGreaterThan(1);
     await page.context().close();
   });
 

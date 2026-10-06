@@ -183,11 +183,7 @@ describe('copy detection diffs', () => {
 
   it('does not let incomplete copy metadata invent an added destination', () => {
     const parsed = parseUnifiedDiff(
-      [
-        'diff --git a/source.txt b/destination.txt',
-        'copy to invented.txt',
-        '',
-      ].join('\n'),
+      ['diff --git a/source.txt b/destination.txt', 'copy to invented.txt', ''].join('\n'),
     );
     expect(codes(parsed)).toEqual(['unsupported-dialect', 'malformed-header']);
     expect(parsed.files[0]).toMatchObject({
