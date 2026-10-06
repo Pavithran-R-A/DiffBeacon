@@ -20,6 +20,8 @@ import {
 // counts.
 
 const VECTOR = [
+  '-c',
+  'core.quotePath=true',
   'diff',
   '--no-ext-diff',
   '--no-textconv',
