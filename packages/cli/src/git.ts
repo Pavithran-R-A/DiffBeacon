@@ -110,11 +110,38 @@ function resolveRevision(revision: string, cwd: string, env?: NodeJS.ProcessEnv)
   }
 }
 
-function rangeParts(range: string): string[] {
+function snapshotRange(range: string, cwd: string, env?: NodeJS.ProcessEnv): string {
   const safeRange = validateRange(range);
-  if (safeRange.includes('...')) return safeRange.split('...');
-  if (safeRange.includes('..')) return safeRange.split('..');
-  return [safeRange];
+  const operator = safeRange.includes('...') ? '...' : '..';
+  const [left, right] = safeRange.split(operator);
+  let resolved: string[];
+  try {
+    resolved = gitSmall(
+      [
+        'rev-parse',
+        '--revs-only',
+        '--end-of-options',
+        `${left ?? ''}^{commit}`,
+        `${right ?? ''}^{commit}`,
+      ],
+      cwd,
+      env,
+    )
+      .trim()
+      .split(/\r?\n/)
+      .filter((value) => value !== '');
+  } catch (error) {
+    throw gitFailure(error, 'rev-parse range');
+  }
+  const fullObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+  if (resolved.length !== 2 || !resolved.every((value) => fullObjectId.test(value))) {
+    // Keep the established side-specific error when only one endpoint is missing.
+    for (const part of [left, right]) resolveRevision(part ?? '', cwd, env);
+    throw new DiffUnavailableError(
+      'No diff available: git could not snapshot both range endpoints as commit object IDs.',
+    );
+  }
+  return `${resolved[0]}${operator}${resolved[1]}`;
 }
 
 function validateRepositoryRange(
@@ -123,9 +150,7 @@ function validateRepositoryRange(
   options: GitProcessOptions,
 ): { root: string; range: string } {
   const root = repositoryRoot(cwd, options.env);
-  const safeRange = validateRange(range);
-  for (const part of rangeParts(safeRange)) resolveRevision(part ?? '', root, options.env);
-  return { root, range: safeRange };
+  return { root, range: snapshotRange(range, root, options.env) };
 }
 
 export async function collectGitDiffAsync(
