@@ -2,7 +2,7 @@
 
 **Deterministic attention routing for pull requests.** See what changed, what evidence is present, and where human review should start.
 
-DiffBeacon helps a maintainer understand a pull request before reading every changed line. It parses a unified diff, classifies observable review surfaces, reports neutral evidence relationships, and produces a deterministic review order.
+DiffBeacon helps a maintainer understand a pull request before reading every changed line. It parses a Git unified diff, classifies observable review surfaces, reports neutral evidence relationships, and produces a deterministic review order.
 
 > DiffBeacon maps review attention. It does **not** determine whether a pull request is safe to merge.
 
@@ -229,7 +229,7 @@ checks run against the live page. To run the same static site locally:
 npm run dev
 ```
 
-The demo is a React + Vite application under `client/`. Paste a unified diff, choose **Analyze diff**, and read the Review Attention Map. The input guard is 8 MiB to bound browser memory use for an accidental enormous paste. The same `packages/core` engine powers the CLI, Action, and web demo.
+The demo is a React + Vite application under `client/`. Paste a Git unified diff, choose **Analyze diff**, and read the Review Attention Map. The input guard is 8 MiB to bound browser memory use for an accidental enormous paste. The same `packages/core` engine powers the CLI, Action, and web demo.
 
 `.github/workflows/pages.yml` builds `client/` with the Vite `base` set to `/DiffBeacon/` for the
 repository subpath, as described in the [Vite static deployment guide][1], and deploys the artifact
