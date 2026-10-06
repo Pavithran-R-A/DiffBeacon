@@ -140,6 +140,24 @@ describe('diff --git path pairs', () => {
     expect(parsed.files[0]).toMatchObject({ oldPath: 'two words.ts', newPath: 'two words.ts' });
   });
 
+  it('accepts Git quoting each side independently', () => {
+    const quotedOld = parseUnifiedDiff('diff --git "a/old\\tname.ts" b/new.ts');
+    expect(codes(quotedOld)).toEqual([]);
+    expect(quotedOld.files[0]).toMatchObject({
+      oldPath: 'old\tname.ts',
+      newPath: 'new.ts',
+      displayPath: 'new.ts',
+    });
+
+    const quotedNew = parseUnifiedDiff('diff --git a/old.ts "b/new\\tname.ts"');
+    expect(codes(quotedNew)).toEqual([]);
+    expect(quotedNew.files[0]).toMatchObject({
+      oldPath: 'old.ts',
+      newPath: 'new\tname.ts',
+      displayPath: 'new\tname.ts',
+    });
+  });
+
   it('rejects /dev/null in the leading diff --git pair', () => {
     for (const input of [
       'diff --git /dev/null b/new.ts',
