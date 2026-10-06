@@ -152,7 +152,9 @@ describe('counted quantities under extreme headers', () => {
     const cases = [
       ['old mode octal', 'new mode 100755'],
       ['old mode 100644', 'new mode 999999'],
+      ['old mode 100644', 'new mode 777777'],
       ['new file mode 10064'],
+      ['new file mode 040000'],
       ['deleted file mode 100888'],
     ];
     for (const lines of cases) {
