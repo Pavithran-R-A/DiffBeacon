@@ -65,6 +65,26 @@ describe('Stage 9 CI contract', () => {
     expect(pages).toMatch(/steps\.deployment\.outputs\.page_url/);
   });
 
+  it('allows Pages to deploy only main after the same security and browser gates', () => {
+    const [buildJob] = pages.split(/^ {2}deploy:$/m);
+    expect(buildJob).toMatch(/if: github\.ref == 'refs\/heads\/main'/);
+    expect(buildJob).toMatch(/timeout-minutes: \d+/);
+    expect(buildJob).toMatch(/DIFFBEACON_SKIP_BROWSER: '1'/);
+    for (const step of [
+      'npm run secret-scan',
+      'npm audit --omit=dev --audit-level=high',
+      'npm audit --audit-level=high',
+      'npm run check',
+      "DIFFBEACON_SKIP_BROWSER: '0'",
+      "DIFFBEACON_REQUIRE_BROWSER: '1'",
+      'npm run test:browser',
+    ])
+      expect(buildJob, `pages.yml build job must run ${step}`).toContain(step);
+    expect(buildJob.indexOf('npm run test:browser')).toBeLessThan(
+      buildJob.indexOf('npm run build:web'),
+    );
+  });
+
   it('runs nothing that could mutate the registry, the branch, or the site from ci.yml', () => {
     expect(workflow).not.toMatch(/pull_request_target/);
     expect(workflow).not.toMatch(/npm publish/);
