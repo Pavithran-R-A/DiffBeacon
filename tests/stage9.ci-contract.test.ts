@@ -69,6 +69,7 @@ describe('Stage 9 CI contract', () => {
   });
 
   it('allows Pages to deploy only main after the same security and browser gates', () => {
+    expect(pages).toMatch(/concurrency:\n {2}group: pages\n {2}cancel-in-progress: false/);
     const [buildJob] = pages.split(/^ {2}deploy:$/m);
     expect(buildJob).toMatch(/if: github\.ref == 'refs\/heads\/main'/);
     expect(buildJob).toMatch(/timeout-minutes: \d+/);
