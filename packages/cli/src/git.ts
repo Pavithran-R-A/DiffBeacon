@@ -168,6 +168,7 @@ export async function collectGitDiffAsync(
   });
   const stdout: string[] = [];
   const stderr: string[] = [];
+  let stderrChars = 0;
   let bytes = 0;
   let exceeded = false;
   child.stdout.setEncoding('utf8');
@@ -183,7 +184,11 @@ export async function collectGitDiffAsync(
     stdout.push(chunk);
   });
   child.stderr.on('data', (chunk: string) => {
-    if (stderr.join('').length < 64 * 1024) stderr.push(chunk);
+    const remaining = 64 * 1024 - stderrChars;
+    if (remaining <= 0) return;
+    const bounded = chunk.slice(0, remaining);
+    stderr.push(bounded);
+    stderrChars += bounded.length;
   });
   return await new Promise<string>((resolve, reject) => {
     child.once('error', () => {
