@@ -147,6 +147,47 @@ describe('counted quantities under extreme headers', () => {
       similarity: 95,
     });
   });
+
+  it('rejects malformed mode metadata instead of deriving file status from it', () => {
+    const cases = [
+      ['old mode octal', 'new mode 100755'],
+      ['old mode 100644', 'new mode 999999'],
+      ['new file mode 10064'],
+      ['deleted file mode 100888'],
+    ];
+    for (const lines of cases) {
+      const parsed = parseUnifiedDiff(
+        ['diff --git a/src/app.ts b/src/app.ts', ...lines, ''].join('\n'),
+      );
+      expect(parsed.diagnostics.map((entry) => entry.code), lines.join(' / ')).toContain(
+        'malformed-header',
+      );
+      expect(parsed.files[0]?.status, lines.join(' / ')).toBe('modified');
+    }
+  });
+
+  it('keeps all six-digit octal Git modes, including symlink and gitlink modes', () => {
+    for (const [oldMode, newMode] of [
+      ['100644', '100755'],
+      ['120000', '100644'],
+      ['160000', '100644'],
+    ]) {
+      const parsed = parseUnifiedDiff(
+        [
+          'diff --git a/src/app.ts b/src/app.ts',
+          `old mode ${oldMode}`,
+          `new mode ${newMode}`,
+          '',
+        ].join('\n'),
+      );
+      expect(parsed.diagnostics, `${oldMode} -> ${newMode}`).toEqual([]);
+      expect(parsed.files[0]).toMatchObject({
+        status: 'mode-only',
+        oldMode,
+        newMode,
+      });
+    }
+  });
 });
 
 describe('line terminators the unified-diff format does not define', () => {
