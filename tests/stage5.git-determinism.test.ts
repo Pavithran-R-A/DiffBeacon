@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { analyzeDiff } from '../packages/core/src/index.js';
 import { collectGitDiffAsync } from '../packages/cli/src/index.js';
+import { boundedGitStderrChunk } from '../packages/cli/src/git.js';
 import {
   createFixtureRepository,
   gitIn,
@@ -49,6 +50,12 @@ function prescribedGitVector(doc: string): string {
 }
 
 describe('Git diff determinism boundary', () => {
+  it('caps captured Git stderr even when one emitted chunk exceeds the whole allowance', () => {
+    expect(boundedGitStderrChunk('x'.repeat(100_000), 0)).toHaveLength(64 * 1024);
+    expect(boundedGitStderrChunk('abcdef', 64 * 1024 - 2)).toBe('ab');
+    expect(boundedGitStderrChunk('still ignored', 64 * 1024)).toBe('');
+  });
+
   it('owns structural flags and omits full binary patch generation', () => {
     const source = readFileSync('packages/cli/src/git.ts', 'utf8');
     expect(source).toContain("'--src-prefix=a/'");
