@@ -142,10 +142,52 @@ function parseGitPair(value: string): PairResolution {
   return resolution;
 }
 
+function decodeWholeQuotedToken(value: string): string | null {
+  if (!value.startsWith('"')) return null;
+  let escaped = false;
+  for (let index = 1; index < value.length; index += 1) {
+    const character = value[index] ?? '';
+    if (!escaped && character === '"')
+      return index === value.length - 1 ? decodeGitQuoted(value) : null;
+    escaped = !escaped && character === '\\';
+    if (character !== '\\') escaped = false;
+  }
+  return null;
+}
+
+function binarySide(value: string, prefix: 'a/' | 'b/'): { valid: boolean; path: string | null } {
+  const decoded = value.startsWith('"') ? decodeWholeQuotedToken(value) : value;
+  if (decoded === null) return { valid: false, path: null };
+  if (decoded === NULL_PATH) return { valid: true, path: null };
+  if (!decoded.startsWith(prefix) || decoded.length === prefix.length)
+    return { valid: false, path: null };
+  return { valid: true, path: decoded.slice(prefix.length) };
+}
+
 function parseBinaryPair(value: string): PairResolution {
-  // The final space belongs to the ` differ` delimiter. Any earlier space may be
-  // part of the new-side filename and must survive.
-  return resolvePair(value.replace(/ differ$/, ''), ' and ', 0);
+  // `Binary files` has an exact trailing ` differ` marker. Strip only that
+  // delimiter; spaces before it may belong to the destination filename.
+  if (!value.endsWith(' differ')) return { reason: 'unprovable', pair: null };
+  const pair = value.slice(0, -' differ'.length);
+  const accepted: PathPair[] = [];
+  let offset = 0;
+  while (offset < pair.length) {
+    const index = pair.indexOf(' and ', offset);
+    if (index < 0) break;
+    const left = binarySide(pair.slice(0, index), 'a/');
+    const right = binarySide(pair.slice(index + ' and '.length), 'b/');
+    if (left.valid && right.valid) accepted.push({ oldPath: left.path, newPath: right.path });
+    offset = index + 1;
+  }
+  if (accepted.length === 0) return { reason: 'unprovable', pair: null };
+  if (accepted.length === 1) return { reason: 'proven', pair: accepted[0] as PathPair };
+  const agreeing = accepted.filter(
+    (candidate) => candidate.oldPath === candidate.newPath && candidate.oldPath !== null,
+  );
+  const distinct = new Set(agreeing.map((candidate) => candidate.oldPath as string));
+  return distinct.size === 1
+    ? { reason: 'proven', pair: agreeing[0] as PathPair }
+    : { reason: 'ambiguous', pair: null };
 }
 
 const isOldSide = (value: string): boolean => value === NULL_PATH || value.startsWith('a/');
