@@ -14,9 +14,8 @@ function exceedsDiffLimit(value) {
   return new TextEncoder().encode(value).length > MAX_DIFF_BYTES;
 }
 function decodeGitQuoted(value) {
-  const trimmed = value.trim();
-  if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) return trimmed;
-  const inner = trimmed.slice(1, -1);
+  if (!(value.startsWith('"') && value.endsWith('"'))) return value;
+  const inner = value.slice(1, -1);
   const bytes = [];
   const encoder = new TextEncoder();
   for (let index = 0; index < inner.length; index += 1) {
@@ -54,13 +53,13 @@ function decodeGitQuoted(value) {
 }
 function stripDiffPrefix(value) {
   const withoutTimestamp = value.split("	", 1)[0] ?? value;
-  const path = decodeGitQuoted(withoutTimestamp.trim());
+  const path = decodeGitQuoted(withoutTimestamp);
   if (path === NULL_PATH) return null;
   if (path.startsWith("a/") || path.startsWith("b/")) return path.slice(2);
   return path;
 }
 function parseQuotedPair(value) {
-  const trimmed = value.trim();
+  const trimmed = value;
   if (!trimmed.startsWith('"')) return null;
   const tokens = [];
   let cursor = 0;
@@ -70,35 +69,43 @@ function parseQuotedPair(value) {
     const start = cursor;
     cursor += 1;
     let escaped = false;
+    let closed = false;
     while (cursor < trimmed.length) {
       const character = trimmed[cursor] ?? "";
       if (!escaped && character === '"') {
         cursor += 1;
+        closed = true;
         break;
       }
       escaped = !escaped && character === "\\";
       if (character !== "\\") escaped = false;
       cursor += 1;
     }
+    if (!closed) return null;
     tokens.push(trimmed.slice(start, cursor));
   }
-  if (tokens.length !== 2) return null;
+  while (trimmed[cursor] === " ") cursor += 1;
+  if (tokens.length !== 2 || cursor !== trimmed.length) return null;
+  const oldToken = decodeGitQuoted(tokens[0]);
+  const newToken = decodeGitQuoted(tokens[1]);
+  if (!(oldToken === NULL_PATH || oldToken.startsWith("a/")) || !(newToken === NULL_PATH || newToken.startsWith("b/")))
+    return null;
   const oldPath = stripDiffPrefix(tokens[0]);
   const newPath = stripDiffPrefix(tokens[1]);
   return oldPath === "" || newPath === "" ? null : [oldPath, newPath];
 }
 function parseGitPair(value) {
-  const trimmed = value.trim();
-  const quoted = parseQuotedPair(trimmed);
+  const pair = value.startsWith(" ") ? value.slice(1) : value;
+  const quoted = parseQuotedPair(pair);
   if (quoted !== null)
     return {
       reason: "proven",
       pair: { oldPath: quoted[0], newPath: quoted[1] }
     };
-  return resolvePair(trimmed, " b/", 2);
+  return resolvePair(pair, " b/", 2);
 }
 function parseBinaryPair(value) {
-  return resolvePair(value.trim().replace(/ differ$/, ""), " and ", 0);
+  return resolvePair(value.replace(/ differ$/, ""), " and ", 0);
 }
 var isOldSide = (value) => value === NULL_PATH || value.startsWith("a/");
 var isNewSide = (value) => value === NULL_PATH || value.startsWith("b/");
@@ -345,8 +352,17 @@ function parseUnifiedDiff(input) {
       current.oldMode = line.slice("old mode ".length).trim();
     else if (line.startsWith("new mode ")) current.newMode = line.slice("new mode ".length).trim();
     else if (line.startsWith("similarity index ")) {
-      const value = Number.parseInt(line.slice("similarity index ".length), 10);
-      current.similarity = Number.isFinite(value) ? value : null;
+      const raw = line.slice("similarity index ".length).trim();
+      const match = /^(\d+)%$/.exec(raw);
+      const value = match === null ? null : Number(match[1]);
+      if (value === null || !Number.isInteger(value) || value < 0 || value > 100) {
+        current.similarity = null;
+        diagnostics.push({
+          code: "malformed-header",
+          message: "Similarity index must be an integer percentage from 0% through 100%.",
+          line: lineNumber
+        });
+      } else current.similarity = value;
     } else if (line.startsWith("rename from "))
       current.renameFrom = decodeGitQuoted(line.slice("rename from ".length));
     else if (line.startsWith("rename to "))
@@ -1120,17 +1136,38 @@ function resolveRevision(revision, cwd, env) {
     );
   }
 }
-function rangeParts(range) {
+function snapshotRange(range, cwd, env) {
   const safeRange = validateRange(range);
-  if (safeRange.includes("...")) return safeRange.split("...");
-  if (safeRange.includes("..")) return safeRange.split("..");
-  return [safeRange];
+  const operator = safeRange.includes("...") ? "..." : "..";
+  const [left, right] = safeRange.split(operator);
+  let resolved;
+  try {
+    resolved = gitSmall(
+      [
+        "rev-parse",
+        "--revs-only",
+        "--end-of-options",
+        `${left ?? ""}^{commit}`,
+        `${right ?? ""}^{commit}`
+      ],
+      cwd,
+      env
+    ).trim().split(/\r?\n/).filter((value) => value !== "");
+  } catch (error) {
+    throw gitFailure(error, "rev-parse range");
+  }
+  const fullObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+  if (resolved.length !== 2 || !resolved.every((value) => fullObjectId.test(value))) {
+    for (const part of [left, right]) resolveRevision(part ?? "", cwd, env);
+    throw new DiffUnavailableError(
+      "No diff available: git could not snapshot both range endpoints as commit object IDs."
+    );
+  }
+  return `${resolved[0]}${operator}${resolved[1]}`;
 }
 function validateRepositoryRange(range, cwd, options) {
   const root = repositoryRoot(cwd, options.env);
-  const safeRange = validateRange(range);
-  for (const part of rangeParts(safeRange)) resolveRevision(part ?? "", root, options.env);
-  return { root, range: safeRange };
+  return { root, range: snapshotRange(range, root, options.env) };
 }
 async function collectGitDiffAsync(range, cwd = process2.cwd(), options = {}) {
   const { root, range: safeRange } = validateRepositoryRange(range, cwd, options);
@@ -1244,7 +1281,7 @@ function readEvent(eventPath) {
   } catch {
     throw new Error("GITHUB_EVENT_PATH is not valid JSON for a workflow event.");
   }
-  if (parsed === null || typeof parsed !== "object")
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
     throw new Error(
       "GITHUB_EVENT_PATH does not hold a JSON object for a workflow event: DiffBeacon reads pull_request.base.sha and pull_request.head.sha from the object the runner wrote."
     );
