@@ -13,8 +13,8 @@ function exceedsDiffLimit(value) {
   if (value.length * 3 <= MAX_DIFF_BYTES) return false;
   return new TextEncoder().encode(value).length > MAX_DIFF_BYTES;
 }
-function decodeGitQuoted(value) {
-  if (!(value.startsWith('"') && value.endsWith('"'))) return value;
+function decodeGitQuotedResult(value) {
+  if (!(value.startsWith('"') && value.endsWith('"'))) return { value, validUtf8: true };
   const inner = value.slice(1, -1);
   const bytes = [];
   const encoder = new TextEncoder();
@@ -52,7 +52,15 @@ function decodeGitQuoted(value) {
     }
     bytes.push(...encoder.encode("\\"));
   }
-  return new TextDecoder().decode(Uint8Array.from(bytes));
+  const encoded = Uint8Array.from(bytes);
+  try {
+    return { value: new TextDecoder("utf-8", { fatal: true }).decode(encoded), validUtf8: true };
+  } catch {
+    return { value: new TextDecoder().decode(encoded), validUtf8: false };
+  }
+}
+function decodeGitQuoted(value) {
+  return decodeGitQuotedResult(value).value;
 }
 function stripDiffPrefix(value) {
   const withoutTimestamp = value.split("	", 1)[0] ?? value;
@@ -73,8 +81,11 @@ function quotedTokenEnd(value, start = 0) {
   return null;
 }
 function pairFromTokens(oldRaw, newRaw) {
-  const oldToken = decodeGitQuoted(oldRaw);
-  const newToken = decodeGitQuoted(newRaw);
+  const oldDecoded = decodeGitQuotedResult(oldRaw);
+  const newDecoded = decodeGitQuotedResult(newRaw);
+  if (!oldDecoded.validUtf8 || !newDecoded.validUtf8) return null;
+  const oldToken = oldDecoded.value;
+  const newToken = newDecoded.value;
   if (!oldToken.startsWith("a/") || !newToken.startsWith("b/")) return null;
   const oldPath = stripDiffPrefix(oldRaw);
   const newPath = stripDiffPrefix(newRaw);
@@ -114,7 +125,9 @@ function parseGitPair(value) {
   return resolution;
 }
 function decodeWholeQuotedToken(value) {
-  return quotedTokenEnd(value) === value.length ? decodeGitQuoted(value) : null;
+  if (quotedTokenEnd(value) !== value.length) return null;
+  const decoded = decodeGitQuotedResult(value);
+  return decoded.validUtf8 ? decoded.value : null;
 }
 function metadataPath(value) {
   if (value === "") return null;
@@ -1285,6 +1298,8 @@ function gitFailure(error, command) {
 }
 function gitArgs(range) {
   return [
+    "-c",
+    "core.quotePath=true",
     "diff",
     "--no-ext-diff",
     "--no-textconv",
