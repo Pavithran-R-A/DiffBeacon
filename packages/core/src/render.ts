@@ -87,8 +87,21 @@ function wrap(text: string, width: number): string[] {
   return lines;
 }
 
+/**
+ * JSON remains the raw factual data model after parsing, but its text form can safely encode
+ * display-control code points as `\\uXXXX`. That keeps a JSON report valid and byte-stable while
+ * preventing C1 terminal controls and Unicode bidi/line-format controls from acting on a reader who
+ * prints the JSON directly. JSON.parse restores the exact original strings.
+ */
+const JSON_DISPLAY_CONTROL =
+  /[\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
+
+function jsonUnicodeEscape(character: string): string {
+  return `\\u${character.codePointAt(0)?.toString(16).padStart(4, '0') ?? 'fffd'}`;
+}
+
 export function renderJson(report: ReviewAttentionMap): string {
-  return JSON.stringify(report, null, 2);
+  return JSON.stringify(report, null, 2).replace(JSON_DISPLAY_CONTROL, jsonUnicodeEscape);
 }
 
 export function renderMarkdown(report: ReviewAttentionMap): string {

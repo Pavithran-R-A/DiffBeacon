@@ -91,6 +91,9 @@ const STALE_CURRENT_STATE_CLAIMS: RegExp[] = [
   /there are still zero tags and zero github releases/i,
   /it has not made its first release/i,
   /so `npx diffbeacon[^`]*` does not resolve/i,
+  /consumption of the Action[^.]{0,160}still never[^.]{0,60}measured/i,
+  /reviewed commit SHA[^.]{0,160}does not exist until the Stage 11 release/i,
+  /trailing whitespace[^.]{0,160}(?:trimmed|displayed as)/i,
 ];
 
 /** Markdown link targets outside fenced code blocks and inline code; external/in-page dropped. */
@@ -155,6 +158,18 @@ function readmeSurfaceList(): string[] {
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
 }
+
+describe('current limitation prose matches parser dialect handling', () => {
+  it('does not describe unsupported copy detection as rename-like two-sided classification', () => {
+    const text = flatRead('docs/limitations.md');
+    expect(text).toMatch(/copy detection is outside the supported vector/i);
+    expect(text).not.toMatch(/copy from[^.]{0,160}classified from both paths/i);
+  });
+
+  it('documents bounded similarity metadata rather than accepting arbitrary percentages', () => {
+    expect(flatRead('docs/limitations.md')).toMatch(/similarity[^.]{0,160}0%[^.]{0,80}100%/i);
+  });
+});
 
 describe('the detector documentation names exactly the shipped surfaces', () => {
   const detectorDoc = read('docs/detectors/initial-detectors.md');

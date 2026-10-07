@@ -153,16 +153,19 @@ describe('the publish workflow is a gate, not a convenience', () => {
       'npm audit --omit=dev --audit-level=high',
       'npm audit --audit-level=high',
       'npm run verify',
+      'npm run test:browser',
       'npm run package-smoke',
     ])
       expect(text, `publish.yml must run ${step}`).toContain(step);
     expect(text).toMatch(/node-version: '24'/);
     expect(text).toMatch(/11\.5\.1/);
-    // Same browser contract as ci.yml's source lanes: this tag push also runs ci.yml's `browser`
-    // job, so the publish gate declares its Chromium suppression instead of quietly skipping it.
+    // `verify` keeps its embedded browser suites suppressed, then this publish job runs one
+    // explicit fail-closed Chromium gate before the registry write. A separate ci.yml run may race
+    // this workflow, so it cannot be the publication prerequisite.
     expect(text).toMatch(/DIFFBEACON_SKIP_BROWSER: '1'/);
-    expect(text).not.toContain('DIFFBEACON_REQUIRE_BROWSER');
-    expect(text).not.toContain('npm run test:browser');
+    expect(text).toMatch(/DIFFBEACON_SKIP_BROWSER: '0'/);
+    expect(text).toMatch(/DIFFBEACON_REQUIRE_BROWSER: '1'/);
+    expect(text).toContain('npm run test:browser');
   });
 
   it('puts every gate ahead of the registry write', () => {
@@ -176,6 +179,7 @@ describe('the publish workflow is a gate, not a convenience', () => {
       'npm audit --omit=dev --audit-level=high',
       'npm audit --audit-level=high',
       'npm run verify',
+      'npm run test:browser',
       'npm run package-smoke',
     ]) {
       const position = commands.indexOf(gate);

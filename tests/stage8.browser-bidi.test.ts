@@ -196,6 +196,8 @@ describeBrowser('hostile display text in a real Chromium', () => {
     expect(probe.codeText).toBe('src/aRLO.ts');
     await page.getByRole('button', { name: 'Copy current JSON report' }).click();
     const exported = await page.evaluate(() => navigator.clipboard.readText());
+    expect(exported).not.toContain(RLO);
+    expect(exported).toContain('\\u202e');
     expect(JSON.parse(exported).files[0].displayPath).toBe(`src/a${RLO}RLO.ts`);
     await page.context().close();
   });

@@ -83,14 +83,113 @@ describe('counted quantities under extreme headers', () => {
     expect(parsed.diagnostics.map((entry) => entry.code)).toContain('truncated-hunk');
   });
 
-  it('keeps a percentage out of the report when it is not a number at all', () => {
-    const words = analyzeDiff(extreme[4] as string);
-    expect(words.files[0]?.similarity).toBeNull();
-    const huge = analyzeDiff(extreme[3] as string);
-    // A claimed percentage beyond the double range stays finite and is reported as the patch
-    // spelled it; the guard exists so no non-finite number can reach a report.
-    expect(huge.files[0]?.similarity).toBe(1e20);
-    expect(Number.isFinite(huge.files[0]?.similarity as number)).toBe(true);
+  it('rejects malformed and out-of-range similarity percentages', () => {
+    const malformed = [
+      extreme[3] as string,
+      extreme[4] as string,
+      [
+        'diff --git a/src/old.ts b/src/new.ts',
+        'similarity index -1%',
+        'rename from src/old.ts',
+        'rename to src/new.ts',
+        '',
+      ].join('\n'),
+      [
+        'diff --git a/src/old.ts b/src/new.ts',
+        'similarity index 101%',
+        'rename from src/old.ts',
+        'rename to src/new.ts',
+        '',
+      ].join('\n'),
+      [
+        'diff --git a/src/old.ts b/src/new.ts',
+        'similarity index 92% trailing',
+        'rename from src/old.ts',
+        'rename to src/new.ts',
+        '',
+      ].join('\n'),
+    ];
+    for (const diff of malformed) {
+      const parsed = parseUnifiedDiff(diff);
+      expect(parsed.files[0]?.similarity, diff).toBeNull();
+      expect(
+        parsed.diagnostics.map((entry) => entry.code),
+        diff,
+      ).toContain('malformed-header');
+      expect(analyzeDiff(diff).summary.diagnostics, diff).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps the valid similarity boundaries inside the schema range', () => {
+    for (const value of [0, 1, 99, 100]) {
+      const diff = [
+        'diff --git a/src/old.ts b/src/new.ts',
+        `similarity index ${value}%`,
+        'rename from src/old.ts',
+        'rename to src/new.ts',
+        '',
+      ].join('\n');
+      const parsed = parseUnifiedDiff(diff);
+      expect(parsed.diagnostics, diff).toEqual([]);
+      expect(parsed.files[0]?.similarity).toBe(value);
+    }
+  });
+
+  it('does not infer a rename from similarity metadata alone', () => {
+    const parsed = parseUnifiedDiff(
+      ['diff --git a/src/app.ts b/src/app.ts', 'similarity index 95%', ''].join('\n'),
+    );
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'src/app.ts',
+      newPath: 'src/app.ts',
+      similarity: 95,
+    });
+  });
+
+  it('rejects malformed mode metadata instead of deriving file status from it', () => {
+    const cases = [
+      ['old mode octal', 'new mode 100755'],
+      ['old mode 100644', 'new mode 999999'],
+      ['old mode 100644', 'new mode 777777'],
+      ['new file mode 10064'],
+      ['new file mode 040000'],
+      ['deleted file mode 100888'],
+    ];
+    for (const lines of cases) {
+      const parsed = parseUnifiedDiff(
+        ['diff --git a/src/app.ts b/src/app.ts', ...lines, ''].join('\n'),
+      );
+      expect(
+        parsed.diagnostics.map((entry) => entry.code),
+        lines.join(' / '),
+      ).toContain('malformed-header');
+      expect(parsed.files[0]?.status, lines.join(' / ')).toBe('modified');
+    }
+  });
+
+  it('keeps all six-digit octal Git modes, including symlink and gitlink modes', () => {
+    for (const [oldMode, newMode] of [
+      ['100644', '100755'],
+      ['120000', '100644'],
+      ['160000', '100644'],
+    ]) {
+      const parsed = parseUnifiedDiff(
+        [
+          'diff --git a/src/app.ts b/src/app.ts',
+          `old mode ${oldMode}`,
+          `new mode ${newMode}`,
+          '',
+        ].join('\n'),
+      );
+      expect(parsed.diagnostics, `${oldMode} -> ${newMode}`).toEqual([]);
+      expect(parsed.files[0]).toMatchObject({
+        status: 'mode-only',
+        oldMode,
+        newMode,
+      });
+    }
   });
 });
 

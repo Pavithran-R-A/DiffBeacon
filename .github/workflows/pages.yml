@@ -5,17 +5,27 @@ name: Deploy browser demo to GitHub Pages
 on:
   workflow_dispatch:
 
-# Exactly three grants: read the source being published, write only the Pages site, and mint the
-# OIDC credential the official deploy action presents for the `github-pages` environment.
-# tests/stage9.ci-contract.test.ts asserts this set as a set, so widening it fails there.
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# Serialize deployments without cancelling the one already writing the public site. A newer manual
+# dispatch waits its turn instead of racing an older artifact and accidentally publishing out of order.
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
+# Permissions are job-scoped: build/test code can read source but cannot mint a Pages OIDC token
+# or write a deployment. Only the dedicated deploy job receives the two elevated Pages grants.
 jobs:
   build:
+    permissions:
+      contents: read
+    # workflow_dispatch can be pointed at any ref in the UI. Only main is a deployable source;
+    # selecting another branch must stop before an artifact or Pages credential is produced.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Source verification is serialized without its embedded browser projects; the dedicated
+      # fail-closed Chromium step below owns that surface before the final Pages build.
+      DIFFBEACON_SKIP_BROWSER: '1'
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -24,8 +34,22 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Secret scan
+        run: npm run secret-scan
       - name: Install dependencies
         run: npm ci
+      - name: Dependency audit (release surface)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Dependency audit (development tree)
+        run: npm audit --audit-level=high
+      - name: Verify source, packages and committed artifacts
+        run: npm run check
+      - name: Qualify the browser before deployment
+        env:
+          DIFFBEACON_SKIP_BROWSER: '0'
+          DIFFBEACON_REQUIRE_BROWSER: '1'
+        run: npm run test:browser
+      # Browser qualification may build its own local-root fixture; make the deployable bytes last.
       - name: Build the repository-path web bundle
         run: BASE_PATH="/${{ github.event.repository.name }}/" npm run build:web
       - name: Configure Pages
@@ -38,6 +62,10 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

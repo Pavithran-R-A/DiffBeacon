@@ -2,7 +2,7 @@
 
 **Deterministic attention routing for pull requests.** See what changed, what evidence is present, and where human review should start.
 
-DiffBeacon helps a maintainer understand a pull request before reading every changed line. It parses a unified diff, classifies observable review surfaces, reports neutral evidence relationships, and produces a deterministic review order.
+DiffBeacon helps a maintainer understand a pull request before reading every changed line. It parses a Git unified diff, classifies observable review surfaces, reports neutral evidence relationships, and produces a deterministic review order.
 
 > DiffBeacon maps review attention. It does **not** determine whether a pull request is safe to merge.
 
@@ -229,7 +229,7 @@ checks run against the live page. To run the same static site locally:
 npm run dev
 ```
 
-The demo is a React + Vite application under `client/`. Paste a unified diff, choose **Analyze diff**, and read the Review Attention Map. The input guard is 8 MiB to bound browser memory use for an accidental enormous paste. The same `packages/core` engine powers the CLI, Action, and web demo.
+The demo is a React + Vite application under `client/`. Paste a Git unified diff, choose **Analyze diff**, and read the Review Attention Map. The input guard is 8 MiB to bound browser memory use for an accidental enormous paste. The same `packages/core` engine powers the CLI, Action, and web demo.
 
 `.github/workflows/pages.yml` builds `client/` with the Vite `base` set to `/DiffBeacon/` for the
 repository subpath, as described in the [Vite static deployment guide][1], and deploys the artifact
@@ -257,9 +257,9 @@ The initial implementation uses conservative path conventions. It does not dynam
 
 ## Privacy and security model
 
-Diff text, paths, revision names, and pull-request metadata are treated as untrusted input. DiffBeacon resolves small Git metadata queries through bounded argument-vector process execution and collects the actual diff through a bounded asynchronous `spawn` stream. Both use `shell: false`; revision tokens are validated, Git resolves commits before diffing, and `--src-prefix=a/ --dst-prefix=b/`, `--ignore-submodules=none`, `--submodule=short`, `--diff-algorithm=myers`, `--find-renames=50%`, and `-l1000` make the parsed patch format deterministic and independent of repository diff configuration. The explicit prefixes are used instead of `--default-prefix` because that option is unavailable on older still-common Git releases; it was measured as rejected by Git 2.39.5 while the prefix pair produces byte-identical output there and on newer versions. External diff/text conversion and full binary patch payloads are disabled because DiffBeacon classifies, never applies, patches; `--` terminates the pathspec. Myers is selected for reproducibility, not because it is objectively superior. It does not source repository scripts, install target dependencies, run changed tests/builds, or execute files from the analyzed repository.
+Diff text, paths, revision names, and pull-request metadata are treated as untrusted input. DiffBeacon resolves small Git metadata queries through bounded argument-vector process execution and collects the actual diff through a bounded asynchronous `spawn` stream. Both use `shell: false`; revision tokens are validated, Git resolves commits before diffing, and `-c core.quotePath=true`, `--src-prefix=a/ --dst-prefix=b/`, `--ignore-submodules=none`, `--submodule=short`, `--diff-algorithm=myers`, `--find-renames=50%`, and `-l1000` make the parsed patch format deterministic and independent of repository diff configuration. The explicit prefixes are used instead of `--default-prefix` because that option is unavailable on older still-common Git releases; it was measured as rejected by Git 2.39.5 while the prefix pair produces byte-identical output there and on newer versions. External diff/text conversion and full binary patch payloads are disabled because DiffBeacon classifies, never applies, patches; `--` terminates the pathspec. Myers is selected for reproducibility, not because it is objectively superior. It does not source repository scripts, install target dependencies, run changed tests/builds, or execute files from the analyzed repository.
 
-The browser paints diff-derived values as React text and `<code>` children; no `dangerouslySetInnerHTML`, `innerHTML`, `insertAdjacentHTML`, or `document.write` appears anywhere in shipped source, and `packages/core/src/display.ts` rewrites reordering, line-shaping, and executable control text at paint time while the JSON report keeps the raw value. The Markdown renderer escapes table-breaking and HTML-looking path characters. The Action uses `node24`, a bundled artifact, trusted event SHAs, and a read-only `contents: read` workflow model.
+The browser paints diff-derived values as React text and `<code>` children; no `dangerouslySetInnerHTML`, `innerHTML`, `insertAdjacentHTML`, or `document.write` appears anywhere in shipped source, and `packages/core/src/display.ts` rewrites reordering, line-shaping, and executable control text at paint time. Parsed JSON keeps the raw value, while serialized JSON spells terminal-active display controls as Unicode escapes so the text itself remains inert. The Markdown renderer escapes table-breaking and HTML-looking path characters. The Action uses `node24`, a bundled artifact, trusted event SHAs, and a read-only `contents: read` workflow model.
 
 Read the full boundary in [`docs/architecture/security.md`](docs/architecture/security.md) and [`SECURITY.md`](SECURITY.md).
 

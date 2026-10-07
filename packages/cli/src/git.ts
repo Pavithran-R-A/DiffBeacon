@@ -49,6 +49,8 @@ function gitFailure(error: unknown, command: string): DiffUnavailableError {
 
 function gitArgs(range: string): string[] {
   return [
+    '-c',
+    'core.quotePath=true',
     'diff',
     '--no-ext-diff',
     '--no-textconv',
@@ -87,6 +89,14 @@ export interface GitProcessOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+const MAX_GIT_STDERR_CHARS = 64 * 1024;
+
+/** Keep diagnostic capture bounded even when one stderr event is larger than the whole allowance. */
+export function boundedGitStderrChunk(chunk: string, capturedChars: number): string {
+  const remaining = MAX_GIT_STDERR_CHARS - capturedChars;
+  return remaining > 0 ? chunk.slice(0, remaining) : '';
+}
+
 function repositoryRoot(cwd: string, env?: NodeJS.ProcessEnv): string {
   try {
     return gitSmall(['rev-parse', '--show-toplevel'], cwd, env).trim();
@@ -110,11 +120,38 @@ function resolveRevision(revision: string, cwd: string, env?: NodeJS.ProcessEnv)
   }
 }
 
-function rangeParts(range: string): string[] {
+function snapshotRange(range: string, cwd: string, env?: NodeJS.ProcessEnv): string {
   const safeRange = validateRange(range);
-  if (safeRange.includes('...')) return safeRange.split('...');
-  if (safeRange.includes('..')) return safeRange.split('..');
-  return [safeRange];
+  const operator = safeRange.includes('...') ? '...' : '..';
+  const [left, right] = safeRange.split(operator);
+  let resolved: string[];
+  try {
+    resolved = gitSmall(
+      [
+        'rev-parse',
+        '--revs-only',
+        '--end-of-options',
+        `${left ?? ''}^{commit}`,
+        `${right ?? ''}^{commit}`,
+      ],
+      cwd,
+      env,
+    )
+      .trim()
+      .split(/\r?\n/)
+      .filter((value) => value !== '');
+  } catch (error) {
+    throw gitFailure(error, 'rev-parse range');
+  }
+  const fullObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+  if (resolved.length !== 2 || !resolved.every((value) => fullObjectId.test(value))) {
+    // Keep the established side-specific error when only one endpoint is missing.
+    for (const part of [left, right]) resolveRevision(part ?? '', cwd, env);
+    throw new DiffUnavailableError(
+      'No diff available: git could not snapshot both range endpoints as commit object IDs.',
+    );
+  }
+  return `${resolved[0]}${operator}${resolved[1]}`;
 }
 
 function validateRepositoryRange(
@@ -123,9 +160,7 @@ function validateRepositoryRange(
   options: GitProcessOptions,
 ): { root: string; range: string } {
   const root = repositoryRoot(cwd, options.env);
-  const safeRange = validateRange(range);
-  for (const part of rangeParts(safeRange)) resolveRevision(part ?? '', root, options.env);
-  return { root, range: safeRange };
+  return { root, range: snapshotRange(range, root, options.env) };
 }
 
 export async function collectGitDiffAsync(
@@ -143,6 +178,7 @@ export async function collectGitDiffAsync(
   });
   const stdout: string[] = [];
   const stderr: string[] = [];
+  let stderrChars = 0;
   let bytes = 0;
   let exceeded = false;
   child.stdout.setEncoding('utf8');
@@ -158,7 +194,10 @@ export async function collectGitDiffAsync(
     stdout.push(chunk);
   });
   child.stderr.on('data', (chunk: string) => {
-    if (stderr.join('').length < 64 * 1024) stderr.push(chunk);
+    const bounded = boundedGitStderrChunk(chunk, stderrChars);
+    if (bounded === '') return;
+    stderr.push(bounded);
+    stderrChars += bounded.length;
   });
   return await new Promise<string>((resolve, reject) => {
     child.once('error', () => {

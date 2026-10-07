@@ -78,15 +78,121 @@ describe('diff --git path pairs', () => {
     expect(parsed.files[0]).toMatchObject({ oldPath: 'one.txt', newPath: 'three.txt' });
   });
 
+  it('refuses incomplete rename metadata instead of inventing a renamed file', () => {
+    const parsed = parseUnifiedDiff(
+      ['diff --git a/a.ts b/b.ts', 'similarity index 95%', 'rename from a.ts', ''].join('\n'),
+    );
+    expect(codes(parsed)).toContain('malformed-header');
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'a.ts',
+      newPath: 'b.ts',
+      similarity: 95,
+    });
+  });
+
+  it('refuses rename metadata that contradicts an already-proven header', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/a.ts b/b.ts',
+        'similarity index 95%',
+        'rename from other.ts',
+        'rename to b.ts',
+        '',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'a.ts',
+      newPath: 'b.ts',
+      similarity: 95,
+    });
+  });
+
+  it('rejects malformed quoting in rename metadata', () => {
+    const parsed = parseUnifiedDiff(
+      ['diff --git a/a.ts b/b.ts', 'rename from "a.ts', 'rename to b.ts', ''].join('\n'),
+    );
+    expect(
+      codes(parsed).filter((code) => code === 'malformed-header').length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(parsed.files[0]).toMatchObject({
+      status: 'modified',
+      oldPath: 'a.ts',
+      newPath: 'b.ts',
+    });
+  });
+
   it('decodes a quoted pair that carries spaces', () => {
     const parsed = parseUnifiedDiff('diff --git "a/two words.ts" "b/two words.ts"');
     expect(codes(parsed)).toEqual([]);
     expect(parsed.files[0]).toMatchObject({ oldPath: 'two words.ts', newPath: 'two words.ts' });
   });
 
+  it('accepts Git quoting each side independently', () => {
+    const quotedOld = parseUnifiedDiff('diff --git "a/old\\tname.ts" b/new.ts');
+    expect(codes(quotedOld)).toEqual([]);
+    expect(quotedOld.files[0]).toMatchObject({
+      oldPath: 'old\tname.ts',
+      newPath: 'new.ts',
+      displayPath: 'new.ts',
+    });
+
+    const quotedNew = parseUnifiedDiff('diff --git a/old.ts "b/new\\tname.ts"');
+    expect(codes(quotedNew)).toEqual([]);
+    expect(quotedNew.files[0]).toMatchObject({
+      oldPath: 'old.ts',
+      newPath: 'new\tname.ts',
+      displayPath: 'new\tname.ts',
+    });
+  });
+
+  it('rejects /dev/null in the leading diff --git pair', () => {
+    for (const input of [
+      'diff --git /dev/null b/new.ts',
+      'diff --git a/old.ts /dev/null',
+      'diff --git "/dev/null" "b/new.ts"',
+      'diff --git "a/old.ts" "/dev/null"',
+    ]) {
+      const parsed = parseUnifiedDiff(input);
+      expect(codes(parsed), input).toEqual(['malformed-header']);
+      expect(parsed.files[0], input).toMatchObject({
+        oldPath: null,
+        newPath: null,
+        displayPath: '<unknown path>',
+      });
+    }
+  });
+
+  it('keeps impossible C-style octal escapes literal instead of wrapping them to a byte', () => {
+    const parsed = parseUnifiedDiff('diff --git "a/src/x\\777.ts" "b/src/x\\777.ts"');
+    expect(codes(parsed)).toEqual([]);
+    expect(parsed.files[0]?.displayPath).toBe('src/x\\777.ts');
+    expect(parsed.files[0]?.displayPath).not.toContain('\uFFFD');
+  });
+
   it('reports a malformed header when a quoted path is never closed', () => {
     const parsed = parseUnifiedDiff('diff --git "a/broken.ts b/broken.ts');
     expect(codes(parsed)).toEqual(['malformed-header']);
+  });
+
+  it('reports a malformed header when the second quoted path is never closed', () => {
+    const parsed = parseUnifiedDiff('diff --git "a/one.ts" "b/two.ts');
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]?.displayPath).toBe('<unknown path>');
+  });
+
+  it('rejects trailing text after a complete quoted path pair', () => {
+    const parsed = parseUnifiedDiff('diff --git "a/one.ts" "b/two.ts" trailing');
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]?.displayPath).toBe('<unknown path>');
+  });
+
+  it('requires quoted diff --git paths to identify their old and new sides', () => {
+    const parsed = parseUnifiedDiff('diff --git "one.ts" "two.ts"');
+    expect(codes(parsed)).toEqual(['malformed-header']);
+    expect(parsed.files[0]?.displayPath).toBe('<unknown path>');
   });
 
   it('drops the trailing timestamp of a context-diff header', () => {
@@ -101,6 +207,31 @@ describe('diff --git path pairs', () => {
       ].join('\n'),
     );
     expect(codes(parsed)).toEqual([]);
+    expect(parsed.files[0]).toMatchObject({ oldPath: 'f.ts', newPath: 'f.ts' });
+  });
+
+  it('rejects a file header that names the wrong Git side', () => {
+    const parsed = parseUnifiedDiff(
+      [
+        'diff --git a/f.ts b/f.ts',
+        '--- b/old-side.ts',
+        '+++ a/new-side.ts',
+        '@@ -1 +1 @@',
+        '-a',
+        '+b',
+      ].join('\n'),
+    );
+    expect(codes(parsed)).toEqual(['malformed-header', 'malformed-header']);
+    expect(parsed.files[0]).toMatchObject({ oldPath: 'f.ts', newPath: 'f.ts' });
+  });
+
+  it('rejects an unterminated quoted file-header path without replacing a proven path', () => {
+    const parsed = parseUnifiedDiff(
+      ['diff --git a/f.ts b/f.ts', '--- "a/f.ts', '+++ b/f.ts', '@@ -1 +1 @@', '-a', '+b'].join(
+        '\n',
+      ),
+    );
+    expect(codes(parsed)).toEqual(['malformed-header']);
     expect(parsed.files[0]).toMatchObject({ oldPath: 'f.ts', newPath: 'f.ts' });
   });
 });
@@ -135,6 +266,46 @@ describe('Binary files path pairs', () => {
       oldPath: 'old.bin',
       newPath: null,
       status: 'deleted',
+    });
+  });
+
+  it('decodes quoted binary paths and quoted /dev/null companions without a false diagnostic', () => {
+    const unicode = parseUnifiedDiff(
+      'diff --git "a/\\303\\251.bin" "b/\\303\\251.bin"\n' +
+        'Binary files "a/\\303\\251.bin" and "b/\\303\\251.bin" differ',
+    );
+    expect(codes(unicode)).toEqual([]);
+    expect(unicode.files[0]).toMatchObject({
+      oldPath: 'é.bin',
+      newPath: 'é.bin',
+      displayPath: 'é.bin',
+      binary: true,
+    });
+
+    const added = parseUnifiedDiff(
+      'diff --git "a/\\303\\251.bin" "b/\\303\\251.bin"\n' +
+        'new file mode 100644\n' +
+        'Binary files /dev/null and "b/\\303\\251.bin" differ',
+    );
+    expect(codes(added)).toEqual([]);
+    expect(added.files[0]).toMatchObject({
+      oldPath: null,
+      newPath: 'é.bin',
+      status: 'added',
+      binary: true,
+    });
+  });
+
+  it('does not treat trailing junk as part of a Binary files destination path', () => {
+    const parsed = parseUnifiedDiff(
+      'diff --git a/x.bin b/x.bin\nBinary files a/x.bin and b/x.bin not-differ',
+    );
+    expect(codes(parsed)).toEqual(['ambiguous-path']);
+    expect(parsed.files[0]).toMatchObject({
+      oldPath: 'x.bin',
+      newPath: 'x.bin',
+      displayPath: 'x.bin',
+      binary: true,
     });
   });
 

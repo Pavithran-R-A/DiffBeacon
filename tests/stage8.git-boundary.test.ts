@@ -225,7 +225,7 @@ describe('the pinned diff controls win over configuration', () => {
     gitIn(reviewed.repo.cwd, ['config', '--unset-all', 'diff.mnemonicPrefix']);
   });
 
-  it('parses the same Unicode path whether Git quotes it or not', async () => {
+  it('pins Unicode path quoting even when repository configuration disables it', async () => {
     const unicodePath = 'src/anom-ünïcode-日本.ts';
     writeRepositoryFile(reviewed.repo.cwd, unicodePath, 'export const u = 1;\n');
     reviewed.repo.commit('unicode');
@@ -237,10 +237,14 @@ describe('the pinned diff controls win over configuration', () => {
     expect(analyzeDiff(quoted).files.map((file) => file.displayPath)).toContain(unicodePath);
 
     gitIn(reviewed.repo.cwd, ['config', 'core.quotepath', 'false']);
-    const unquoted = await collectGitDiffAsync(range, reviewed.repo.cwd);
-    expect(unquoted).toContain(`diff --git a/${unicodePath} b/${unicodePath}`);
-    expect(analyzeDiff(unquoted).files.map((file) => file.displayPath)).toContain(unicodePath);
-    gitIn(reviewed.repo.cwd, ['config', '--unset-all', 'core.quotepath']);
+    try {
+      const stillQuoted = await collectGitDiffAsync(range, reviewed.repo.cwd);
+      expect(stillQuoted).toMatch(/^diff --git "a\/src\/anom-/m);
+      expect(stillQuoted).not.toContain(`diff --git a/${unicodePath} b/${unicodePath}`);
+      expect(analyzeDiff(stillQuoted).files.map((file) => file.displayPath)).toContain(unicodePath);
+    } finally {
+      gitIn(reviewed.repo.cwd, ['config', '--unset-all', 'core.quotepath']);
+    }
   });
 });
 

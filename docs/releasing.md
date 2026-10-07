@@ -126,10 +126,13 @@ procedure for the **next** version.
    `packages/cli`'s own version, refuses a version the registry already answers for, refuses a registry
    that answers anything _other_ than not-found, requires npm 11.5.1 or newer, confirms the other two
    workspace packages are still private, and only then runs `npm ci`, both audit surfaces,
-   `npm run verify` and `npm run package-smoke` before
-   `npm publish ./packages/cli --provenance`. The workflow has never run: Stage 14 published `0.1.0`
-   by hand from the tarball qualified in section 1, so section 1's "run it on the exact commit" rule
-   applies to this file's first execution as well as to that one.
+   `npm run verify`, a fail-closed real-Chromium `npm run test:browser`, and
+   `npm run package-smoke` before `npm publish ./packages/cli --provenance`. The explicit browser
+   step belongs to the publish job itself: a tag push also starts `ci.yml`, but two workflows run
+   independently, so a green browser job elsewhere cannot be a prerequisite for an irreversible
+   registry write unless the publish job waits for it. The workflow has never run: Stage 14 published
+   `0.1.0` by hand from the tarball qualified in section 1, so section 1's "run it on the exact
+   commit" rule applies to this file's first execution as well as to that one.
 4. Verify from outside the repository: `npm view diffbeacon version`, `npm view diffbeacon
 dist.tarball`, then install the published tarball into a throwaway directory, run its `--version`
    and one real `review --stdin`, and confirm its output matches the source tests' expectation.

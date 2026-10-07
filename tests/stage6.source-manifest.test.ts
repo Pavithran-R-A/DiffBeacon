@@ -1,6 +1,9 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 import { describe, expect, it } from 'vitest';
 import { renderSourceManifest, trackedSourceFiles } from '../scripts/source-manifest.mjs';
 
@@ -61,5 +64,42 @@ describe('Source manifest governance', () => {
     expect(asBytes.map((entry) => entry.toString('utf8'))).toEqual(
       sorted.map((entry) => entry.toString('utf8')),
     );
+  });
+});
+
+describe.runIf(process.platform !== 'win32')('Source manifest symbolic-link boundary', () => {
+  it('hashes the tracked link blob instead of bytes outside the repository', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'diffbeacon-manifest-link-'));
+    const checkout = path.join(root, 'repo');
+    const outside = path.join(root, 'outside.txt');
+    const link = path.join(checkout, 'link.txt');
+    try {
+      execFileSync('git', ['init', '-q', checkout], { shell: false, windowsHide: true });
+      writeFileSync(outside, 'outside secret one\n', 'utf8');
+      symlinkSync('../outside.txt', link);
+      execFileSync('git', ['-C', checkout, 'add', '--', 'link.txt'], {
+        shell: false,
+        windowsHide: true,
+      });
+      expect(
+        execFileSync('git', ['-C', checkout, 'ls-files', '-s', '--', 'link.txt'], {
+          encoding: 'utf8',
+          shell: false,
+          windowsHide: true,
+        }),
+      ).toMatch(/^120000 /);
+
+      const expected = createHash('sha256').update('../outside.txt').digest('hex');
+      const before = renderSourceManifest(checkout);
+      expect(before).toContain(`${expected}  link.txt`);
+      expect(before).not.toContain(
+        createHash('sha256').update('outside secret one\n').digest('hex'),
+      );
+
+      writeFileSync(outside, 'outside secret two\n', 'utf8');
+      expect(renderSourceManifest(checkout)).toBe(before);
+    } finally {
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
   });
 });

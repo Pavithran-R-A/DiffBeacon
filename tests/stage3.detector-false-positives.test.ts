@@ -51,6 +51,10 @@ const nearMisses: Array<[string, string[]]> = [
   ['package.example.json', []],
   ['.github/ISSUE_TEMPLATE/bug.yml', []],
   ['charts/app/templates/pod.yaml', []],
+  ['src\\auth\\session.ts', ['runtime']],
+  ['dir\\package.json', []],
+  ['dist\\bundle.js', ['runtime']],
+  ['.github\\workflows\\ci.yml', []],
 ];
 
 const conventions: Array<[string, string[]]> = [
@@ -103,6 +107,19 @@ describe('near-miss paths carry no surface claim', () => {
 describe('genuine conventions beside each near-miss', () => {
   it.each(conventions)('classifies %s as %j', (path, expected) => {
     expect(surfacesFor(path)).toEqual(expected);
+  });
+});
+
+describe('Git path separators stay distinct from literal POSIX backslashes', () => {
+  it('does not invent directory segments from backslash bytes', () => {
+    expect(surfacesFor('src/auth/session.ts')).toEqual(['auth-access', 'runtime']);
+    expect(surfacesFor('src\\auth\\session.ts')).toEqual(['runtime']);
+
+    expect(surfacesFor('package.json')).toEqual(['dependencies']);
+    expect(surfacesFor('dir\\package.json')).toEqual([]);
+
+    expect(surfacesFor('dist/bundle.js')).toEqual(['generated']);
+    expect(surfacesFor('dist\\bundle.js')).toEqual(['runtime']);
   });
 });
 

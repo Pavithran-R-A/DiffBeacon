@@ -43,26 +43,37 @@ or piped in from elsewhere:
 - **Combined merge diffs are refused.** `diff --cc` and `diff --combined` blocks are skipped with an
   `unsupported-dialect` diagnostic rather than being read as ordinary hunks, because they describe one
   file against several parents and the supported vector never produces them.
-- **Copy detection is read, not interpreted.** A `copy from`/`copy to` record is classified from both
-  paths, the same way a rename is.
+- **Copy detection is outside the supported vector.** A pasted `copy from`/`copy to` record gets an
+  `unsupported-dialect` diagnostic and is represented conservatively as an added destination file.
+  DiffBeacon's own Git invocation does not request copy detection; unlike a rename, the copy source
+  is not carried into classification or relationship evidence.
 - **Counts are observed, never inferred.** A hunk whose body does not match its header, a header that
   cannot be attributed to a file, or a diff that stops mid-record produces a typed diagnostic and a
   total in `summary.diagnostics`. Additions and deletions count the lines actually read; a binary or
-  mode-only change reports `null` counts, not zero.
+  mode-only change reports `null` counts, not zero. Rename similarity is accepted only in Git's
+  integer `0%` through `100%` form; malformed or out-of-range metadata is diagnosed and the
+  report's nullable `similarity` field stays inside its JSON Schema bounds.
 - **Input is bounded at 8 MiB.** One limit, `MAX_DIFF_BYTES` in `packages/core/src/model.ts`, applies
   to pasted browser input, CLI stdin, and the diff the CLI collects from Git. Larger input is an
   explicit failure, not a truncated report.
 - **Naming oddities are display problems, not classification problems.** Traversal-, shell-, markup-,
   and Windows-device-shaped names are treated as opaque labels, never opened, and neutralised at paint
-  time. One measured exception: Git's C-quoted header form is trimmed of trailing whitespace, so
-  `src/x ` is displayed as `src/x`.
+  time. Path parsing preserves meaningful trailing spaces in Git's unquoted headers and rename
+  metadata; those names remain distinct in the raw report even though some target filesystems cannot
+  create them. Detector structure follows Git's patch grammar: `/` is the separator. A literal
+  backslash in a POSIX filename stays a filename byte instead of being reinterpreted as a synthetic
+  directory boundary. JSON keeps those raw names as data after parsing, while its serialized text
+  spells C1, bidi-formatting, and line-format controls as `\\uNNNN` escapes so printing JSON cannot
+  turn a filename into terminal instructions or reorder the trusted text around it.
 
 ## Each adapter has its own edges
 
 - **CLI.** Needs a real Git repository in the working directory and `git` on `PATH`. A shallow or
   partial clone that lacks the requested range fails with exit code 3 instead of reporting a partial
-  review. It inherits the operator's Git environment unchanged, which is the point: the person running
-  the command owns that environment.
+  review. Before starting `git diff`, both validated range endpoints are resolved together to full
+  commit object IDs, so a symbolic ref moving between validation and collection cannot silently change
+  the diff. It inherits the operator's Git environment unchanged, which is the point: the person
+  running the command owns that environment.
 - **GitHub Action.** Needs the workflow to check out enough history to diff both event SHAs, so
   `fetch-depth: 0` is required and the default shallow checkout does not qualify. It reads only the two
   commit object IDs from the event payload and writes only the Job Summary, whose size is checked
@@ -91,8 +102,11 @@ hand-waved:
   which reached a hosted success for the first time in this repository's history. Three earlier hosted
   runs of the same workflow (`36971746510`, `37188759053`, `37190394247`) each failed at a recorded
   step, so the green run qualifies the lanes it executed at the commit it ran at — not this workflow
-  at any future commit, and not consumption of the Action by another repository, which has still never
-  been measured anywhere. The claim is also scoped by era: the bootstrap-era workflows did receive
+  at any future commit. Cross-repository consumption was measured later: on 2026-10-06 the temporary
+  public consumer repository ran the released Action pinned to
+  `5a50b52028ead78942ea3fc3bee93ba26e0a79cc` in Actions run `37430396143`, which completed
+  successfully; that is a fixed release measurement, not proof about a future commit. The hosted-CI
+  claim is also scoped by era: the bootstrap-era workflows did receive
   GitHub-hosted runners and executed setup and checkout steps on them before failing during archive
   extraction (Actions runs `32859849733`, `31819615124` and `31818807881`, recorded in
   `docs/audits/stage1-rebaseline.md`); those are historical evidence, not product or release

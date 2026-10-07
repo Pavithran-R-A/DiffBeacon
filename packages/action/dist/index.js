@@ -13,10 +13,9 @@ function exceedsDiffLimit(value) {
   if (value.length * 3 <= MAX_DIFF_BYTES) return false;
   return new TextEncoder().encode(value).length > MAX_DIFF_BYTES;
 }
-function decodeGitQuoted(value) {
-  const trimmed = value.trim();
-  if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) return trimmed;
-  const inner = trimmed.slice(1, -1);
+function decodeGitQuotedResult(value) {
+  if (!(value.startsWith('"') && value.endsWith('"'))) return { value, validUtf8: true };
+  const inner = value.slice(1, -1);
   const bytes = [];
   const encoder = new TextEncoder();
   for (let index = 0; index < inner.length; index += 1) {
@@ -27,9 +26,12 @@ function decodeGitQuoted(value) {
     }
     const octal = inner.slice(index + 1, index + 4);
     if (/^[0-7]{3}$/.test(octal)) {
-      bytes.push(Number.parseInt(octal, 8));
-      index += 3;
-      continue;
+      const byte = Number.parseInt(octal, 8);
+      if (byte <= 255) {
+        bytes.push(byte);
+        index += 3;
+        continue;
+      }
     }
     const next = inner[index + 1] ?? "";
     const escapes = {
@@ -50,55 +52,124 @@ function decodeGitQuoted(value) {
     }
     bytes.push(...encoder.encode("\\"));
   }
-  return new TextDecoder().decode(Uint8Array.from(bytes));
+  const encoded = Uint8Array.from(bytes);
+  try {
+    return { value: new TextDecoder("utf-8", { fatal: true }).decode(encoded), validUtf8: true };
+  } catch {
+    return { value: new TextDecoder().decode(encoded), validUtf8: false };
+  }
+}
+function decodeGitQuoted(value) {
+  return decodeGitQuotedResult(value).value;
 }
 function stripDiffPrefix(value) {
   const withoutTimestamp = value.split("	", 1)[0] ?? value;
-  const path = decodeGitQuoted(withoutTimestamp.trim());
+  const path = decodeGitQuoted(withoutTimestamp);
   if (path === NULL_PATH) return null;
   if (path.startsWith("a/") || path.startsWith("b/")) return path.slice(2);
   return path;
 }
-function parseQuotedPair(value) {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('"')) return null;
-  const tokens = [];
-  let cursor = 0;
-  while (cursor < trimmed.length && tokens.length < 2) {
-    while (trimmed[cursor] === " ") cursor += 1;
-    if (trimmed[cursor] !== '"') return null;
-    const start = cursor;
-    cursor += 1;
-    let escaped = false;
-    while (cursor < trimmed.length) {
-      const character = trimmed[cursor] ?? "";
-      if (!escaped && character === '"') {
-        cursor += 1;
-        break;
-      }
-      escaped = !escaped && character === "\\";
-      if (character !== "\\") escaped = false;
-      cursor += 1;
-    }
-    tokens.push(trimmed.slice(start, cursor));
+function quotedTokenEnd(value, start = 0) {
+  if (value[start] !== '"') return null;
+  let escaped = false;
+  for (let cursor = start + 1; cursor < value.length; cursor += 1) {
+    const character = value[cursor] ?? "";
+    if (!escaped && character === '"') return cursor + 1;
+    escaped = !escaped && character === "\\";
+    if (character !== "\\") escaped = false;
   }
-  if (tokens.length !== 2) return null;
-  const oldPath = stripDiffPrefix(tokens[0]);
-  const newPath = stripDiffPrefix(tokens[1]);
+  return null;
+}
+function pairFromTokens(oldRaw, newRaw) {
+  const oldDecoded = decodeGitQuotedResult(oldRaw);
+  const newDecoded = decodeGitQuotedResult(newRaw);
+  if (!oldDecoded.validUtf8 || !newDecoded.validUtf8) return null;
+  const oldToken = oldDecoded.value;
+  const newToken = newDecoded.value;
+  if (!oldToken.startsWith("a/") || !newToken.startsWith("b/")) return null;
+  const oldPath = stripDiffPrefix(oldRaw);
+  const newPath = stripDiffPrefix(newRaw);
   return oldPath === "" || newPath === "" ? null : [oldPath, newPath];
 }
+function parseQuotedPair(value) {
+  if (value.startsWith('"')) {
+    const end = quotedTokenEnd(value);
+    if (end === null || value[end] !== " ") return null;
+    const oldRaw = value.slice(0, end);
+    const newRaw = value.slice(end + 1);
+    if (newRaw === "") return null;
+    if (newRaw.startsWith('"') && quotedTokenEnd(newRaw) !== newRaw.length) return null;
+    return pairFromTokens(oldRaw, newRaw);
+  }
+  const candidates = [];
+  for (let separator = value.indexOf(' "'); separator >= 0; separator = value.indexOf(' "', separator + 1)) {
+    const oldRaw = value.slice(0, separator);
+    const newRaw = value.slice(separator + 1);
+    if (quotedTokenEnd(newRaw) !== newRaw.length) continue;
+    const pair = pairFromTokens(oldRaw, newRaw);
+    if (pair !== null) candidates.push(pair);
+  }
+  return candidates.length === 1 ? candidates[0] : null;
+}
 function parseGitPair(value) {
-  const trimmed = value.trim();
-  const quoted = parseQuotedPair(trimmed);
+  const pair = value.startsWith(" ") ? value.slice(1) : value;
+  const quoted = parseQuotedPair(pair);
   if (quoted !== null)
     return {
       reason: "proven",
       pair: { oldPath: quoted[0], newPath: quoted[1] }
     };
-  return resolvePair(trimmed, " b/", 2);
+  const resolution = resolvePair(pair, " b/", 2);
+  if (resolution.pair !== null && (resolution.pair.oldPath === null || resolution.pair.newPath === null))
+    return { reason: "unprovable", pair: null };
+  return resolution;
+}
+function decodeWholeQuotedToken(value) {
+  if (quotedTokenEnd(value) !== value.length) return null;
+  const decoded = decodeGitQuotedResult(value);
+  return decoded.validUtf8 ? decoded.value : null;
+}
+function metadataPath(value) {
+  if (value === "") return null;
+  return value.startsWith('"') ? decodeWholeQuotedToken(value) : value;
+}
+function fileHeaderPath(value, prefix) {
+  const token = value.split("	", 1)[0] ?? value;
+  const decoded = token.startsWith('"') ? decodeWholeQuotedToken(token) : token;
+  if (decoded === null || decoded === "") return { valid: false, path: null };
+  if (decoded === NULL_PATH) return { valid: true, path: null };
+  if (!decoded.startsWith(prefix) || decoded.length === prefix.length)
+    return { valid: false, path: null };
+  return { valid: true, path: decoded.slice(prefix.length) };
+}
+function binarySide(value, prefix) {
+  const decoded = value.startsWith('"') ? decodeWholeQuotedToken(value) : value;
+  if (decoded === null) return { valid: false, path: null };
+  if (decoded === NULL_PATH) return { valid: true, path: null };
+  if (!decoded.startsWith(prefix) || decoded.length === prefix.length)
+    return { valid: false, path: null };
+  return { valid: true, path: decoded.slice(prefix.length) };
 }
 function parseBinaryPair(value) {
-  return resolvePair(value.trim().replace(/ differ$/, ""), " and ", 0);
+  if (!value.endsWith(" differ")) return { reason: "unprovable", pair: null };
+  const pair = value.slice(0, -" differ".length);
+  const accepted = [];
+  let offset = 0;
+  while (offset < pair.length) {
+    const index = pair.indexOf(" and ", offset);
+    if (index < 0) break;
+    const left = binarySide(pair.slice(0, index), "a/");
+    const right = binarySide(pair.slice(index + " and ".length), "b/");
+    if (left.valid && right.valid) accepted.push({ oldPath: left.path, newPath: right.path });
+    offset = index + 1;
+  }
+  if (accepted.length === 0) return { reason: "unprovable", pair: null };
+  if (accepted.length === 1) return { reason: "proven", pair: accepted[0] };
+  const agreeing = accepted.filter(
+    (candidate) => candidate.oldPath === candidate.newPath && candidate.oldPath !== null
+  );
+  const distinct = new Set(agreeing.map((candidate) => candidate.oldPath));
+  return distinct.size === 1 ? { reason: "proven", pair: agreeing[0] } : { reason: "ambiguous", pair: null };
 }
 var isOldSide = (value) => value === NULL_PATH || value.startsWith("a/");
 var isNewSide = (value) => value === NULL_PATH || value.startsWith("b/");
@@ -134,14 +205,17 @@ function parseHunkHeader(line) {
     newCount: Number.parseInt(match[4] ?? "1", 10)
   };
 }
+function gitMode(value) {
+  const mode = value.trim();
+  return (/* @__PURE__ */ new Set(["100644", "100755", "120000", "160000"])).has(mode) ? mode : null;
+}
 function inferStatus(file) {
   if (file.isNewFile) return "added";
   if (file.isDeletedFile) return "deleted";
   if (file.isCopy) return "added";
   if (file.oldPath === null && file.newPath !== null) return "added";
   if (file.newPath === null && file.oldPath !== null) return "deleted";
-  if (file.renameFrom !== null || file.renameTo !== null || file.similarity !== null)
-    return "renamed";
+  if (file.renameFrom !== null || file.renameTo !== null) return "renamed";
   if (file.hunks.length === 0 && !file.binary && file.oldMode !== null && file.newMode !== null)
     return "mode-only";
   return "modified";
@@ -239,6 +313,67 @@ function parseUnifiedDiff(input) {
   const flush = () => {
     if (current !== null) {
       closeHunk(current, diagnostics);
+      const hasRenameFrom = current.renameFrom !== null;
+      const hasRenameTo = current.renameTo !== null;
+      if (hasRenameFrom !== hasRenameTo) {
+        diagnostics.push({
+          code: "malformed-header",
+          message: "Rename metadata must contain both rename from and rename to paths.",
+          line: current.renameFromLine ?? current.renameToLine ?? 1
+        });
+        current.renameFrom = null;
+        current.renameTo = null;
+      } else if (hasRenameFrom && hasRenameTo && (current.oldPath !== null && current.oldPath !== current.renameFrom || current.newPath !== null && current.newPath !== current.renameTo)) {
+        diagnostics.push({
+          code: "malformed-header",
+          message: "Rename metadata disagrees with the paths named by the file header.",
+          line: current.renameFromLine ?? current.renameToLine ?? 1
+        });
+        current.renameFrom = null;
+        current.renameTo = null;
+      }
+      if (current.isCopy && (current.copyFrom === null || current.copyTo === null || current.oldPath !== null && current.oldPath !== current.copyFrom || current.newPath !== null && current.newPath !== current.copyTo)) {
+        diagnostics.push({
+          code: "malformed-header",
+          message: "Copy metadata must contain a source and destination consistent with the file header.",
+          line: current.copyLine ?? 1
+        });
+        current.isCopy = false;
+        current.copyFrom = null;
+        current.copyTo = null;
+      }
+      const specialKinds = [
+        current.isNewFile,
+        current.isDeletedFile,
+        current.isCopy,
+        current.renameFrom !== null && current.renameTo !== null
+      ].filter(Boolean).length;
+      const incompatibleModeMetadata = current.isNewFile && current.oldMode !== null || current.isDeletedFile && current.newMode !== null;
+      if (specialKinds > 1 || incompatibleModeMetadata) {
+        diagnostics.push({
+          code: "malformed-header",
+          message: "File-status metadata is contradictory; add, delete, rename, copy, and mode-change forms cannot be combined this way.",
+          line: current.renameFromLine ?? current.renameToLine ?? current.copyLine ?? current.modeLine ?? 1
+        });
+        current.isNewFile = false;
+        current.isDeletedFile = false;
+        current.isCopy = false;
+        current.renameFrom = null;
+        current.renameTo = null;
+        current.copyFrom = null;
+        current.copyTo = null;
+        current.oldMode = null;
+        current.newMode = null;
+      }
+      if (current.oldMode !== null && current.newMode !== null && current.oldMode === current.newMode) {
+        diagnostics.push({
+          code: "malformed-header",
+          message: "old mode and new mode are identical, so they do not describe a mode change.",
+          line: current.modeLine ?? 1
+        });
+        current.oldMode = null;
+        current.newMode = null;
+      }
       files.push(finalize(current));
     }
     current = null;
@@ -255,15 +390,20 @@ function parseUnifiedDiff(input) {
         newPath: resolution.pair?.newPath ?? null,
         oldMode: null,
         newMode: null,
+        modeLine: null,
         similarity: null,
         binary: false,
         hunks: [],
         renameFrom: null,
         renameTo: null,
+        renameFromLine: null,
+        renameToLine: null,
         isNewFile: false,
         isDeletedFile: false,
         isCopy: false,
+        copyFrom: null,
         copyTo: null,
+        copyLine: null,
         activeHunk: null
       };
       if (resolution.reason === "ambiguous")
@@ -334,34 +474,122 @@ function parseUnifiedDiff(input) {
       continue;
     }
     if (line.startsWith("new file mode ")) {
-      current.isNewFile = true;
-      current.oldMode = null;
-      current.newMode = line.slice("new file mode ".length).trim();
+      const mode = gitMode(line.slice("new file mode ".length));
+      if (mode === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "new file mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.",
+          line: lineNumber
+        });
+      else {
+        current.isNewFile = true;
+        current.oldMode = null;
+        current.newMode = mode;
+        current.modeLine = lineNumber;
+      }
     } else if (line.startsWith("deleted file mode ")) {
-      current.isDeletedFile = true;
-      current.oldMode = line.slice("deleted file mode ".length).trim();
-      current.newMode = null;
-    } else if (line.startsWith("old mode "))
-      current.oldMode = line.slice("old mode ".length).trim();
-    else if (line.startsWith("new mode ")) current.newMode = line.slice("new mode ".length).trim();
-    else if (line.startsWith("similarity index ")) {
-      const value = Number.parseInt(line.slice("similarity index ".length), 10);
-      current.similarity = Number.isFinite(value) ? value : null;
-    } else if (line.startsWith("rename from "))
-      current.renameFrom = decodeGitQuoted(line.slice("rename from ".length));
-    else if (line.startsWith("rename to "))
-      current.renameTo = decodeGitQuoted(line.slice("rename to ".length));
-    else if (line.startsWith("copy from ") || line.startsWith("copy to ")) {
+      const mode = gitMode(line.slice("deleted file mode ".length));
+      if (mode === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "deleted file mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.",
+          line: lineNumber
+        });
+      else {
+        current.isDeletedFile = true;
+        current.oldMode = mode;
+        current.newMode = null;
+        current.modeLine = lineNumber;
+      }
+    } else if (line.startsWith("old mode ")) {
+      const mode = gitMode(line.slice("old mode ".length));
+      if (mode === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "old mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.",
+          line: lineNumber
+        });
+      else {
+        current.oldMode = mode;
+        current.modeLine = lineNumber;
+      }
+    } else if (line.startsWith("new mode ")) {
+      const mode = gitMode(line.slice("new mode ".length));
+      if (mode === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "new mode must be one of the supported Git file entry modes: 100644, 100755, 120000, or 160000.",
+          line: lineNumber
+        });
+      else {
+        current.newMode = mode;
+        current.modeLine = lineNumber;
+      }
+    } else if (line.startsWith("similarity index ")) {
+      const raw = line.slice("similarity index ".length).trim();
+      const match = /^(\d+)%$/.exec(raw);
+      const value = match === null ? null : Number(match[1]);
+      if (value === null || !Number.isInteger(value) || value < 0 || value > 100) {
+        current.similarity = null;
+        diagnostics.push({
+          code: "malformed-header",
+          message: "Similarity index must be an integer percentage from 0% through 100%.",
+          line: lineNumber
+        });
+      } else current.similarity = value;
+    } else if (line.startsWith("rename from ")) {
+      const path = metadataPath(line.slice("rename from ".length));
+      if (path === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "rename from must name one complete Git path.",
+          line: lineNumber
+        });
+      else {
+        current.renameFrom = path;
+        current.renameFromLine = lineNumber;
+      }
+    } else if (line.startsWith("rename to ")) {
+      const path = metadataPath(line.slice("rename to ".length));
+      if (path === null)
+        diagnostics.push({
+          code: "malformed-header",
+          message: "rename to must name one complete Git path.",
+          line: lineNumber
+        });
+      else {
+        current.renameTo = path;
+        current.renameToLine = lineNumber;
+      }
+    } else if (line.startsWith("copy from ") || line.startsWith("copy to ")) {
       if (!current.isCopy) {
         current.isCopy = true;
+        current.copyLine = lineNumber;
         diagnostics.push({
           code: "unsupported-dialect",
           message: "Copy detection is outside the supported patch vector.",
           line: lineNumber
         });
       }
-      if (line.startsWith("copy to "))
-        current.copyTo = decodeGitQuoted(line.slice("copy to ".length));
+      if (line.startsWith("copy from ")) {
+        const path = metadataPath(line.slice("copy from ".length));
+        if (path === null)
+          diagnostics.push({
+            code: "malformed-header",
+            message: "copy from must name one complete Git path.",
+            line: lineNumber
+          });
+        else current.copyFrom = path;
+      } else {
+        const path = metadataPath(line.slice("copy to ".length));
+        if (path === null)
+          diagnostics.push({
+            code: "malformed-header",
+            message: "copy to must name one complete Git path.",
+            line: lineNumber
+          });
+        else current.copyTo = path;
+      }
     } else if (line.startsWith("Binary files ")) {
       current.binary = true;
       const resolution = parseBinaryPair(line.slice("Binary files ".length));
@@ -376,15 +604,16 @@ function parseUnifiedDiff(input) {
         });
     } else if (line === "GIT binary patch") current.binary = true;
     else if (line.startsWith("--- ") || line.startsWith("+++ ")) {
-      const path = stripDiffPrefix(line.slice(4));
-      if (path === "")
+      const oldSide = line.startsWith("--- ");
+      const resolved = fileHeaderPath(line.slice(4), oldSide ? "a/" : "b/");
+      if (!resolved.valid)
         diagnostics.push({
           code: "malformed-header",
-          message: "File header named no path.",
+          message: `${oldSide ? "---" : "+++"} file header must name /dev/null or a complete ${oldSide ? "a/" : "b/"} Git path.`,
           line: lineNumber
         });
-      else if (line.startsWith("--- ")) current.oldPath = path;
-      else current.newPath = path;
+      else if (oldSide) current.oldPath = resolved.path;
+      else current.newPath = resolved.path;
     } else if (line.startsWith("@@ ")) {
       const counts = parseHunkHeader(line);
       if (counts === null)
@@ -402,11 +631,10 @@ function parseUnifiedDiff(input) {
 
 // packages/core/src/detectors/shared.ts
 function normalizedPath(path) {
-  return path.replaceAll("\\", "/").toLowerCase();
+  return path.toLowerCase();
 }
 function basename(path) {
-  const normalized = path.replaceAll("\\", "/");
-  return normalized.slice(normalized.lastIndexOf("/") + 1).toLowerCase();
+  return path.slice(path.lastIndexOf("/") + 1).toLowerCase();
 }
 function hasSegment(path, segment) {
   const normalized = normalizedPath(path);
@@ -1072,6 +1300,8 @@ function gitFailure(error, command) {
 }
 function gitArgs(range) {
   return [
+    "-c",
+    "core.quotePath=true",
     "diff",
     "--no-ext-diff",
     "--no-textconv",
@@ -1099,6 +1329,11 @@ function gitSmall(args, cwd, env) {
     maxBuffer: 256 * 1024
   });
 }
+var MAX_GIT_STDERR_CHARS = 64 * 1024;
+function boundedGitStderrChunk(chunk, capturedChars) {
+  const remaining = MAX_GIT_STDERR_CHARS - capturedChars;
+  return remaining > 0 ? chunk.slice(0, remaining) : "";
+}
 function repositoryRoot(cwd, env) {
   try {
     return gitSmall(["rev-parse", "--show-toplevel"], cwd, env).trim();
@@ -1120,17 +1355,38 @@ function resolveRevision(revision, cwd, env) {
     );
   }
 }
-function rangeParts(range) {
+function snapshotRange(range, cwd, env) {
   const safeRange = validateRange(range);
-  if (safeRange.includes("...")) return safeRange.split("...");
-  if (safeRange.includes("..")) return safeRange.split("..");
-  return [safeRange];
+  const operator = safeRange.includes("...") ? "..." : "..";
+  const [left, right] = safeRange.split(operator);
+  let resolved;
+  try {
+    resolved = gitSmall(
+      [
+        "rev-parse",
+        "--revs-only",
+        "--end-of-options",
+        `${left ?? ""}^{commit}`,
+        `${right ?? ""}^{commit}`
+      ],
+      cwd,
+      env
+    ).trim().split(/\r?\n/).filter((value) => value !== "");
+  } catch (error) {
+    throw gitFailure(error, "rev-parse range");
+  }
+  const fullObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+  if (resolved.length !== 2 || !resolved.every((value) => fullObjectId.test(value))) {
+    for (const part of [left, right]) resolveRevision(part ?? "", cwd, env);
+    throw new DiffUnavailableError(
+      "No diff available: git could not snapshot both range endpoints as commit object IDs."
+    );
+  }
+  return `${resolved[0]}${operator}${resolved[1]}`;
 }
 function validateRepositoryRange(range, cwd, options) {
   const root = repositoryRoot(cwd, options.env);
-  const safeRange = validateRange(range);
-  for (const part of rangeParts(safeRange)) resolveRevision(part ?? "", root, options.env);
-  return { root, range: safeRange };
+  return { root, range: snapshotRange(range, root, options.env) };
 }
 async function collectGitDiffAsync(range, cwd = process2.cwd(), options = {}) {
   const { root, range: safeRange } = validateRepositoryRange(range, cwd, options);
@@ -1143,6 +1399,7 @@ async function collectGitDiffAsync(range, cwd = process2.cwd(), options = {}) {
   });
   const stdout = [];
   const stderr = [];
+  let stderrChars = 0;
   let bytes = 0;
   let exceeded = false;
   child.stdout.setEncoding("utf8");
@@ -1158,7 +1415,10 @@ async function collectGitDiffAsync(range, cwd = process2.cwd(), options = {}) {
     stdout.push(chunk);
   });
   child.stderr.on("data", (chunk) => {
-    if (stderr.join("").length < 64 * 1024) stderr.push(chunk);
+    const bounded = boundedGitStderrChunk(chunk, stderrChars);
+    if (bounded === "") return;
+    stderr.push(bounded);
+    stderrChars += bounded.length;
   });
   return await new Promise((resolve2, reject) => {
     child.once("error", () => {
@@ -1244,10 +1504,8 @@ function readEvent(eventPath) {
   } catch {
     throw new Error("GITHUB_EVENT_PATH is not valid JSON for a workflow event.");
   }
-  if (parsed === null || typeof parsed !== "object")
-    throw new Error(
-      "GITHUB_EVENT_PATH does not hold a JSON object for a workflow event: DiffBeacon reads pull_request.base.sha and pull_request.head.sha from the object the runner wrote."
-    );
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error("GITHUB_EVENT_PATH does not hold a JSON object for a workflow event.");
   return parsed;
 }
 function summaryBytesBefore(summaryPath) {

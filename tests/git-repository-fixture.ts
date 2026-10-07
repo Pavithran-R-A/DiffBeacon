@@ -13,6 +13,7 @@ export interface FixtureRepository {
   cwd: string;
   hooksPath: string;
   git(args: string[]): string;
+  gitRaw(args: string[]): string;
   commit(message: string): void;
 }
 
@@ -25,14 +26,18 @@ export interface FixtureOptions {
   nestedPath?: string;
 }
 
-export function gitIn(cwd: string, args: string[]): string {
+export function gitRawIn(cwd: string, args: string[]): string {
   return execFileSync('git', args, {
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: false,
     windowsHide: true,
-  }).trim();
+  });
+}
+
+export function gitIn(cwd: string, args: string[]): string {
+  return gitRawIn(cwd, args).trim();
 }
 
 export function createFixtureRepository(options: FixtureOptions): FixtureRepository {
@@ -42,6 +47,7 @@ export function createFixtureRepository(options: FixtureOptions): FixtureReposit
   const cwd = options.nestedPath ? path.join(root, options.nestedPath) : root;
   if (options.nestedPath) mkdirSync(cwd, { recursive: true });
   const git = (args: string[]) => gitIn(cwd, args);
+  const gitRaw = (args: string[]) => gitRawIn(cwd, args);
   git(['init', '-q']);
   git(['config', 'user.email', `${options.identity}@example.invalid`]);
   git(['config', 'user.name', `DiffBeacon ${options.identity}`]);
@@ -51,6 +57,7 @@ export function createFixtureRepository(options: FixtureOptions): FixtureReposit
     cwd,
     hooksPath,
     git,
+    gitRaw,
     commit(message: string) {
       git(['add', '--all']);
       git(['commit', '-qm', message]);

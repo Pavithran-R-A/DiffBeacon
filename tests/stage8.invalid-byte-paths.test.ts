@@ -1,11 +1,11 @@
 /**
  * Stage 8, PHASE 36: filenames whose bytes cannot be decoded as UTF-8. Two different kinds of
- * evidence are in scope here, and they are kept apart on purpose. What the parser does with the
- * octal escape a quoted header carries is measurable on any host, because the patch is only text
- * once Git has written it. Whether a real Git really produces that form for a real undecodable name
- * can only be measured where such a file can exist, which is a POSIX filesystem — so that block is
- * Linux-only, runs the shipped diff collector, and skips here with a recorded reason rather than
- * having its answer typed in by hand.
+ * evidence are in scope here, and they are kept apart on purpose. A structural Git path whose
+ * C-quoted bytes are not valid UTF-8 cannot be represented losslessly by the string-valued report
+ * model, so the parser diagnoses it and withholds the path instead of publishing U+FFFD as identity.
+ * Whether a real Git really produces that form for a real undecodable name can only be measured where
+ * such a file can exist, which is a POSIX filesystem — so that block is Linux-only, runs the shipped
+ * diff collector, and skips here with a recorded reason rather than having its answer typed in by hand.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -69,26 +69,39 @@ const INVALID_OCTET = 'src/bad\\377name.ts';
 const MIXED_NAME = 'src/caf\\303\\251\\377.ts';
 
 describe('a header carrying bytes no UTF-8 decoder can represent', () => {
-  it('replaces the undecodable octet instead of producing a surrogate half', () => {
+  it('diagnoses an undecodable quoted path instead of publishing a lossy filename', () => {
     const parsed = parseUnifiedDiff(quotedPatch(INVALID_OCTET));
     expect(parsed.files).toHaveLength(1);
-    expect(parsed.files[0]?.displayPath).toBe(`src/bad${REPLACEMENT}name.ts`);
+    expect(parsed.files[0]).toMatchObject({
+      oldPath: null,
+      newPath: null,
+      displayPath: '<unknown path>',
+      surfaces: [],
+    });
     expect(parsed.files[0]?.displayPath).not.toMatch(SURROGATE_HALF);
-    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.diagnostics.map((entry) => entry.code)).toEqual([
+      'malformed-header',
+      'malformed-header',
+    ]);
   });
 
-  it('keeps every decodable byte of a mixed name and replaces only the bad octet', () => {
+  it('withholds a mixed valid/invalid byte path instead of keeping only its decodable prefix', () => {
     const parsed = parseUnifiedDiff(quotedPatch(MIXED_NAME));
     expect(parsed.files).toHaveLength(1);
-    expect(parsed.files[0]?.displayPath).toBe(`src/café${REPLACEMENT}.ts`);
-    expect(parsed.files[0]?.displayPath).not.toMatch(SURROGATE_HALF);
+    expect(parsed.files[0]?.displayPath).toBe('<unknown path>');
+    expect(parsed.files[0]?.displayPath).not.toContain('café');
+    expect(parsed.diagnostics.map((entry) => entry.code)).toEqual([
+      'malformed-header',
+      'malformed-header',
+    ]);
   });
 
-  it('never shows the escape text itself as the name', () => {
-    const name = parseUnifiedDiff(quotedPatch(INVALID_OCTET)).files[0]?.displayPath ?? '';
-    expect(name).not.toContain('\\377');
-    expect(name).not.toContain('"');
-    expect(decodeGitPath(`"${INVALID_OCTET}"`)).toBe(name);
+  it('keeps the lossy decoder helper separate from structural path identity', () => {
+    const parsedName = parseUnifiedDiff(quotedPatch(INVALID_OCTET)).files[0]?.displayPath ?? '';
+    const decoded = decodeGitPath(`"${INVALID_OCTET}"`);
+    expect(parsedName).toBe('<unknown path>');
+    expect(decoded).toBe(`src/bad${REPLACEMENT}name.ts`);
+    expect(decoded).not.toMatch(SURROGATE_HALF);
   });
 
   it('reads the other C escapes a quoted header carries', () => {
@@ -130,8 +143,8 @@ describe('a header carrying bytes no UTF-8 decoder can represent', () => {
     expect(parsed.diagnostics).toEqual([]);
   });
 
-  it('prints the replacement mark as ordinary text in all three formats', () => {
-    const patch = quotedPatch(INVALID_OCTET);
+  it('prints a literal replacement code point as ordinary text in all three formats', () => {
+    const patch = plainPatch(`src/bad${REPLACEMENT}name.ts`);
     const name = parseUnifiedDiff(patch).files[0]?.displayPath ?? '';
     const report = analyzeDiff(patch);
     const pretty = renderPretty(report);
@@ -150,13 +163,15 @@ describe('a header carrying bytes no UTF-8 decoder can represent', () => {
     expect(rows).toHaveLength(2);
     for (const row of rows) expect(row).toContain('`' + name + '`');
     expect(rows.some((row) => row.startsWith('| added | '))).toBe(true);
-    // The octal escape that stood for the byte in the patch is never shown as if it were the name.
+    expect(name).toBe(`src/bad${REPLACEMENT}name.ts`);
     expect(markdown).not.toContain('\\377');
     expect(pretty).not.toContain('\\377');
   });
 
-  it('round-trips the name through JSON unchanged and next to ordinary names', () => {
-    const report = analyzeDiff(`${quotedPatch(INVALID_OCTET)}${plainPatch('src/ok.ts')}`);
+  it('round-trips a literal replacement code point through JSON next to ordinary names', () => {
+    const report = analyzeDiff(
+      `${plainPatch(`src/bad${REPLACEMENT}name.ts`)}${plainPatch('src/ok.ts')}`,
+    );
     expect(report.summary.changedFiles).toBe(2);
     expect(JSON.parse(renderJson(report))).toEqual(report);
     expect(renderJson(report)).not.toMatch(SURROGATE_HALF);
@@ -188,23 +203,26 @@ describe.runIf(POSIX)('what a real Git writes for a name that is not valid UTF-8
     if (repo) removeFixtureRepository(repo.root);
   });
 
-  it('is read as one file through the shipped diff collector', async () => {
+  it('pins Git quoting and refuses to publish a lossy filename as a factual path', async () => {
     const patch = await collectGitDiffAsync('HEAD~1...HEAD', repo?.cwd ?? '');
-    console.info(
-      'OBSERVED (default core.quotePath): quoted escape =',
-      patch.includes('\\377'),
-      'raw octet in the text =',
-      patch.includes('\uFFFD'),
-    );
+    expect(patch).toContain('\\377');
+    expect(patch).not.toContain(REPLACEMENT);
+
+    const parsed = parseUnifiedDiff(patch);
     const report = analyzeDiff(patch);
     expect(report.files).toHaveLength(1);
-    expect(report.summary.diagnostics).toBe(0);
-    expect(report.files[0]?.displayPath).toContain(REPLACEMENT);
-    expect(report.files[0]?.displayPath).not.toMatch(SURROGATE_HALF);
+    expect(report.summary.diagnostics).toBeGreaterThan(0);
+    expect(parsed.diagnostics.map((entry) => entry.code)).toContain('malformed-header');
+    expect(report.files[0]).toMatchObject({
+      oldPath: null,
+      newPath: null,
+      displayPath: '<unknown path>',
+      surfaces: [],
+    });
     for (const line of renderPretty(report).split('\n')) expect(line).not.toMatch(CONTROL);
   });
 
-  it('is read the same way when Git is told not to quote, so the byte reaches the reader raw', () => {
+  it('documents the external raw-text limitation when core.quotePath=false bypasses the collector pin', () => {
     const raw = execFileSync(
       'git',
       ['-c', 'core.quotePath=false', 'diff', '--no-color', 'HEAD~1...HEAD', '--'],

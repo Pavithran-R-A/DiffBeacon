@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { analyzeDiff } from '../packages/core/src/index.js';
 import { collectGitDiffAsync } from '../packages/cli/src/index.js';
+import { boundedGitStderrChunk } from '../packages/cli/src/git.js';
 import {
   createFixtureRepository,
   gitIn,
@@ -49,6 +50,12 @@ function prescribedGitVector(doc: string): string {
 }
 
 describe('Git diff determinism boundary', () => {
+  it('caps captured Git stderr even when one emitted chunk exceeds the whole allowance', () => {
+    expect(boundedGitStderrChunk('x'.repeat(100_000), 0)).toHaveLength(64 * 1024);
+    expect(boundedGitStderrChunk('abcdef', 64 * 1024 - 2)).toBe('ab');
+    expect(boundedGitStderrChunk('still ignored', 64 * 1024)).toBe('');
+  });
+
   it('owns structural flags and omits full binary patch generation', () => {
     const source = readFileSync('packages/cli/src/git.ts', 'utf8');
     expect(source).toContain("'--src-prefix=a/'");
@@ -128,6 +135,30 @@ describe('Git diff determinism boundary', () => {
     expect(prescribed).toContain('--dst-prefix=b/');
     // Prose may explain why the newer flag was dropped; prescribed commands may not.
     expect(prescribed).not.toContain('--default-prefix');
+  });
+
+  it('snapshots symbolic range endpoints before the diff process starts', async () => {
+    const repo = repository();
+    writeRepositoryFile(repo.cwd, 'src.ts', 'export const value = 1;\n');
+    repo.commit('base');
+    const base = gitIn(repo.cwd, ['rev-parse', 'HEAD']);
+    writeRepositoryFile(repo.cwd, 'src.ts', 'export const value = 2;\n');
+    repo.commit('head');
+    const head = gitIn(repo.cwd, ['rev-parse', 'HEAD']);
+    const trace = path.join(repo.root, 'range-trace.log');
+    const previous = process.env.GIT_TRACE;
+    process.env.GIT_TRACE = trace;
+    try {
+      await collectGitDiffAsync('HEAD~1...HEAD', repo.cwd);
+    } finally {
+      if (previous === undefined) delete process.env.GIT_TRACE;
+      else process.env.GIT_TRACE = previous;
+    }
+
+    const log = readFileSync(trace, 'utf8');
+    expect(log).toContain('--revs-only --end-of-options');
+    expect(log).toContain(`${base}...${head} --`);
+    expect(log).not.toContain('git diff HEAD~1...HEAD');
   });
 
   it('normalizes hostile repository diff configuration to the same report', async () => {

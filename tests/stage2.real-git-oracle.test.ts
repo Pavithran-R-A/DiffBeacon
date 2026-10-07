@@ -20,6 +20,8 @@ import {
 // counts.
 
 const VECTOR = [
+  '-c',
+  'core.quotePath=true',
   'diff',
   '--no-ext-diff',
   '--no-textconv',
@@ -118,6 +120,56 @@ const textLines = (count: number) =>
 // still diffs as one long text line. These payloads carry real control bytes.
 const binaryPayload = (seed: number) =>
   Buffer.from(Array.from({ length: 8192 }, (_, index) => (index + seed) % 256));
+
+describe.runIf(process.platform !== 'win32')(
+  'POSIX filenames with trailing spaces cross-checked against Git',
+  () => {
+    it('preserves trailing spaces in a real rename emitted by the shipped vector', () => {
+      const repo = repository();
+      writeRepositoryFile(repo.cwd, 'old ', textLines(4));
+      repo.commit('base trailing-space name');
+      repo.git(['mv', '--', 'old ', 'new ']);
+      repo.commit('rename trailing-space name');
+
+      const patch = repo.gitRaw(VECTOR);
+      expect(patch).toContain('diff --git a/old  b/new ');
+      expect(patch).toContain('rename from old ');
+      expect(patch).toContain('rename to new ');
+
+      const parsed = parseUnifiedDiff(patch);
+      expect(parsed.diagnostics).toEqual([]);
+      expect(parsed.files).toHaveLength(1);
+      expect(parsed.files[0]).toMatchObject({
+        status: 'renamed',
+        oldPath: 'old ',
+        newPath: 'new ',
+        displayPath: 'new ',
+        similarity: 100,
+      });
+    });
+
+    it('accepts a real rename where Git quotes only the unusual side', () => {
+      const repo = repository();
+      writeRepositoryFile(repo.cwd, 'old\tname.ts', textLines(4));
+      repo.commit('base quoted-side name');
+      repo.git(['mv', '--', 'old\tname.ts', 'new.ts']);
+      repo.commit('rename from quoted side');
+
+      const patch = repo.gitRaw(VECTOR);
+      expect(patch).toContain('diff --git "a/old\\tname.ts" b/new.ts');
+      const parsed = parseUnifiedDiff(patch);
+      expect(parsed.diagnostics).toEqual([]);
+      expect(parsed.files).toHaveLength(1);
+      expect(parsed.files[0]).toMatchObject({
+        status: 'renamed',
+        oldPath: 'old\tname.ts',
+        newPath: 'new.ts',
+        displayPath: 'new.ts',
+        similarity: 100,
+      });
+    });
+  },
+);
 
 describe('single-file states cross-checked against Git', () => {
   it('covers modification, addition, and deletion', () => {

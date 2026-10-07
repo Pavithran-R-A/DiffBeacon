@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync, readlinkSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -45,11 +45,19 @@ export function trackedSourceFiles(root = process.cwd()) {
   );
 }
 
+function trackedBlobBytes(root, file) {
+  const absolute = path.join(root, file);
+  // Git stores a symbolic link as a blob containing the link target. Hash that blob
+  // representation rather than following the link into arbitrary host files. On a
+  // checkout with core.symlinks=false the same path is already a regular file whose
+  // contents are that target string, so both checkout modes produce the same digest.
+  if (lstatSync(absolute).isSymbolicLink()) return readlinkSync(absolute, { encoding: 'buffer' });
+  return readFileSync(absolute);
+}
+
 export function renderSourceManifest(root = process.cwd()) {
   const lines = trackedSourceFiles(root).map((file) => {
-    const digest = createHash('sha256')
-      .update(readFileSync(path.join(root, file)))
-      .digest('hex');
+    const digest = createHash('sha256').update(trackedBlobBytes(root, file)).digest('hex');
     return `${digest}  ${file}`;
   });
   return `${[...header, ...lines].join('\n')}\n`;
