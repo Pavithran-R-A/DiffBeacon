@@ -46,8 +46,8 @@ New and expanded tests cover runtime-to-schema conformance, similarity bounds, m
 quoted path records, real-Git path oracles, moving refs, Action event shapes, secret-scan byte bounds,
 NUL-bearing files, symlink boundaries, detector backslash semantics, browser hostile corpus,
 contradictory status metadata, Git stderr bounds, JSON display-control serialization, Pages deployment
-credential isolation, pinned Git path quoting, undecodable-filename rejection, and the future publish
-workflow contract.
+credential isolation, pinned Git path quoting, the parser/collector split for undecodable filenames,
+and the future publish workflow contract.
 
 The tracked Action bundle and `SOURCE_MANIFEST.txt` are regenerated after source changes. Temporary
 formatter/finalizer workflows used only to obtain repository-native Prettier/build output are removed
