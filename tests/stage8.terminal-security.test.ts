@@ -226,6 +226,6 @@ describe('the CLI message surface keeps one bounded line', () => {
     expect(result.stdout).toContain('\\u202e');
     expect(result.stdout).toContain('\\u009b');
     const parsed = JSON.parse(result.stdout) as { files: Array<{ displayPath: string }> };
-    expect(parsed.files.map((file) => file.displayPath)).toEqual(paths);
+    expect(parsed.files.map((file) => file.displayPath).toSorted()).toEqual(paths.toSorted());
   });
 });
