@@ -28,13 +28,26 @@ a later patch release.
   and release-cache settings aligned with npm Trusted Publishing guidance.
 - Current-facing documentation still contained a small number of pre-release statements after
   v0.1.0 was already live.
+- Git mode parsing accepted any six octal digits instead of only file entry modes that Git can store.
+- Contradictory add/delete/rename/copy/mode metadata could manufacture a status from hostile pasted
+  input instead of falling back to the structural paths the parser had actually proved.
+- Git stderr capture could exceed its intended bound when one emitted chunk was larger than the
+  allowance.
+- Raw JSON text could carry C1 or bidi-formatting controls that remain factual data after parsing but
+  can still act on a terminal when the serialized report itself is printed or copied.
+- The Pages workflow could be manually dispatched from a non-main ref and previously gave build/test
+  code the same Pages/OIDC grants used by the deployment job.
+- Git pathname quoting needed to be pinned explicitly, and undecodable repository filename bytes now
+  fail closed rather than being silently normalized into replacement characters by the Git boundary.
 
 ## Evidence added in this branch
 
 New and expanded tests cover runtime-to-schema conformance, similarity bounds, malformed Git modes,
 quoted path records, real-Git path oracles, moving refs, Action event shapes, secret-scan byte bounds,
-NUL-bearing files, symlink boundaries, detector backslash semantics, browser hostile corpus, and the
-future publish workflow contract.
+NUL-bearing files, symlink boundaries, detector backslash semantics, browser hostile corpus,
+contradictory status metadata, Git stderr bounds, JSON display-control serialization, Pages deployment
+credential isolation, pinned Git path quoting, undecodable-filename rejection, and the future publish
+workflow contract.
 
 The tracked Action bundle and `SOURCE_MANIFEST.txt` are regenerated after source changes. Temporary
 formatter/finalizer workflows used only to obtain repository-native Prettier/build output are removed
