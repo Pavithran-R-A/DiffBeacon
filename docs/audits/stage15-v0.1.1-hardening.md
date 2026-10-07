@@ -63,3 +63,12 @@ workflow.
 
 No npm publish, tag, GitHub Release, Pages deployment, Marketplace submission, or v0.1.0 mutation is
 authorized by this audit record.
+
+## Qualification trigger note
+
+The repository-native finalizer wrote the clean artifact commit with GitHub's workflow token. GitHub
+suppresses ordinary push-triggered recursion from that token and places the pull-request synchronize
+run in approval-required state. This audit-only commit intentionally changes no product, workflow,
+package, or manifest input; it exists to produce a normal maintainer-authored exact-SHA CI run for the
+already-finalized tree.
+
