@@ -362,6 +362,8 @@ function parseUnifiedDiff(input) {
         current.renameTo = null;
         current.copyFrom = null;
         current.copyTo = null;
+        current.oldMode = null;
+        current.newMode = null;
       }
       if (current.oldMode !== null && current.newMode !== null && current.oldMode === current.newMode) {
         diagnostics.push({
