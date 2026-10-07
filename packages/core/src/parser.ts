@@ -549,6 +549,8 @@ export function parseUnifiedDiff(input: string): ParsedDiff {
         current.renameTo = null;
         current.copyFrom = null;
         current.copyTo = null;
+        current.oldMode = null;
+        current.newMode = null;
       }
 
       if (
