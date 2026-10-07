@@ -1,0 +1,45 @@
+name: Temporary Stage 15 audit formatter
+
+on:
+  push:
+    branches:
+      - fix/v0.1.1-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: fix/v0.1.1-hardening
+          persist-credentials: true
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Format audit and remove this workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx prettier --write docs/audits/stage15-v0.1.1-hardening.md
+          git rm .github/workflows/format-stage15-audit.yml
+          npm run format:check
+          git diff --check
+      - name: Commit formatter output
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style(audit): format Stage 15 record"
+          git push origin HEAD:fix/v0.1.1-hardening
