@@ -10,7 +10,10 @@ npx diffbeacon@0.1.0 --version
 git diff main...HEAD | npx diffbeacon@0.1.0 review --stdin
 ```
 
-The package ships one bundled file, declares no runtime dependencies, and has no install-time script. To run this repository's own build instead of the published package:
+The package ships one bundled file, declares no runtime dependencies, and has no install-time script.
+A source checkout may contain a newer candidate version than the public registry; `npm view
+diffbeacon version` is the publication authority. The pinned `0.1.0` examples above remain a
+verified public install path while a later candidate is being qualified. To run this repository's own build instead of the published package:
 
 ```bash
 npm run build

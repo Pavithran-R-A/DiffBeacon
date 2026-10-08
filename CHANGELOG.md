@@ -7,9 +7,22 @@ npm registry and GitHub on 2026-10-06. Capability details live in
 
 ## Unreleased
 
-Nothing yet. Work that lands after `v0.1.0` is listed here until it ships in the next version; a
-defect found after the release does not change the immutable `v0.1.0` identity — it is fixed
-forward.
+**v0.1.1 release candidate, not yet published.** The current public npm package and GitHub Release
+remain `v0.1.0` until the v0.1.1 tag, trusted-publisher job and registry checks succeed. No change
+below alters the immutable `v0.1.0` release.
+
+### Fixed
+
+- Validate similarity percentages against the v1 JSON Schema and test emitted reports against it.
+- Reject malformed, contradictory and undecodable Git diff metadata instead of inventing paths,
+  statuses or out-of-range values; preserve Git's true path separator semantics.
+- Snapshot Git range revisions and bound captured process output.
+- Validate GitHub Action event shapes and keep its committed bundle reproducible.
+- Scan tracked secrets and hash source-manifest symlinks without following paths outside the checkout.
+- Escape display controls in serialized JSON and copied browser reports without changing parsed data.
+- Harden Pages deployment qualification, main-branch dispatch and deployment-token isolation.
+- Strengthen automated regression tests for parser, CLI, Action, browser, supply-chain and release
+  workflows.
 
 ## 0.1.0 — 2026-10-06
 
