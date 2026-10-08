@@ -106,8 +106,11 @@ settings can change the details, so no universal statement is made about any one
 token privileges. DiffBeacon's boundary is the stricter one — the repository under review must
 never choose or run the reviewer. That form is limited to trusted development on this repository's
 own branches; consumers are directed to the independently referenced, reviewed release commit
-`5a50b52028ead78942ea3fc3bee93ba26e0a79cc`, which a separate consumer repository exercised
-successfully in Actions run `37430396143`. `pull_request_target` runs the base branch's workflow in
+`a89d8bb7d048bfd4e016e494428d04f060e82112`, the commit the `v0.1.1` tag names, which a separate consumer
+repository exercised successfully in Actions run `37749736010`. The earlier release commit
+`5a50b52028ead78942ea3fc3bee93ba26e0a79cc` behind `v0.1.0` was exercised the same way in run
+`37430396143` and stays valid as a reference; it is simply not the current one. `pull_request_target`
+runs the base branch's workflow in
 the base repository's context, where the default checkout is the base branch rather than the pull
 request, and it can carry more trust than an ordinary fork event; the hazard is a workflow that
 then checks out or executes the pull request's code inside that context, which DiffBeacon neither
@@ -239,7 +242,8 @@ Specifically left open, each for a recorded reason rather than by assumption:
   Measured 2026-10-04 in a clean `npm ci` clone of `889f52b6e53095fea978fafbe50017ff71e543db`: both
   `npm audit --omit=dev --audit-level=high` and `npm audit --audit-level=high` print
   `found 0 vulnerabilities` and exit 0. The release surface audits clean because the only package
-  marked publishable is the CLI (`diffbeacon@0.1.0`), which declares no runtime dependencies, while
+  marked publishable is the CLI (`diffbeacon`, whose published versions as of 2026-10-08 are `0.1.0` and
+  `0.1.1`), which declares no runtime dependencies, while
   `diffbeacon-core` and `diffbeacon-action` are `private: true`. The development tree did carry one
   high advisory when it was measured on 2026-09-30: `brace-expansion` reached only through
   development lint tooling (`eslint@9.39.5 → minimatch@3.1.5` resolving `1.1.18`, and

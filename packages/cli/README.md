@@ -2,18 +2,27 @@
 
 The CLI reviews a Git range using the shared local core. It uses argument-vector Git execution with external diff and text-conversion hooks disabled. It does not execute repository scripts, install repository dependencies, run tests, or upload source code. It never fetches, mutates, or cleans the repository it is pointed at.
 
-`diffbeacon@0.1.0` is on the public npm registry, released on 2026-10-06 from commit `5a50b52028ead78942ea3fc3bee93ba26e0a79cc`; `npm view diffbeacon version` is the authority on what `latest` reports today. Install the version that was consumer-smoke-tested, or run it straight from the registry without a project install:
+`diffbeacon@0.1.1` is the published release, on the public npm registry since 2026-10-08 and tagged
+`v0.1.1` at commit `a89d8bb7d048bfd4e016e494428d04f060e82112`; the first release, `diffbeacon@0.1.0`,
+was published on 2026-10-06 from commit `5a50b52028ead78942ea3fc3bee93ba26e0a79cc` and stays on the
+registry unchanged. `npm view diffbeacon version` is the authority on what `latest` reports today.
+Install the version that was consumer-smoke-tested, or run it straight from the registry without a
+project install:
 
 ```bash
-npm install diffbeacon@0.1.0     # provides node_modules/.bin/diffbeacon
-npx diffbeacon@0.1.0 --version
-git diff main...HEAD | npx diffbeacon@0.1.0 review --stdin
+npm install diffbeacon@0.1.1     # provides node_modules/.bin/diffbeacon
+npx diffbeacon@0.1.1 --version
+git diff main...HEAD | npx diffbeacon@0.1.1 review --stdin
 ```
 
 The package ships one bundled file, declares no runtime dependencies, and has no install-time script.
 A source checkout may contain a newer candidate version than the public registry; `npm view
-diffbeacon version` is the publication authority. The pinned `0.1.0` examples above remain a
-verified public install path while a later candidate is being qualified. To run this repository's own build instead of the published package:
+diffbeacon version` is the publication authority. The pinned `0.1.1` examples above were the verified
+public install path measured on 2026-10-08, and they stay that way for whoever reads them: neither
+`0.1.0` nor `0.1.1` can be republished or overwritten. One consequence of that immutability is worth
+stating — the `README.md` inside the published `0.1.1` tarball still names `0.1.0` as the registry
+release, because it was frozen at the release commit, and it cannot be corrected without publishing a
+new version. To run this repository's own build instead of the published package:
 
 ```bash
 npm run build

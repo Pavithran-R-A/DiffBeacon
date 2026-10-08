@@ -3,7 +3,7 @@
 # NOT A WORKFLOW GITHUB RUNS FROM THIS REPOSITORY. This file is documentation kept outside
 # `.github/workflows/` on purpose: it is the reference a *consumer* copies into their own
 # repository. What it references is a reviewed, published release rather than an unfilled slot —
-# `v0.1.0` exists, and the commit named below is the release commit it points at.
+# `v0.1.1` is the current release, and the commit named below is the release commit it points at.
 #
 # Why the reference is a full commit SHA:
 #
@@ -25,11 +25,13 @@
 #   - `3d3c42e5aac5ba805825da76410c181273ba90b1` was checked against `refs/tags/v7` of
 #     https://github.com/actions/checkout with `git ls-remote --tags` on 2026-09-26, and is the
 #     same pin this repository's own CI uses. Re-verify before replacing it.
-#   - `5a50b52028ead78942ea3fc3bee93ba26e0a79cc` is the commit the annotated `v0.1.0` tag peels to,
-#     verified with `git ls-remote` on 2026-10-06. That commit is what a release is pinned to; a
+#   - `a89d8bb7d048bfd4e016e494428d04f060e82112` is the commit the annotated `v0.1.1` tag peels to,
+#     verified with `git ls-remote` on 2026-10-08. That commit is what a release is pinned to; a
 #     moving major tag was deliberately not created, so the SHA below is the recommended reference
 #     rather than a stricter alternative to a convenient one. See
-#     `docs/audits/stage14-v0.1.0-consumer-release.md` for the consumer run that exercised it.
+#     `docs/audits/stage17-v0.1.1-release-finalization.md` for the consumer run that exercised it.
+#     The earlier release, `5a50b52028ead78942ea3fc3bee93ba26e0a79cc` behind the `v0.1.0` tag, was
+#     verified the same way on 2026-10-06 and remains consumable; it is not what this example pins.
 name: DiffBeacon review
 on:
   pull_request:
@@ -50,4 +52,4 @@ jobs:
           persist-credentials: false
       # The step needs no `with:` inputs: DiffBeacon reads the event the runner delivered and
       # writes its review to the Job Summary, which is the Action's only v0.1 output.
-      - uses: Pavithran-R-A/DiffBeacon@5a50b52028ead78942ea3fc3bee93ba26e0a79cc
+      - uses: Pavithran-R-A/DiffBeacon@a89d8bb7d048bfd4e016e494428d04f060e82112

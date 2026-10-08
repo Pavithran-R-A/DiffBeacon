@@ -11,6 +11,14 @@ output: `action.yml` declares no `inputs` and no `outputs`, because the review a
 in machine-readable form through the CLI's `--format json`, and a second copy in
 `$GITHUB_OUTPUT` would be a second contract to keep in sync.
 
+Because that is the only output, reading a past run's review back is a web-UI action: GitHub does not
+expose a Job Summary body through any API endpoint. Measured on 2026-10-08, `/check-runs/{id}` returns
+`output.summary` as `null` and the `/actions/runs/{id}/summary` and `/actions/jobs/{id}/summary` routes
+answer HTTP 404, so the run's conclusion is machine-verifiable while its rendered content is not.
+[`docs/audits/stage17-v0.1.1-release-finalization.md`](../../docs/audits/stage17-v0.1.1-release-finalization.md)
+§4.5 records how the panel behind the consumer proof was nevertheless identified — the release bundle
+hashed three ways, then replayed against the same merge commit.
+
 ## What it reads
 
 The Action takes no inputs. Everything it needs comes from the four variables the runner
@@ -42,13 +50,20 @@ on a trusted branch of this repository, reviewing this repository's own commits.
 pattern, and no example in this repository presents it as one.
 
 Consumers need the Action referenced independently of the repository being reviewed, by a reviewed
-immutable commit SHA. That reference exists: the annotated `v0.1.0` tag peels to commit
-`5a50b52028ead78942ea3fc3bee93ba26e0a79cc`, whose `packages/action/dist/index.js` bundle hashes to
-`45660da735388dee35fc581e94490d2aacc295b2382f8bea23ab12dff2350049`, and a repository other than this
-one has run it from that commit — Actions run `37430396143`, recorded in
+immutable commit SHA. That reference exists at each release: the annotated `v0.1.1` tag (object
+`4012aa50f83a894445975d5713cb29976bf00a61`) peels to commit
+`a89d8bb7d048bfd4e016e494428d04f060e82112`, whose `packages/action/dist/index.js` bundle is 60064
+bytes hashing to `e37f412192346e903ae88e45b3506ad9fa909b90f5655f7eec7a098790c3db42` — a digest
+measured three ways, through the raw URL at the SHA, at the tag, and out of the commit object — and a
+repository other than this one has run it from that commit: Actions run `37749736010` on 2026-10-08,
+recorded in
+[`docs/audits/stage17-v0.1.1-release-finalization.md`](../../docs/audits/stage17-v0.1.1-release-finalization.md).
+The first such proof ran at the `v0.1.0` release commit `5a50b52028ead78942ea3fc3bee93ba26e0a79cc`
+(bundle `45660da735388dee35fc581e94490d2aacc295b2382f8bea23ab12dff2350049`, Actions run `37430396143`)
+on 2026-10-06, in
 [`docs/audits/stage14-v0.1.0-consumer-release.md`](../../docs/audits/stage14-v0.1.0-consumer-release.md).
 Pin the **full commit SHA**: it names the exact bundle the runner will execute, and only this
-repository's owner can move a tag, so a SHA is the reference a consumer can audit. The `v0.1.0` tag
+repository's owner can move a tag, so a SHA is the reference a consumer can audit. The version tag
 points at the same commit for anyone who prefers the shorter form; there is deliberately no moving
 major tag, and creating one is not part of this release. Check for yourself what a reference resolves
 to, with `git ls-remote --tags origin` and this repository's Releases page, and read the release
@@ -70,7 +85,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: Pavithran-R-A/DiffBeacon@5a50b52028ead78942ea3fc3bee93ba26e0a79cc
+      - uses: Pavithran-R-A/DiffBeacon@a89d8bb7d048bfd4e016e494428d04f060e82112
 ```
 
 `pull_request_target` is not the alternative. It runs the base branch's workflow in the base
