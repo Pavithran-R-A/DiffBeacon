@@ -42,7 +42,7 @@
     "@types/react-dom": "^19.2.1",
     "@vitejs/plugin-react": "^5.0.4",
     "esbuild": "^0.28.1",
-    "eslint": "^9.39.1",
+    "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^16.0.0",
     "lucide-react": "^0.453.0",
