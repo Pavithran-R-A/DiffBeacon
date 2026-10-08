@@ -124,6 +124,10 @@ describe('Stage 4 release invariants', () => {
     const lock = json<{ packages: Record<string, { version?: string }> }>('package-lock.json');
     expect(cli.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(lock.packages['packages/cli']?.version).toBe(cli.version);
+    const root = json<PackageManifest>('package.json');
+    expect(root.version).toBe(cli.version);
+    expect(lock.version).toBe(root.version);
+    expect(lock.packages['']?.version).toBe(root.version);
   });
 
   it('defaults development and preview to localhost-safe Vite behavior', () => {

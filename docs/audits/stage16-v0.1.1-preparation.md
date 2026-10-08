@@ -6,10 +6,10 @@ The candidate starts from main commit `c17a6b032bbf8a97ab9fe090e85f234c1c77a36c`
 whose hosted CI run `37659210935` completed successfully in all five lanes. PR #6 merged
 the Stage 15 hardening changes by squash without modifying the v0.1.0 tag or npm package.
 
-This preparation changes only the public CLI workspace version to `0.1.1`, its matching
-npm lockfile workspace entry, the pre-release changelog, the consumer README and a regression
-test for lockfile/version parity. The private workspaces and root workspace stay at `0.1.0`
-because they are not independent npm publications. The source manifest tracks the changed files.
+This preparation changes the public CLI workspace and private root workspace versions to
+`0.1.1`, with their matching npm lockfile entries, the pre-release changelog, the consumer
+README and a regression test for version parity. Core and Action remain private at `0.1.0`,
+as they are not separately published. The source manifest tracks the changed files.
 
 ## Before any v0.1.1 tag
 
