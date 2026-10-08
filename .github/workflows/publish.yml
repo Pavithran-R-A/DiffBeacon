@@ -1,9 +1,11 @@
 name: Publish
 
-# The gate a *future* npm release passes through. Stage 14 published `diffbeacon@0.1.0` by hand, from
-# the tarball qualified in `docs/releasing.md` §1, so this file has never run and never published
-# anything; it exists so the next publication follows the same procedure without a human holding an
-# npm credential. Sections 3 and 7 of `docs/releasing.md` are the runbook this implements.
+# The gate an npm release passes through, and a gate it has already passed. Stage 16 pushed the
+# annotated `v0.1.1` tag and this workflow published `diffbeacon@0.1.1` from it on a GitHub-hosted
+# runner with OIDC provenance, as Actions run `37740211385` on 2026-10-08 — 18 steps, all green, with
+# no npm credential in this repository or in this file. `diffbeacon@0.1.0` predates that gate: Stage 14
+# published it by hand from the tarball qualified in `docs/releasing.md` §1, which is exactly the
+# dependency this file removes. Sections 3 and 7 of `docs/releasing.md` are the runbook this implements.
 #
 # One trigger, and it is the moment a release becomes a decision rather than a wish: an annotated
 # release tag. A tag push also runs `ci.yml`, whose `browser` job qualifies the Chromium suites, so

@@ -4,11 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 // Stage 14, Phase O: the gate a *future* npm release passes through without this repository ever
-// holding an npm credential. Stage 14 published `diffbeacon@0.1.0` by hand, so this workflow has
-// never run — which is exactly why its contract is asserted against the committed text. Everything
-// below is a guard over a publication path someone else will take using the tree as it stands, so a
-// widened permission, a token in the open, or a registry write that outruns its own checks has to be
-// caught by a reviewed commit rather than by a run that already published.
+// holding an npm credential. That future arrived at `v0.1.1`: Stage 16 pushed the annotated tag and
+// this workflow ran on a GitHub-hosted runner and published `diffbeacon@0.1.1` with OIDC provenance
+// (Actions run `37740211385`), so the file's own execution is now a measured fact and is guarded to
+// stay in its header. Everything else below is a guard over a publication path someone else will
+// take using the tree as it stands, so a widened permission, a token in the open, or a registry write
+// that outruns its own checks has to be caught by a reviewed commit rather than by a run that already
+// published.
 
 const repository = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const file = '.github/workflows/publish.yml';
@@ -215,5 +217,16 @@ describe('the publish workflow is a gate, not a convenience', () => {
 
   it('points at the runbook it implements', () => {
     expect(workflow()).toMatch(/docs\/releasing\.md/);
+  });
+
+  it('records the publication it has actually performed', () => {
+    const text = workflow();
+    // The header used to explain that this file had never run, because Stage 14 published `0.1.0` by
+    // hand. That sentence went false when the `v0.1.1` tag pushed it through the gate, and a header
+    // that still says it makes the committed workflow contradict the public registry.
+    expect(text, 'the header must name the run that published a version').toMatch(/37740211385/);
+    expect(text, 'the header still denies its own execution').not.toMatch(
+      /has never run and never published|this file has never run/i,
+    );
   });
 });

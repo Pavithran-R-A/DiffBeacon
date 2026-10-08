@@ -739,7 +739,7 @@ export default function Home() {
           </section>
         </div>
         <footer className="workspace-footer">
-          <span>DIFFBEACON / 0.1.0</span>
+          <span>DIFFBEACON / 0.1.1</span>
           <span>DETERMINISTIC ATTENTION ROUTING</span>
           <span>ANALYSIS IN THIS BROWSER</span>
         </footer>

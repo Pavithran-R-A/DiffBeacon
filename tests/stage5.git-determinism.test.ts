@@ -84,12 +84,13 @@ describe('Git diff determinism boundary', () => {
     };
     expect(rootReadme).not.toContain('OWNER/diffbeacon');
     expect(actionReadme).not.toContain('OWNER/diffbeacon');
-    // A consumer reference is only valid once it resolves to a reviewed release. Stage 14 published
-    // `v0.1.0` at the full commit SHA below, so every owner reference in the shipped prose must be
-    // that immutable SHA — not the earlier placeholder, which no runner can resolve, and not a
-    // movable version tag, which a consumer cannot audit.
+    // A consumer reference is only valid once it resolves to a reviewed release. Stage 16 tagged
+    // `v0.1.1` and Stage 17 published its GitHub Release at the full commit SHA below, so every
+    // owner reference in the shipped prose must be that immutable SHA — not the earlier placeholder,
+    // which no runner can resolve, not the superseded `v0.1.0` commit, and not a movable version tag,
+    // which a consumer cannot audit.
     const reviewedActionReference =
-      'uses: Pavithran-R-A/DiffBeacon@5a50b52028ead78942ea3fc3bee93ba26e0a79cc';
+      'uses: Pavithran-R-A/DiffBeacon@a89d8bb7d048bfd4e016e494428d04f060e82112';
     for (const readme of [rootReadme, actionReadme]) {
       const ownerReferences = readme.match(/uses:\s*\S*diffbeacon@\S*/gi) ?? [];
       expect(ownerReferences.length, 'a README names no usable Action reference').toBeGreaterThan(
@@ -100,7 +101,7 @@ describe('Git diff determinism boundary', () => {
       expect(readme).not.toMatch(/diffbeacon@v\d/i);
       expect(readme).toContain('uses: ./');
     }
-    expect(rootReadme).toContain('diffbeacon@0.1.0');
+    expect(rootReadme).toContain('diffbeacon@0.1.1');
     expect(rootReadme).toContain('node packages/cli/dist/index.js review');
     expect(manifest.repository).toEqual({
       type: 'git',

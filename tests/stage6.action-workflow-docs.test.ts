@@ -54,12 +54,13 @@ describe('the Action documentation keeps the two trust domains apart', () => {
   it('names the released Action version, its immutable pin, and its consumer proof', () => {
     for (const file of actionDocs) {
       const text = read(file);
-      expect(text, `${file} omits the released version`).toMatch(/v0\.1\.0/);
+      // Stage 17 re-measured the current release: `v0.1.1` is what a consumer should pin today.
+      expect(text, `${file} omits the current released version`).toMatch(/v0\.1\.1/);
       expect(text, `${file} omits the reviewed release SHA`).toMatch(
-        /5a50b52028ead78942ea3fc3bee93ba26e0a79cc/,
+        /a89d8bb7d048bfd4e016e494428d04f060e82112/,
       );
       // Documentation that recommends a reference must show the recommendation working somewhere.
-      expect(text, `${file} omits the consumer Actions run`).toMatch(/37430396143/);
+      expect(text, `${file} omits the consumer Actions run`).toMatch(/37749736010/);
       expect(text, `${file} drops the release runbook pointer`).toMatch(/docs\/releasing\.md/);
       expect(text, `${file} still denies the release`).not.toMatch(
         /no published|does not exist yet|not published/i,
@@ -118,7 +119,7 @@ describe('the future consumer workflow fixture', () => {
   });
 
   it('pins the reviewed release SHA rather than a placeholder', () => {
-    expect(uses()).toContain('Pavithran-R-A/DiffBeacon@5a50b52028ead78942ea3fc3bee93ba26e0a79cc');
+    expect(uses()).toContain('Pavithran-R-A/DiffBeacon@a89d8bb7d048bfd4e016e494428d04f060e82112');
     const text = read(fixture);
     expect(text).not.toMatch(/REVIEWED_FULL_COMMIT_SHA|placeholder|TBD|FIXME/i);
     for (const reference of uses()) expect(reference, reference).toMatch(/^[^@]+@[0-9a-f]{40}$/);

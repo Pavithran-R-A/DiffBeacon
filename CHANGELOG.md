@@ -2,14 +2,51 @@
 
 This project aims at [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Its first release, `0.1.0`, reached the
-npm registry and GitHub on 2026-10-06. Capability details live in
-[`README.md`](README.md) and [`docs/architecture/`](docs/architecture/), not here.
+npm registry and GitHub on 2026-10-06; the published release today is `0.1.1`, published on
+2026-10-08. Capability details live in [`README.md`](README.md) and
+[`docs/architecture/`](docs/architecture/), not here.
 
 ## Unreleased
 
-**v0.1.1 release candidate, not yet published.** The current public npm package and GitHub Release
-remain `v0.1.0` until the v0.1.1 tag, trusted-publisher job and registry checks succeed. No change
-below alters the immutable `v0.1.0` release.
+No behaviour change is pending here. The Stage 17 pass that finalised the `v0.1.1` consumer release
+left the repository documentation, the consumer Action example pin and this file pointing at the
+published release; it changed no code, and it is recorded in
+[`docs/audits/stage17-v0.1.1-release-finalization.md`](docs/audits/stage17-v0.1.1-release-finalization.md).
+
+## 0.1.1 — 2026-10-08
+
+Shipped as `diffbeacon@0.1.1` on npm at `2026-10-08T06:59:56.410Z`, from commit
+`a89d8bb7d048bfd4e016e494428d04f060e82112`, which the annotated tag `v0.1.1` (tag object
+`4012aa50f83a894445975d5713cb29976bf00a61`) names. Unlike `0.1.0`, this publication went through
+`.github/workflows/publish.yml`: pushing that tag ran the workflow on a GitHub-hosted runner holding
+only `contents: read` and `id-token: write`, and it published with provenance as Actions run
+`37740211385` — 18 steps, every one success, and no credential in the repository, its settings or the
+file. The same tag also ran `ci.yml` green in all five lanes (run `37740211315`), and `main` at that
+commit had already been green (run `37722256817`). GitHub Release `406586383` — "DiffBeacon v0.1.1" at
+<https://github.com/Pavithran-R-A/DiffBeacon/releases/tag/v0.1.1> — was published from the tag on
+`2026-10-08T08:15:27Z` with no draft, no prerelease and no attached assets, so the Action bundle in
+the tree stays the only copy of itself.
+
+Measured 2026-10-08 from directories that were not this repository: `npm view diffbeacon version`
+reports `0.1.1` and `dist-tags` is `{"latest":"0.1.1"}`, while `0.1.0` is still listed and unchanged;
+the published tarball is 19025 bytes packed and 74394 unpacked across exactly `LICENSE`, `README.md`,
+`dist/index.js` and `package.json`, MIT-licensed, `engines.node: ">=22"`, zero runtime dependencies,
+and its downloaded bytes hash to the registry's `dist.shasum` `4f71c7672aa000cf68903345d651e3c302965c67`;
+npm's attestation for `pkg:npm/diffbeacon@0.1.1` binds that digest to `.github/workflows/publish.yml`
+at `refs/tags/v0.1.1` with `gitCommit = a89d8bb7d048bfd4e016e494428d04f060e82112`. A clean directory
+installed `diffbeacon@0.1.1`, read `0.1.1` from `--version`, and ran eleven `review --stdin` /
+`--output` cases over real `git diff` output plus three usage controls at exit `2`/`2`/`3`. A second
+temporary consumer repository ran the Action pinned to the full release SHA on an ordinary
+`pull_request` event — Actions run `37749736010`, job `113219738037`, five steps all success, `pull-requests: write`
+nowhere, no PAT — and its Job Summary carried a real Review Attention Map for that pull request. The
+pull request was closed and the repository archived, not deleted.
+
+[`docs/audits/stage17-v0.1.1-release-finalization.md`](docs/audits/stage17-v0.1.1-release-finalization.md)
+records those measurements, including the one that could not be retrieved through any API: GitHub
+serves a Job Summary panel to a signed-in session only, so the published review body was reproduced
+from the byte-identical bundle over the byte-identical commit range and labelled as a reproduction.
+[`docs/audits/stage14-v0.1.0-consumer-release.md`](docs/audits/stage14-v0.1.0-consumer-release.md)
+remains the record of the first release, which this one does not overwrite.
 
 ### Fixed
 

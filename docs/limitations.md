@@ -104,8 +104,15 @@ hand-waved:
   step, so the green run qualifies the lanes it executed at the commit it ran at — not this workflow
   at any future commit. Cross-repository consumption was measured later: on 2026-10-06 the temporary
   public consumer repository ran the released Action pinned to
-  `5a50b52028ead78942ea3fc3bee93ba26e0a79cc` in Actions run `37430396143`, which completed
-  successfully; that is a fixed release measurement, not proof about a future commit. The hosted-CI
+  `5a50b52028ead78942ea3fc3bee93ba26e0a79cc` in Actions run `37430396143`, and on 2026-10-08 a second
+  temporary public consumer repository ran it pinned to
+  `a89d8bb7d048bfd4e016e494428d04f060e82112` in Actions run `37749736010`; both completed
+  successfully; each is a fixed release measurement, not proof about a future commit. Neither run
+  makes the review text retrievable after the fact — GitHub exposes no Job Summary body through any
+  API endpoint, so a past run's review is read in the web UI, and what these stages recorded from
+  outside the browser was the Action's own replayed output plus the bundle fingerprint, as stated in
+  [`docs/audits/stage17-v0.1.1-release-finalization.md`](audits/stage17-v0.1.1-release-finalization.md)
+  §4.5. The hosted-CI
   claim is also scoped by era: the bootstrap-era workflows did receive
   GitHub-hosted runners and executed setup and checkout steps on them before failing during archive
   extraction (Actions runs `32859849733`, `31819615124` and `31818807881`, recorded in

@@ -94,6 +94,29 @@ const STALE_CURRENT_STATE_CLAIMS: RegExp[] = [
   /consumption of the Action[^.]{0,160}still never[^.]{0,60}measured/i,
   /reviewed commit SHA[^.]{0,160}does not exist until the Stage 11 release/i,
   /trailing whitespace[^.]{0,160}(?:trimmed|displayed as)/i,
+  // Stage 17 falsified a third group, on 2026-10-08: `diffbeacon@0.1.1` is the published `latest`,
+  // the annotated `v0.1.1` tag and GitHub Release `406586383` exist, the tokenless publish workflow
+  // has executed, and a second consumer repository ran the Action at the v0.1.1 release commit.
+  // Each pattern below was true while `0.1.0` was the only release, so a document that keeps it is
+  // now a defect rather than a history entry. Patterns, not quoted prose, for the same reason as
+  // above: repairing a sentence must not paste the false claim back into a tracked file.
+  /diffbeacon v0\.1\.0 is released/i,
+  /`"latest":"0\.1\.0"`/,
+  /v0\.1\.1 release candidate, not yet published/i,
+  /current public npm package and github release remain `?v0\.1\.0`?/i,
+  // A second sweep, run after the first four landed, found claims the vocabulary above had never
+  // covered: `SECURITY.md` still named `0.1.0` as the published and supported surface, and
+  // `docs/README.md` still said the runbook forbade a second publication and that the consumer
+  // example's pin was dated 2026-10-06. Each pattern below is one of those sentences and was
+  // confirmed to match the committed (pre-repair) file and to match nothing in the repaired tree —
+  // see `guard-sweep.txt` and `guard-sweep2.txt` in the Stage 17 evidence directory. A checker only
+  // catches the wording it was written with, so the next release pass is expected to widen this
+  // group again rather than trust it.
+  /published surface is `?diffbeacon@0\.1\.0`?/i,
+  /supported (?:version|surface)[^.]{0,80}`?0\.1\.0`?/i,
+  /open-source project at `?0\.1\.0`?/i,
+  /authorises publishing a second time/i,
+  /pinned on 2026-10-06/i,
 ];
 
 /** Markdown link targets outside fenced code blocks and inline code; external/in-page dropped. */
@@ -210,25 +233,48 @@ describe('current-facing prose does not carry stale project status', () => {
     expect(headings.length).toBeGreaterThan(0);
     for (const heading of headings)
       expect(heading).toMatch(/^(?:Unreleased|\d+\.\d+\.\d+ — \d{4}-\d{2}-\d{2})$/);
-    // The shipped release is dated from the registry and Release timestamps, and a free
-    // `Unreleased` candidate section has to exist for the work that follows it.
+    // Both shipped releases are dated from the registry and Release timestamps, and a free
+    // `Unreleased` candidate section has to exist for the work that follows them.
     expect(headings).toContain('0.1.0 — 2026-10-06');
+    expect(headings).toContain('0.1.1 — 2026-10-08');
     expect(headings).toContain('Unreleased');
   });
 
   it('keeps the status block dated, dated-true, and pointed at the release runbook', () => {
     const readme = read('README.md');
     expect(readme).toMatch(/Published on npm\?\s*\|\s*Yes/);
+    // The current release, each value re-measured in Stage 17 on 2026-10-08.
+    for (const fact of [
+      'diffbeacon@0.1.1',
+      'v0.1.1',
+      'a89d8bb7d048bfd4e016e494428d04f060e82112',
+      '406586383',
+      '2026-10-08',
+      '37740211385',
+      '37749736010',
+    ])
+      expect(readme, `README omits the current release fact ${fact}`).toContain(fact);
+    // The first release stays named, with the measurements that dated it: `0.1.0` is consumed and
+    // immutable, so a status block that drops it invites someone to treat it as reclaimable.
     for (const fact of [
       'diffbeacon@0.1.0',
       'v0.1.0',
       '5a50b52028ead78942ea3fc3bee93ba26e0a79cc',
+      '404432804',
       '2026-10-06',
     ])
-      expect(readme, `README omits the measured release fact ${fact}`).toContain(fact);
+      expect(readme, `README omits the historical release fact ${fact}`).toContain(fact);
     expect(readme).not.toContain('<REVIEWED_FULL_COMMIT_SHA>');
     expect(readme).toMatch(/36562157439/);
     expect(readme).toContain('docs/releasing.md');
+  });
+
+  it('keeps the deployed demo labelling itself with the published version', () => {
+    // The footer is a release statement people read on the live Pages site, so it cannot be a
+    // literal someone remembers to bump. It has to equal the published package's own version.
+    const footer = read('client/src/pages/Home.tsx');
+    const { version } = JSON.parse(read('packages/cli/package.json')) as { version: string };
+    expect(footer).toContain(`DIFFBEACON / ${version}`);
   });
 
   it('states the measured registry count in the detector intro', () => {

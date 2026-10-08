@@ -5,15 +5,17 @@ intentionally narrow: it analyzes the diff and does not execute the changed repo
 
 ## Supported versions
 
-The published surface is `diffbeacon@0.1.0`, released on 2026-10-06, together with the annotated
-`v0.1.0` tag at commit `5a50b52028ead78942ea3fc3bee93ba26e0a79cc` and the Action bundle checked out at
-that commit. Those three references are what "a supported version" means here.
+The published surface is `diffbeacon@0.1.1`, released on 2026-10-08, together with the annotated
+`v0.1.1` tag at commit `a89d8bb7d048bfd4e016e494428d04f060e82112` and the Action bundle checked out at
+that commit. Those three references are what "a supported version" means here. `diffbeacon@0.1.0`
+(2026-10-06, commit `5a50b52028ead78942ea3fc3bee93ba26e0a79cc`) remains installable and unchanged, but it
+is not the supported surface: it is history, and it cannot be revised.
 
 Security work is assessed against the latest published release — the version
 `npm view diffbeacon version` reports when you read this — and a fix ships as a new release instead of
-rewriting the immutable `v0.1.0` tag, package, or history. No response time, no disclosure timeline,
+rewriting an immutable tag, package, or history. No response time, no disclosure timeline,
 no fix window, and no support period for older releases is promised: this is a single-maintainer
-open-source project at `0.1.0`. Analysis you build from source yourself is analysis of the commit you
+open-source project at `0.1.1`. Analysis you build from source yourself is analysis of the commit you
 checked out; it is not a supported release. See [`CHANGELOG.md`](CHANGELOG.md) for what has shipped.
 
 ## Reporting a vulnerability
