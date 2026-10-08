@@ -121,7 +121,9 @@ describe('Stage 4 release invariants', () => {
 
   it('keeps the publishable CLI version in lockstep with its lockfile workspace entry', () => {
     const cli = json<PackageManifest>('packages/cli/package.json');
-    const lock = json<{ packages: Record<string, { version?: string }> }>('package-lock.json');
+    const lock = json<{ version: string; packages: Record<string, { version?: string }> }>(
+      'package-lock.json',
+    );
     expect(cli.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(lock.packages['packages/cli']?.version).toBe(cli.version);
     const root = json<PackageManifest>('package.json');
