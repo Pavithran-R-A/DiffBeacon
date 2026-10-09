@@ -1,0 +1,25 @@
+name: Published DiffBeacon Action on Windows
+
+# This is an on-repository consumer-style smoke test of the *released* Action
+# at its immutable v0.1.1 SHA; it is not proof of a different-repository run.
+# It checks Windows-hosted execution on a normal pull_request with no PAT,
+# no write permissions and no checkout-controlled Action implementation.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  released-action-windows:
+    name: Windows hosted / released Action v0.1.1
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out full PR history as untrusted data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run the immutable published Action
+        uses: Pavithran-R-A/DiffBeacon@a89d8bb7d048bfd4e016e494428d04f060e82112 # v0.1.1

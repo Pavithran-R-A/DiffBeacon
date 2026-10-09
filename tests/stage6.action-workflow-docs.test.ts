@@ -93,6 +93,7 @@ describe('the future consumer workflow fixture', () => {
       'ci.yml',
       'pages.yml',
       'publish.yml',
+      'windows-action-consumer.yml',
     ]);
     expect(read(fixture)).toMatch(/NOT A WORKFLOW|not.*run by GitHub|documentation/i);
   });
