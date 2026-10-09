@@ -483,3 +483,253 @@ Operator evidence was recorded under the existing local
 `stage17-v0.1.1-finalize/` workspace as `pages-deploy-01` through
 `pages-deploy-11`, `pages-live-bundle-after.js`, and `pages-deploy-report.md`.
 Those local paths are evidence pointers, not files embedded in this repository.
+
+## 10. Post-stage closeout of Issue #12: owner-controlled items, measured to the boundary (2026-10-09)
+
+Issue #12 ("Owner-controlled closeout: Marketplace, npm publishing access, private conduct
+intake") asked for five workstreams to be carried as far as a non-owner pass can carry them. This
+section records what was measured, what was proven, and where each item stops on an owner decision.
+It is a later observation, like §9; it re-qualifies nothing and changes no released byte.
+
+**Baseline re-read before acting.** `refs/heads/main` was
+`6d090c7059968a6e939e8132a48e121b5f24854d` (the merge commit of PR #11, merged
+2026-10-09T07:42:19Z), `refs/tags/v0.1.0` was `5311ee05e3199b84854d719453b8939c5c482dc7` peeling to
+`5a50b52028ead78942ea3fc3bee93ba26e0a79cc`, and `refs/tags/v0.1.1` was
+`4012aa50f83a894445975d5713cb29976bf00a61` peeling to
+`a89d8bb7d048bfd4e016e494428d04f060e82112`. Post-merge CI on `main` at that SHA was run
+`37900553636`, `event: push`, `conclusion: success`, five jobs (browser lane plus four source
+lanes). The only open non-pull-request issue is #12; open pull requests #1–#5 are all
+`dependabot[bot]` dependency bumps. Local workspace tooling for the closeout was `node v24.21.0`
+and `npm 11.19.0` on Windows; all times below are UTC.
+
+### 10.1 WS1 — GitHub Marketplace: eligibility re-measured, listing is an owner-only action
+
+Every measurable precondition was re-measured rather than restated from Stage 14:
+
+| Precondition                                                   | Measured                                                                                                                                                                                                             |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Root `action.yml` on the default branch                        | `contents/action.yml?ref=main` returns `action.yml`, 224 bytes                                                                                                                                                       |
+| Metadata identical at `main`, at `v0.1.1`, and in the worktree | sha256 `f21651d07dfcb7ab515c1991960327952024b31d99600f3d6fc0110c6b041caa` (three identical digests)                                                                                                                  |
+| Bundled runtime identical at `main` and at `v0.1.1`            | sha256 `e37f412192346e903ae88e45b3506ad9fa909b90f5655f7eec7a098790c3db42`                                                                                                                                            |
+| Action metadata shape                                          | `name: DiffBeacon`, `branding: {color: orange, icon: eye}`, `runs.using: node24`, `runs.main: packages/action/dist/index.js`                                                                                         |
+| A public release to publish from                               | Release `406586383`, `tag_name: v0.1.1`, `draft: false`, `prerelease: false`, `published_at: 2026-10-08T08:15:27Z`, assets `[]`                                                                                      |
+| Repository state                                               | `visibility: public`, `archived: false`, `fork: false`, `default_branch: main`                                                                                                                                       |
+| No pre-existing listing to duplicate                           | `github.com/marketplace/actions/diffbeacon`, `…/diffbeacon?version=v0.1.1`, `…/diff-beacon` and `…/diffbeacon-review-attention` all HTTP 404; the Actions search for `diffbeacon` renders `No results` / `0 results` |
+
+The `diffbeacon` slug is unclaimed, the product name and the tags need no change, and the current
+documentation already says a listing was never requested, so WS1 required no repository edit.
+The listing itself was **not created and cannot be created by this pass**: GitHub requires the
+account owner to accept the Marketplace Developer Agreement (a legal agreement) and to have
+two-factor authentication, both behind an interactive login. There is also no non-interactive
+route to read or reach: `gh marketplace` is not a command, and `GET https://api.github.com/marketplace`
+answers HTTP 404. Accepting agreement text on the owner's behalf would be a claim, not a
+completion, so it was not done.
+
+### 10.2 WS2 — npm publishing access: publisher identity confirmed independently; the policy change is an owner login
+
+The published artifact was re-verified from bytes rather than from the registry's own assertion:
+`diffbeacon-0.1.1.tgz` re-downloaded on this host is 19,025 bytes with sha512
+`cbaaf37a…5a22da1b` and sha1 `4f71c7672aa000cf68903345d651e3c302965c67`, matching the `integrity`
+and `shasum` npm publishes. Two DSSE attestations exist for the version (publish `v0.1` with Rekor
+tlog index `3143160305`, and `https://slsa.dev/provenance/v1` with tlog index `3143103071`), each
+naming that same subject digest.
+
+The SLSA v1 predicate is the independent confirmation WS2 asked for. It names
+`workflow.repository = https://github.com/Pavithran-R-A/DiffBeacon`,
+`workflow.path = .github/workflows/publish.yml`, `workflow.ref = refs/tags/v0.1.1`,
+`event_name = push`, `repository_id = 1334290049`, `repository_owner_id = 92867708`,
+`builder.id = https://github.com/actions/runner/github-hosted`, and invocation
+`…/actions/runs/37740211385/attempts/1`. GitHub reports run `37740211385` as `Publish`, at that
+path, `event: push`, `head_branch: v0.1.1`, `head_sha: a89d8bb7…`, `conclusion: success`, and the
+repository read reports the same repository and owner ids. The registry's `gitHead` is the commit
+the tag peels to. So package, attestation, tag, workflow file and run record all name one another.
+
+The workflow is tokenless as published: `publish.yml` declares exactly
+`permissions: {contents: read, id-token: write}`, and the **tag** copy — the bytes that ran —
+contains no `${{ secrets.* }}` interpolation. Tag-versus-`main` drift in that file is comment-only.
+
+The recommendation WS2 asked for is: set npm's package access policy to **"Require two-factor
+authentication and disallow tokens"**. That is npm's strictest mode; it forbids long-lived and
+bypass tokens as an alternative publishing path while leaving Trusted Publishing intact, because an
+OIDC publisher is not a token. Applied to this package it means publishing requires all of: the
+existing Trusted Publisher rule (repository, workflow path and ref), the `v*` tag trigger, the tag
+naming the manifest version, and 2FA on the account — and it makes the hand-published route that
+shipped `0.1.0` structurally unavailable rather than merely discouraged. It must not be applied by
+relaxing any of those.
+
+It was **not applied**, because the setting lives behind the owner's npm login and 2FA. Measured
+boundaries: `www.npmjs.com/package/diffbeacon/access` answers HTTP 403 unauthenticated;
+`registry.npmjs.org/-/npm/v1/packages/diffbeacon`, `…/access/2fa/diffbeacon`, `…/oidc/roles` and
+`…/oidc/allowed-oidc-token-scopes` answer 404; and this host's `npm 11.19.0` answers `Unknown
+command` for both `attestation` and `trusted-publishing`, so there is no non-interactive read of
+the saved policy to fall back on. No credential, token, cookie or OTP was requested, entered, read
+or printed, the global npm configuration was not opened, and no setting is claimed to have been
+saved. After the owner applies it, the read-back belongs in this record's continuation, not here.
+
+### 10.3 WS3 — private conduct intake: absence measured across ten surfaces, documentation already honest
+
+No monitored private conduct channel exists, and that was measured rather than assumed:
+`GET /repos/…/private-vulnerability-reporting` answers `{"enabled":true}` (so security intake is
+open, and per the ticket it is deliberately **not** reused for conduct);
+`GET /repos/…/security_and_analysis` answers 404, which is recorded as unreadable rather than as
+disabled; `security_policy_url`, `isSecurityPolicyEnabled` and `has_vulnerability_reports` are
+`null` even though `SECURITY.md` is present at the root, and the community profile reports
+`health_map: null` with the code of conduct keyed `other`; `security-advisories` is `[]`;
+`GET /repos/…/discussions` answers HTTP 410 "Discussions are disabled for this repo"; `CODEOWNERS`
+is 404; and a scan of the shipped documentation finds no published contact address of any kind,
+only historical audit identities such as `local.invalid` and the maintainer's noreply commit
+address. There is consequently nothing to send a delivery test through, and claiming an
+end-to-end verification without a channel would be fabrication.
+
+No repository change was warranted, and none was made for WS3. `CODE_OF_CONDUCT.md` on `main`
+already states verbatim that there is no configured reporting channel, that neither private
+vulnerability reporting nor the public issue tracker is conduct intake, that establishing a
+monitored intake is a post-release governance decision (recorded in
+[`stage13-release-policy-decision.md`](stage13-release-policy-decision.md)), and that the file
+"will name a channel only once one actually exists and has been verified". Naming an address now
+would make the document false. The owner sequence is: create and commit to monitoring a private
+channel, authorize publishing its address, then change `CODE_OF_CONDUCT.md` through the normal
+branch and full gate chain, and finally prove delivery with a test report that the designated
+reader confirms receiving.
+
+### 10.4 WS4 — cross-repository hosted Windows consumer run: met
+
+This closes the §7 bullet "No Windows-hosted consumer run". PR #11 added a passing same-repository
+Windows consumer-style job; that is a different trust context from this proof and the two are
+reported separately, because only the one below exercises cross-repository `uses:` resolution.
+
+A minimal temporary public repository,
+`Pavithran-R-A/diffbeacon-win-consumer-tmp-20261009` (base commit `de3a551b2ee5fdbe2ea9da8eda6faaf85d67372c`),
+consumed the released Action pinned by immutable commit
+`Pavithran-R-A/DiffBeacon@a89d8bb7d048bfd4e016e494428d04f060e82112` — the commit `v0.1.1` peels to,
+pinned by SHA rather than by tag name — on an ordinary `pull_request`, with `permissions: contents:
+read` only, no PAT or secrets, `fetch-depth: 0` and `persist-credentials: false` on the checkout,
+and `pull_request_target` deliberately not used. Four attempts all concluded `success` on a
+GitHub-hosted `windows-latest` runner:
+
+| Run           | Job            | Head commit of the pull request            |
+| ------------- | -------------- | ------------------------------------------ |
+| `37916711217` | `113774565991` | `a72369f0b2c5daf44a12702c09939d51118cf5fb` |
+| `37917154430` | `113776042649` | `12354384bc434ce729e93cab5da4f6f8bc4010b0` |
+| `37918222929` | `113779524581` | `726750da3d8252628e7194d7b6f85b7147f28539` |
+| `37918439309` | `113780235559` | `7199051b8c62de8554946b7c7be891c60db695c5` |
+
+Every step of the final run is `success` — none skipped, cancelled or failed — and the retained
+job log records image `Microsoft Windows Server 2025`, `git version 2.55.0.windows.5`, effective
+`Contents: read`, and
+`Download action repository 'Pavithran-R-A/DiffBeacon@a89d8bb7…' (SHA:a89d8bb7…)`, which is the
+cross-repository resolution actually happening on Windows.
+
+The report the Action produced was obtained, not inferred, and §4.5's finding needed one correction:
+the Job Summary is reachable on a hosted runner after the fact, just not through any of the three
+instruments first tried. A following `run:` step sees only the path (the runner consumes the file at
+the step boundary); a step-level `env:` override of `GITHUB_STEP_SUMMARY` on a `uses:` step is
+ignored by the runner, which is itself evidence the Action wrote where the runner told it to; and
+the Checks API is blind — `.output.summary` and `.output.text` are empty and
+`check-runs/113780235559/annotations` returns `[]`. What works is that the runner leaves the
+consumed files under `%RUNNER_TEMP%\_runner_file_commands\`, so a later step can print them. Both
+Action invocations produced byte-identical report bodies, sha256
+`22897a1b02d5b062e85e2505bde47350b4b1b2d81cc02749a79a99fca06914e5`, containing the `# DiffBeacon
+review` heading, the fixed "does not determine whether a pull request is safe to merge" disclaimer,
+the summary counters (Changed files 2, Additions +55, Deletions -0, Binary 0, Mode-only 0), the
+attention levels `FOCUS` for CI / Build and `CHECK` for Runtime Implementation with the observed
+evidence entry pointing at `src/inventory.ts`, the numbered review order, and the per-file table.
+The `+55` matches the runner's own event payload, so the Action read a real diff.
+
+Disposition: the pull request was left open and never merged, and the temporary repository is
+**archived, not deleted** (`isArchived: true`, `archivedAt 2026-10-09T10:36:52Z`, still public), so
+the runs, logs and history stay retrievable. No pre-existing repository was deleted, renamed, or
+revisibility-changed, and the product repository was not touched by WS4 at all.
+
+### 10.5 WS5 — the immutable tarball README: measured scope and risk, decision recorded
+
+§7 already stated the staleness. Two facts were added by measurement, and they change the
+decision's basis without changing its direction.
+
+First, the stale text is the public npm page, not only the tarball: the package document at
+`https://registry.npmjs.org/diffbeacon` carries a `readme` field of 3,682 bytes whose sha256 is
+`571da52cf1740c1813d659647e4851dbfb885941c3f5467795ed302b4904f4ec`, byte-identical to
+`package/README.md` inside `diffbeacon-0.1.1.tgz`, and `dist-tags.latest` is `0.1.1`. Five lines
+name `0.1.0`, including the three install and `npx` examples. (A caution worth keeping: the
+per-version document `GET /diffbeacon/0.1.1` has **no** `readme` key at all, so a probe there
+returns an empty string whose digest is the well-known empty sha256. That is an endpoint shape, not
+evidence that npm displays nothing.)
+
+Second, the defect is prose-only and the shipped code reports the truth: `LICENSE`, `package.json`
+and `dist/index.js` in the published tarball each contain zero occurrences of `0.1.0`, the packaged
+version field is `0.1.1`, and `node dist/index.js --version` run against the extracted published
+bytes printed `0.1.1` with exit code 0.
+
+The only remedy that could change the tarball is a new version, and its scope was counted rather
+than guessed: `0.1.1` appears 134 times across 22 tracked paths outside `docs/audits/`, and six of
+those are test files that assert the strings (the docs-contract heading assertion, the publish-
+workflow contract, the CLI-argument and git-determinism README assertions, the Action workflow-docs
+test, and the package-contents test). Each re-anchor is a change under the failing-test-first rule,
+not a search-and-replace. Three version fields would move, `CHANGELOG.md` would gain an entry, and
+`README.md`, `docs/releasing.md`, `SECURITY.md`, `packages/action/README.md`, `client/src/pages/Home.tsx`
+and `docs/limitations.md` would all be re-anchored, while the Action pin in
+`.github/workflows/windows-action-consumer.yml` must **not** be moved as a side effect, because it
+names the immutable `v0.1.1` Action commit. The release itself would add a new annotated tag, a new
+GitHub Release, and new permanent attestations, and would move `latest` for every consumer, on
+behalf of code that has not changed.
+
+Publishing is also structurally guarded against exactly the shortcut this defect invites:
+`publish.yml` refuses the version Stage 14 published, refuses a tag that does not name the manifest
+version, and refuses any version the registry already carries, treating a network error as not
+evidence of absence.
+
+**Decision: do not publish `v0.1.2` for this documentation defect.** Three immutable artifacts plus
+a 22-path re-qualification is a permanent cost against a stale paragraph that the source README
+already discloses in the sentence a reader of the repository would otherwise have no reason to
+trust. `AGENTS.md` requires explicit maintainer authorization to publish, and the ticket forbids a
+documentation-only release, so this stays an owner decision and no publication was attempted.
+If the owner overrides the recommendation, the sequence is the one `docs/releasing.md` records as
+exercised for `v0.1.1`, subject to the constraints in this subsection.
+
+### 10.6 Residue noticed while measuring (reported, not acted on)
+
+`GET /repos/…/actions/workflows` lists ten active entries (nine real files plus the dynamic
+Dependabot Updates) while `main` carries five workflow files; `finalize-v011.yml`,
+`format-stage15-audit.yml` and `format-v011.yml` exist on no branch, since GitHub keeps a workflow
+record after the file is deleted, so those three cannot run. `self-hosted-smoke.yml` survives only
+on `tmp/stage9-selfhosted-smoke`, and `ci-self-hosted-stage9.yml`, which is on `main`, still
+triggers on pushes to `rescue/stage9-selfhosted-ci` — a branch that also still exists. Sixteen
+branches exist in total. The five open Dependabot pull requests name `react-dom`, `eslint` 10.11.0,
+`typescript-eslint` 8.71.0, `lucide-react` 1.49.0 and `vite` 8.3.2. Nothing was deleted, renamed or
+merged: branch and workflow cleanup is a repository change that would need the whole gate chain and
+is outside this closeout, and dependency bumps are a maintainer choice, not a defect.
+
+### 10.7 What this closeout changed, and what it did not
+
+One file changed in the repository: this section. It lives under `docs/audits/`, which is excluded
+from `SOURCE_MANIFEST.txt` by prefix and is outside the current-document scan set, so it is not a
+gate input and needs no re-qualification of any released artifact.
+
+Unchanged and re-verified as unchanged: `diffbeacon@0.1.0` and `diffbeacon@0.1.1` bytes and
+attestations, `dist-tags`, both release tags and their peel targets, GitHub Release `406586383`, the
+Action bundle digest, `main`'s history (only fast-forwarded by a normal merge commit when this
+section merges), the Pages deployment, and the published workflow permissions. No publish, unpublish,
+deprecate, token creation, tag move, force-push, history rewrite, repository deletion, Marketplace
+submission, agreement acceptance, or login was performed. Test suites were not weakened and no
+timeout was relaxed.
+
+### 10.8 Closure criteria this pass did not meet
+
+The issue stays open, because these are owner actions and none is a code task:
+
+1. GitHub Marketplace listing — owner: accept the Marketplace Developer Agreement, satisfy 2FA, and
+   publish from the existing v0.1.1 Release page; then record and independently reopen the listing
+   URL.
+2. npm "Require two-factor authentication and disallow tokens" — owner: sign in to npm, save the
+   setting, and read it back. Nothing may be relaxed on the OIDC publisher to make it fit.
+3. Private conduct intake — owner: create and monitor a private channel, designate a reader, verify
+   receipt; only then does `CODE_OF_CONDUCT.md` name it, through the full gate chain.
+4. Optional: publish `v0.1.2` for the tarball README, against the recommendation in §10.5.
+5. Optional: the five Dependabot pull requests, and the branch/workflow residue in §10.6.
+
+This commit carries the record, so it cannot carry the run that qualifies it; that run is read back
+after the fact and reported in the closeout response and on Issue #12. The evidence files named
+throughout §10 (`closeout-ws0-state.txt`, `closeout-ws1-*.txt`, `closeout-ws2-*.txt`,
+`closeout-ws3-*.txt`, `closeout-ws4-*.txt`, `closeout-ws5-record.txt` and the `ws5-*` measurements)
+already exist in the local `stage17-v0.1.1-finalize/` workspace as evidence pointers, following the
+convention of §9; they are not embedded in this repository.
