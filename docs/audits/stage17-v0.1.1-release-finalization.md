@@ -354,7 +354,7 @@ Two things this section deliberately does not contain. It does not name a hosted
 adds these lines: a record cannot hold the measurement of its own creation, and that run is readable
 from the Actions history of `refs/heads/main` instead of being asserted here. And it makes no claim about
 the deployed Pages demo, which is a manual-dispatch snapshot rather than a main-branch build; what the
-live site currently renders is recorded in §7 as measured, not inferred.
+live site rendered at Stage 17 close is recorded in §7 as measured, not inferred; §9 records the subsequent 2026-10-09 deployment.
 
 No npm version was published for these documentation changes, and no tag was created or moved.
 
@@ -388,7 +388,7 @@ version` left as the authority. Measured by unpacking the fetched tarball (`diff
   a repository-level statement. Stage 17 chose the second, and `packages/cli/README.md` now says so where
   a reader of the source would otherwise trust the frozen copy. Anyone who reads the README through
   `npm root` rather than the repository will read `0.1.0`, and no prose change here reaches them.
-- **The deployed Pages demo still renders `0.1.0`, and this stage did not change that.** The site is
+- **Historical observation at Stage 17 close (2026-10-08): the deployed Pages demo still rendered `0.1.0`; this stage did not change it.** The site is
   built only by a `workflow_dispatch` (`pages.yml` has no push or pull-request trigger), so merging a
   `client/` change to `main` does not republish anything. Measured on the live host rather than inferred:
   the newest `github-pages` deployment is dated 2026-10-05T03:04:17Z from run `37257883015` at commit
@@ -443,3 +443,43 @@ All Stage 17 evidence lives outside this repository, under
 | `phaseE-main-ci.txt`                                                                                                                                                                                       | the post-merge `main` run at the merge SHA, with its five job conclusions                                                             |
 | `phaseE-surfaces-reread.txt`                                                                                                                                                                               | registry version and `dist-tags`, Release `406586383`, tag object, and the newest publish/Pages runs, all re-read after the merge     |
 | `phaseE-pages-readback.txt`, `live-index.js`                                                                                                                                                               | the live Pages deployment record, the served shell and bundle name, and the fetched bundle behind the §7 version-literal count        |
+
+## 9. Post-stage closure: Pages v0.1.1 deployment (2026-10-09)
+
+**Supersedes only the live-demo limitation measured in §7.** Stage 17 closed on 2026-10-08,
+when GitHub Pages still hosted the older bundle. That earlier observation remains correct **for
+that time**; it is no longer the live state after the separately authorized deployment below.
+This addendum is a later observation, not a rewrite of Stage 17's original qualification or an
+additional npm publication.
+
+- **Approved one-time dispatch.** The maintainer authorized republishing the browser demo from
+  `main`. The existing manual-only `.github/workflows/pages.yml` was dispatched once using
+  `gh workflow run pages.yml --repo Pavithran-R-A/DiffBeacon --ref main`; the report records the
+  pre-dispatch check and no second dispatch. [Pages run 37892199409](https://github.com/Pavithran-R-A/DiffBeacon/actions/runs/37892199409)
+  completed successfully on 2026-10-09 (06:10:50–06:13:59 UTC).
+- **Exact source and jobs.** The workflow ran against `main` at
+  `792c1b1f2ab46db118616cdaf37f9c54c671f386`. GitHub's job records show successful
+  `build` (job `113695396000`, 15/15 steps) and `deploy` (job `113696163208`,
+  4/4 steps). The reported Pages deployment is `6954282600`, with a successful status and
+  environment URL [DiffBeacon live demo](https://pavithran-r-a.github.io/DiffBeacon/).
+- **Live artifact, not merely repository source.** The deployed SPA references
+  `/DiffBeacon/assets/index-DrE7XIEb.js` (reported 238,323 bytes). That live JavaScript
+  contains `DIFFBEACON / 0.1.1` and does not contain `DIFFBEACON / 0.1.0`.
+  The version strings were independently cross-checked from the publicly served JavaScript
+  after deployment. This closes the discrepancy between the repository footer and the live demo.
+- **Browser smoke, scope, and evidence.** The deployment operator's
+  `pages-deploy-report.md` reports 14 successful live smoke cases covering startup,
+  example analysis, copy feedback, theme, clear, keyboard shortcut with focus, deterministic
+  re-analysis, and non-diff handling, with no console messages. This is the operator's
+  reported browser evidence, not a claim that the audit's authors independently repeated all
+  interactions. Its limitations remain: clipboard **contents** were not read back,
+  the browser harness failed during reload/persistence testing, and it could not attach
+  screenshots. A separate fresh-load inspection succeeded.
+- **Immutability.** Deployment did not change npm `diffbeacon@0.1.1`, its provenance,
+  either release tag, the GitHub Release, or the v0.1.1 tarball's immutable README.
+  No additional npm publication or release tag was required.
+
+Operator evidence was recorded under the existing local
+`stage17-v0.1.1-finalize/` workspace as `pages-deploy-01` through
+`pages-deploy-11`, `pages-live-bundle-after.js`, and `pages-deploy-report.md`.
+Those local paths are evidence pointers, not files embedded in this repository.
