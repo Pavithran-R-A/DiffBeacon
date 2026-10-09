@@ -98,7 +98,7 @@ describe('the future consumer workflow fixture', () => {
     expect(read(fixture)).toMatch(/NOT A WORKFLOW|not.*run by GitHub|documentation/i);
   });
 
-  it('keeps the hosted Windows release Action consumer smoke on the unprivileged event', () => {
+  it('guards the Windows release Action consumer smoke workflow', () => {
     const consumer = read('.github/workflows/windows-action-consumer.yml');
     expect(consumer).toMatch(/^on:\n {2}pull_request:\n/m);
     expect(consumer).toMatch(/^permissions:\n {2}contents: read\n/m);
@@ -108,7 +108,8 @@ describe('the future consumer workflow fixture', () => {
     expect(consumer).toContain(
       'Pavithran-R-A/DiffBeacon@a89d8bb7d048bfd4e016e494428d04f060e82112',
     );
-    expect(consumer).not.toMatch(/pull_request_target|contents: write|secrets\.|uses: \.\//);
+    for (const forbidden of ['pull_request_target', 'contents: write', 'secrets.', 'uses: ./'])
+      expect(consumer).not.toContain(forbidden);
     expect(consumer).not.toMatch(/^\s*run:/m);
   });
 
