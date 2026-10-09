@@ -93,8 +93,23 @@ describe('the future consumer workflow fixture', () => {
       'ci.yml',
       'pages.yml',
       'publish.yml',
+      'windows-action-consumer.yml',
     ]);
     expect(read(fixture)).toMatch(/NOT A WORKFLOW|not.*run by GitHub|documentation/i);
+  });
+
+  it('keeps the hosted Windows release Action consumer smoke on the unprivileged event', () => {
+    const consumer = read('.github/workflows/windows-action-consumer.yml');
+    expect(consumer).toMatch(/^on:\n {2}pull_request:\n/m);
+    expect(consumer).toMatch(/^permissions:\n {2}contents: read\n/m);
+    expect(consumer).toMatch(/^ {4}runs-on: windows-latest$/m);
+    expect(consumer).toContain('fetch-depth: 0');
+    expect(consumer).toContain('persist-credentials: false');
+    expect(consumer).toContain(
+      'Pavithran-R-A/DiffBeacon@a89d8bb7d048bfd4e016e494428d04f060e82112',
+    );
+    expect(consumer).not.toMatch(/pull_request_target|contents: write|secrets\.|uses: \.\//);
+    expect(consumer).not.toMatch(/^\s*run:/m);
   });
 
   it('triggers on the ordinary pull_request event with read-only permissions', () => {
